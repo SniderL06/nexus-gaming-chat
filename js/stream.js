@@ -110,7 +110,11 @@ async function startLocalStream() {
             // Actualizar presencia para marcar isStreaming: true
             if (presenceChannel) {
                 const myEmail = localStorage.getItem('nexus_user_email') || '';
-                const myName = myEmail ? myEmail.split('@')[0].charAt(0).toUpperCase() + myEmail.split('@')[0].slice(1) : 'Usuario Nexus';
+                let myName = 'Usuario Nexus';
+                if (myEmail) {
+                    const base = myEmail.split('@')[0];
+                    myName = base.charAt(0).toUpperCase() + base.slice(1);
+                }
                 presenceChannel.track({
                     name: myName,
                     peerId: peer.id,
@@ -174,7 +178,11 @@ export function stopLocalStream() {
         // Actualizar presencia para marcar isStreaming: false
         if (presenceChannel && peer) {
             const myEmail = localStorage.getItem('nexus_user_email') || '';
-            const myName = myEmail ? myEmail.split('@')[0].charAt(0).toUpperCase() : 'Usuario Nexus';
+            let myName = 'Usuario Nexus';
+            if (myEmail) {
+                const base = myEmail.split('@')[0];
+                myName = base.charAt(0).toUpperCase() + base.slice(1);
+            }
             presenceChannel.track({
                 name: myName,
                 peerId: peer.id,

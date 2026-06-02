@@ -446,17 +446,22 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
 function syncVoiceRoomFromPresence(presenceState, myName) {
     const realMembers = [];
+    const seenPeers = new Set();
     Object.values(presenceState).forEach(presenceList => {
+        // En Supabase, a veces el state guarda la misma presencia si se re-conecta rápido
         presenceList.forEach(presence => {
-            realMembers.push({
-                name: presence.name,
-                avatar: presence.name.charAt(0).toUpperCase(),
-                avatarBg: 'bg-blue',
-                isMuted: presence.isMuted || false,
-                activeSpeaker: false,
-                isLocalUser: presence.peerId === localPeerId,
-                peerId: presence.peerId
-            });
+            if (!seenPeers.has(presence.peerId)) {
+                seenPeers.add(presence.peerId);
+                realMembers.push({
+                    name: presence.name,
+                    avatar: presence.name.charAt(0).toUpperCase(),
+                    avatarBg: 'bg-blue',
+                    isMuted: presence.isMuted || false,
+                    activeSpeaker: false,
+                    isLocalUser: presence.peerId === localPeerId,
+                    peerId: presence.peerId
+                });
+            }
         });
     });
 

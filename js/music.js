@@ -163,16 +163,24 @@ export function playMusicCommand(query) {
         try {
             const urlObj = new URL(query.trim());
             if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
-                // youtube.com/watch?v=VIDEO_ID&list=... → tomar sólo el parámetro v
+                // youtube.com/watch?v=VIDEO_ID&list=... → tomar sólo el parámetro v y list
                 let videoId = urlObj.searchParams.get('v');
+                let listId = urlObj.searchParams.get('list');
+                
                 // youtu.be/VIDEO_ID → tomar sólo el primer segmento del pathname
-                if (!videoId) {
+                if (!videoId && !listId) {
                     videoId = urlObj.pathname.replace(/^\//, '').split('?')[0].split('/')[0];
                 }
-                if (videoId && videoId.length > 0) {
+                
+                if (listId && listId.length > 0) {
+                    urlTitle = `▶ YouTube Mix/Playlist`;
+                    selectedPreset.youtubeListId = listId;
+                    if (videoId) selectedPreset.youtubeId = videoId; // por si queremos empezar en un índice
+                    selectedPreset.duration = 3600; // duración por defecto larga para mixes
+                } else if (videoId && videoId.length > 0) {
                     urlTitle = `▶ YouTube • ${videoId}`;
                     selectedPreset.youtubeId = videoId;
-                    selectedPreset.duration = 180; // duración por defecto (se actualizará dinámicamente)
+                    selectedPreset.duration = 180; // duración por defecto
                 } else {
                     urlTitle = `▶ YouTube Stream`;
                 }
@@ -263,13 +271,20 @@ function startTrack(preset) {
         console.log('[Music Bot] Audio sintetizado acoplado físicamente al analizador espectral WebRTC.');
     }
 
-    if (preset.youtubeId) {
+    if (preset.youtubeId || preset.youtubeListId) {
         // En pista de YouTube silenciamos el sintetizador (para que no suene beeps encima), pero lo mantenemos conectado al visualizador
         synthGain.gain.setValueAtTime(0.001, audioCtx.currentTime);
         
         if (ytPlayer && ytPlayerReady) {
             try {
-                ytPlayer.loadVideoById(preset.youtubeId);
+                if (preset.youtubeListId) {
+                    ytPlayer.loadPlaylist({
+                        listType: 'playlist',
+                        list: preset.youtubeListId
+                    });
+                } else {
+                    ytPlayer.loadVideoById(preset.youtubeId);
+                }
                 ytPlayer.setVolume(globalOutVol * 100);
                 ytPlayer.playVideo();
                 
