@@ -202,19 +202,27 @@ function subscribeToChannel(channelId) {
     }
 
     // Suscribirse a inserciones y borrados en tiempo real
+    // NOTA: No usamos filter del lado del servidor porque requiere REPLICA IDENTITY FULL
+    // en Supabase para funcionar con INSERT. Filtramos localmente para mayor compatibilidad.
     currentRealtimeChannel = supabase
         .channel(`chat:${channelId}`)
         .on('postgres_changes', {
-            event: '*', // Escuchar todo (INSERT, DELETE, UPDATE)
+            event: '*', // Escuchar INSERT, DELETE, UPDATE
             schema: 'public',
-            table: 'messages',
-            filter: `channel_id=eq.${channelId}`
+            table: 'messages'
         }, (payload) => {
+            // Filtrar localmente por canal para no mezclar canales
+            const rowChannelId = payload.new?.channel_id || payload.old?.channel_id;
+            if (rowChannelId && rowChannelId !== channelId) return;
+
             if (payload.eventType === 'INSERT') {
                 const row = payload.new;
                 const myName = getLocalUserName();
                 // No duplicar mensajes propios que ya renderizamos localmente
                 if (row.author === myName) return;
+                // Evitar duplicados si el mensaje ya existe en el estado local
+                const existing = currentMessages[channelId]?.find(m => m.id === row.id);
+                if (existing) return;
 
                 const msg = {
                     id: row.id,
@@ -233,22 +241,23 @@ function subscribeToChannel(channelId) {
                 if (state.activeChannel === channelId && chatContainer) {
                     chatContainer.appendChild(createMessageElement(msg));
                     scrollToBottom();
-                    // Flash de notificación
                     showIncomingMessageIndicator(msg.author);
                 }
             } else if (payload.eventType === 'DELETE') {
                 const deletedId = payload.old.id;
-                // Remover del estado
                 if (currentMessages[channelId]) {
                     currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== deletedId);
                 }
-                // Remover del DOM
                 const el = document.querySelector(`.message-item[data-id="${deletedId}"]`);
                 if (el) el.remove();
             }
         })
         .subscribe((status) => {
             console.log(`[Chat] Supabase Realtime en #${channelId}: ${status}`);
+            if (status === 'CHANNEL_ERROR') {
+                console.warn('[Chat] Error en canal Realtime, reintentando en 3s...');
+                setTimeout(() => subscribeToChannel(channelId), 3000);
+            }
         });
 }
 
