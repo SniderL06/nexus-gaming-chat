@@ -373,20 +373,51 @@ async function joinMultiplayerVoice(channelId) {
     });
 
     // 3. Atender llamadas entrantes de PeerJS
-    peer.on('call', (call) => {
-        console.log(`[PeerJS] Llamada entrante de: ${call.peer}`);
-        if (microphoneStream) {
-            call.answer(microphoneStream);
+    peer.on('call', async (call) => {
+        const callType = call.metadata?.type || 'audio'; // 'audio' | 'camera' | 'screen'
+        console.log(`[PeerJS] Llamada entrante de: ${call.peer} (tipo: ${callType})`);
+
+        // Answer with the appropriate local stream
+        if (callType === 'camera') {
+            // Dynamically import camera module to avoid circular deps
+            const { getCameraStream } = await import('./camera.js');
+            const camStream = getCameraStream();
+            call.answer(camStream || undefined);
+        } else if (callType === 'screen') {
+            call.answer(); // screen share: no need to send anything back
         } else {
-            call.answer();
+            // Audio call
+            if (microphoneStream) {
+                call.answer(microphoneStream);
+            } else {
+                call.answer();
+            }
         }
 
-        call.on('stream', (remoteStream) => {
-            console.log(`[PeerJS] Stream remoto recibido de: ${call.peer}`);
-            playRemoteStream(call.peer, remoteStream);
+        call.on('stream', async (remoteStream) => {
+            console.log(`[PeerJS] Stream remoto recibido de: ${call.peer} (tipo: ${callType})`);
+            if (callType === 'camera') {
+                // Find the name of this peer and route to camera card
+                const peerInfo = activeMembersInRoom.find(m => m.peerId === call.peer);
+                const remoteName = peerInfo?.name || call.peer;
+                const { attachRemoteCameraToCard } = await import('./camera.js');
+                attachRemoteCameraToCard(call.peer, remoteStream, remoteName);
+            } else {
+                playRemoteStream(call.peer, remoteStream);
+            }
         });
 
-        call.on('close', () => removeRemoteAudio(call.peer));
+        call.on('close', async () => {
+            if (callType === 'camera') {
+                const peerInfo = activeMembersInRoom.find(m => m.peerId === call.peer);
+                if (peerInfo) {
+                    const { detachRemoteCameraFromCard } = await import('./camera.js');
+                    detachRemoteCameraFromCard(peerInfo.name);
+                }
+            } else {
+                removeRemoteAudio(call.peer);
+            }
+        });
     });
 
     peer.on('error', (err) => {
@@ -477,7 +508,9 @@ function callPeer(remotePeerId, remoteName) {
     if (activePeers.has(remotePeerId)) return;
 
     console.log(`[PeerJS] Llamando a ${remoteName} (${remotePeerId})`);
-    const call = peer.call(remotePeerId, microphoneStream);
+    const call = peer.call(remotePeerId, microphoneStream, {
+        metadata: { type: 'audio' }
+    });
 
     call.on('stream', (remoteStream) => {
         playRemoteStream(remotePeerId, remoteStream);
@@ -584,6 +617,9 @@ export function disconnectVoiceChannel(triggerUI = true) {
     state.activeVoiceChannel = null;
 
     console.log('[Voz] Cerrando conexiones WebRTC.');
+
+    // Apagar cámara si estaba activa
+    import('./camera.js').then(({ stopCamera }) => stopCamera()).catch(() => {});
 
     // Desconectar PeerJS y Presence de Supabase
     if (isMultiplayerMode) {

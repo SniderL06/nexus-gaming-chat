@@ -8,6 +8,7 @@ import { EMAILJS_CONFIG, DEMO_MODE } from './emailjs.config.js';
 import { initMusic } from './music.js';
 import { isUserOp } from './voice.js';
 import { initSupabaseSetup, supabase, supabaseReady } from './supabase-client.js';
+import { initCamera, stopCamera } from './camera.js';
 
 // Estado global de la aplicación (Single Source of Truth)
 export const state = {
@@ -105,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initChat();
     initVoice();
     initStream();
+    initCamera();
     initThemePanel();
     initSupabaseSetup();
     

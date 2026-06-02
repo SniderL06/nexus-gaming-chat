@@ -285,6 +285,7 @@ function startTrack(preset) {
                 } else {
                     ytPlayer.loadVideoById(preset.youtubeId);
                 }
+                ytPlayer.unMute();
                 ytPlayer.setVolume(globalOutVol * 100);
                 ytPlayer.playVideo();
                 

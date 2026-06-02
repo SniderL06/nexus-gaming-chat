@@ -2538,3 +2538,116 @@ body.theme-light .theme-panel {
     color: var(--accent-orange);
     background: rgba(245,60,60,0.1);
 }
+
+/* ─── Camera Feature ─────────────────────────────── */
+
+/* Camera button active state */
+#camera-btn.camera-active {
+    color: var(--accent-green);
+    border-color: rgba(87,242,135,0.4);
+    background: rgba(87,242,135,0.08);
+    box-shadow: 0 0 14px rgba(87,242,135,0.25);
+}
+#camera-btn.camera-active svg {
+    filter: drop-shadow(0 0 4px rgba(87,242,135,0.6));
+}
+
+/* Voice member card with camera: video fills the card */
+.voice-member-card {
+    position: relative;
+    overflow: hidden;
+}
+.voice-member-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    z-index: 0;
+}
+.voice-member-video.active {
+    opacity: 1;
+}
+/* Dim the avatar when video is active */
+.voice-member-card.has-camera .voice-member-avatar {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+/* Keep name & icons above the video */
+.voice-member-card .voice-member-name,
+.voice-member-card .voice-member-icons,
+.voice-member-card .speaking-wave {
+    position: relative;
+    z-index: 2;
+}
+/* Gradient scrim at the bottom so the name remains readable over video */
+.voice-member-card.has-camera::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
+    z-index: 1;
+    border-radius: inherit;
+}
+/* Camera icon badge on member card */
+.voice-camera-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 0.7rem;
+    background: rgba(0,0,0,0.55);
+    border-radius: 4px;
+    padding: 2px 4px;
+    z-index: 3;
+    color: var(--accent-green);
+    opacity: 0.85;
+}
+
+/* Local camera PiP (Picture-in-Picture) preview */
+#local-camera-pip {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    width: 180px;
+    height: 120px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid var(--accent-green);
+    box-shadow: 0 4px 24px rgba(87,242,135,0.3);
+    z-index: 9000;
+    display: none;
+    background: #000;
+    cursor: grab;
+}
+#local-camera-pip.active {
+    display: block;
+    animation: pipAppear 0.3s ease;
+}
+#local-camera-pip video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+#local-camera-pip .pip-label {
+    position: absolute;
+    bottom: 4px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.75);
+    background: rgba(0,0,0,0.4);
+    padding: 2px 0;
+}
+@keyframes pipAppear {
+    from { opacity: 0; transform: scale(0.8) translateY(20px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
