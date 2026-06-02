@@ -5,6 +5,9 @@ export let supabaseUrl = localStorage.getItem('nexus_supabase_url') || '';
 export let supabaseKey = localStorage.getItem('nexus_supabase_key') || '';
 export let supabaseReady = false;
 
+// ─── Canal de presencia global (quién está en línea) ─────────
+let globalPresenceChannel = null;
+
 // Inicializar cliente si existen las credenciales
 function tryInitClient(url, key) {
     if (url && key && window.supabase) {
@@ -17,7 +20,6 @@ function tryInitClient(url, key) {
             supabase = client;
             supabaseReady = true;
             console.log('[Supabase] Cliente inicializado correctamente.');
-            // Actualizar indicador de estado en UI (si ya cargó el DOM)
             setTimeout(updateStatusIndicator, 500);
             return true;
         } catch (e) {
@@ -28,9 +30,125 @@ function tryInitClient(url, key) {
     return false;
 }
 
-// Intentar inicialización al cargar
 tryInitClient(supabaseUrl, supabaseKey);
 
+// ─────────────────────────────────────────────────────────────
+// PRESENCIA GLOBAL: quién está conectado en tiempo real
+// Llama a esta función desde app.js tras el login del usuario.
+// ─────────────────────────────────────────────────────────────
+export function startGlobalPresence(userName) {
+    if (!supabase || !userName) return;
+
+    // Limpiar canal anterior si existía
+    if (globalPresenceChannel) {
+        supabase.removeChannel(globalPresenceChannel);
+        globalPresenceChannel = null;
+    }
+
+    globalPresenceChannel = supabase.channel('nexus:online-users', {
+        config: { presence: { key: userName } }
+    });
+
+    globalPresenceChannel
+        .on('presence', { event: 'sync' }, () => {
+            const state = globalPresenceChannel.presenceState();
+            updateOnlineMembersSidebar(state);
+        })
+        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+            console.log(`[Presencia] ${key} se conectó.`);
+        })
+        .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+            console.log(`[Presencia] ${key} se desconectó.`);
+        })
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await globalPresenceChannel.track({
+                    name: userName,
+                    online_at: new Date().toISOString()
+                });
+                console.log(`[Presencia] ${userName} marcado como en línea.`);
+            }
+        });
+}
+
+export function stopGlobalPresence() {
+    if (globalPresenceChannel && supabase) {
+        supabase.removeChannel(globalPresenceChannel);
+        globalPresenceChannel = null;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTUALIZAR SIDEBAR DE MIEMBROS EN LÍNEA
+// ─────────────────────────────────────────────────────────────
+function updateOnlineMembersSidebar(presenceState) {
+    const membersList = document.querySelector('.members-list');
+    const onlineCountEl = document.getElementById('online-count');
+    if (!membersList) return;
+
+    // Recopilar todos los usuarios únicos presentes
+    const onlineUsers = [];
+    Object.values(presenceState).forEach(presences => {
+        presences.forEach(p => {
+            if (p.name && !onlineUsers.find(u => u.name === p.name)) {
+                onlineUsers.push({ name: p.name, online_at: p.online_at });
+            }
+        });
+    });
+
+    // Actualizar contador
+    if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;
+
+    // Reconstruir lista
+    membersList.innerHTML = '';
+    const myName = (() => {
+        const email = localStorage.getItem('nexus_user_email') || '';
+        if (!email) return null;
+        const base = email.split('@')[0];
+        return base.charAt(0).toUpperCase() + base.slice(1);
+    })();
+
+    onlineUsers.forEach(user => {
+        const isMe = user.name === myName;
+        const initial = user.name.charAt(0).toUpperCase();
+        // Colores de avatar consistentes por inicial
+        const bgColors = ['bg-blue', 'bg-purple', 'bg-green', 'bg-orange', 'bg-cyan'];
+        const colorIdx = user.name.charCodeAt(0) % bgColors.length;
+        const bgClass = bgColors[colorIdx];
+
+        const li = document.createElement('li');
+        li.className = 'member-item';
+        if (isMe) li.id = 'local-user-sidebar-item';
+
+        li.innerHTML = `
+            <div class="avatar-container small">
+                <div class="avatar ${bgClass}">${initial}</div>
+                <span class="user-status online"></span>
+            </div>
+            <div class="member-info">
+                <span class="member-name">${escapeHTMLPresence(user.name)}</span>
+                <span class="member-game">${isMe ? 'Tú · En línea' : 'En línea'}</span>
+            </div>
+        `;
+        membersList.appendChild(li);
+    });
+
+    // Si no hay nadie (raro, pero por si acaso)
+    if (onlineUsers.length === 0 && onlineCountEl) {
+        onlineCountEl.textContent = '0';
+    }
+}
+
+function escapeHTMLPresence(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/[&<>'"]/g, t =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t)
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SETUP DEL MODAL DE CONFIGURACIÓN
+// ─────────────────────────────────────────────────────────────
 export function initSupabaseSetup() {
     const modal = document.getElementById('database-setup-modal');
     const form = document.getElementById('database-setup-form');
@@ -40,7 +158,6 @@ export function initSupabaseSetup() {
     const overlay = document.getElementById('database-setup-overlay');
     const saveBtn = document.getElementById('db-setup-save-btn');
 
-    // Botón de configuración en ajustes
     if (openBtn) {
         openBtn.addEventListener('click', () => {
             if (urlInput) urlInput.value = localStorage.getItem('nexus_supabase_url') || '';
@@ -49,7 +166,6 @@ export function initSupabaseSetup() {
         });
     }
 
-    // Botón "Usar sin BD" – modo local
     const skipBtn = document.getElementById('db-skip-btn');
     if (skipBtn) {
         skipBtn.addEventListener('click', () => {
@@ -58,7 +174,6 @@ export function initSupabaseSetup() {
         });
     }
 
-    // Cerrar al hacer clic fuera (solo si ya está conectado o se saltó)
     if (overlay) {
         overlay.addEventListener('click', () => {
             if (supabaseReady || localStorage.getItem('nexus_supabase_skipped')) {
@@ -67,7 +182,6 @@ export function initSupabaseSetup() {
         });
     }
 
-    // Formulario de configuración
     if (form) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -85,12 +199,10 @@ export function initSupabaseSetup() {
             }
 
             try {
-                // Verificar conexión real haciendo una consulta sencilla
                 const testClient = window.supabase.createClient(urlVal, keyVal);
                 const { error } = await testClient.from('channels').select('id').limit(1);
 
                 if (error && error.code !== 'PGRST116') {
-                    // PGRST116 = tabla no existe aún, lo cual también es válido
                     throw new Error(error.message);
                 }
 
@@ -104,7 +216,6 @@ export function initSupabaseSetup() {
                 if (modal) modal.classList.add('hidden');
                 showConnectionSuccess();
 
-                // Disparar evento global para que los módulos se reconecten
                 window.dispatchEvent(new CustomEvent('supabase-ready', { detail: { client: supabase } }));
 
             } catch (err) {
@@ -119,7 +230,6 @@ export function initSupabaseSetup() {
         });
     }
 
-    // Mostrar el modal automáticamente si no está configurado ni se saltó
     if (!supabaseReady && !localStorage.getItem('nexus_supabase_skipped')) {
         setTimeout(() => {
             if (modal) modal.classList.remove('hidden');
@@ -128,7 +238,6 @@ export function initSupabaseSetup() {
 }
 
 function showConnectionSuccess() {
-    // Update status dot in settings panel
     updateStatusIndicator();
 
     const notification = document.createElement('div');

@@ -7,7 +7,7 @@ import { initThemePanel } from './theme.js';
 import { EMAILJS_CONFIG, DEMO_MODE } from './emailjs.config.js';
 import { initMusic } from './music.js';
 import { isUserOp } from './voice.js';
-import { initSupabaseSetup, supabase, supabaseReady } from './supabase-client.js';
+import { initSupabaseSetup, supabase, supabaseReady, startGlobalPresence, stopGlobalPresence } from './supabase-client.js';
 import { initCamera, stopCamera } from './camera.js';
 
 // Estado global de la aplicación (Single Source of Truth)
@@ -528,8 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            // Desconectar voz si está activa antes de cerrar sesión
             disconnectVoiceChannel();
+            stopGlobalPresence(); // Quitar al usuario de la lista de en línea
             localStorage.removeItem('nexus_user_email');
             window.location.reload();
         });
@@ -549,8 +549,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (avatarLetter && !localStorage.getItem('nexus_user_avatar')) {
                 avatarLetter.textContent = cleanName.charAt(0);
             }
+
+            // Actualizar el item local en la sidebar de miembros
+            const sidebarName = document.getElementById('sidebar-local-name');
+            if (sidebarName) sidebarName.textContent = cleanName;
+            const sidebarAvatar = document.getElementById('sidebar-local-avatar');
+            if (sidebarAvatar) sidebarAvatar.textContent = cleanName.charAt(0);
+
+            // Iniciar presencia global para que todos vean quién está conectado
+            if (supabaseReady && supabase) {
+                startGlobalPresence(cleanName);
+            }
         }
     }
+
+    // Si Supabase se conecta después de que el usuario ya estaba logueado
+    window.addEventListener('supabase-ready', () => {
+        const savedEmail = localStorage.getItem('nexus_user_email');
+        if (savedEmail) {
+            const base = savedEmail.split('@')[0];
+            const cleanName = base.charAt(0).toUpperCase() + base.slice(1);
+            startGlobalPresence(cleanName);
+        }
+    });
 
     // --- CARGAR / ENLAZAR EL MOTOR DE MÚSICA EN VOZ ---
     initMusic();
