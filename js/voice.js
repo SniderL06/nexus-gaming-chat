@@ -26,18 +26,9 @@ let canvasCtx = null;
 
 // Datos de miembros virtuales en la sala de voz
 const voiceChannelMembers = {
-    'general-voice': [
-        { name: 'Snide', avatar: 'S', avatarBg: 'bg-blue', isMuted: false, activeSpeaker: false },
-        { name: 'Kaizen', avatar: 'K', avatarBg: 'bg-purple', isMuted: false, activeSpeaker: false },
-        { name: 'GamerGirl99', avatar: 'G', avatarBg: 'bg-orange', isMuted: true, activeSpeaker: false }
-    ],
-    'squad-1': [
-        { name: 'Snide', avatar: 'S', avatarBg: 'bg-blue', isMuted: false, activeSpeaker: false },
-        { name: 'ApexPro', avatar: 'A', avatarBg: 'bg-green', isMuted: false, activeSpeaker: false }
-    ],
-    'squad-2': [
-        { name: 'Snide', avatar: 'S', avatarBg: 'bg-blue', isMuted: false, activeSpeaker: false }
-    ]
+    'general-voice': [],
+    'squad-1': [],
+    'squad-2': []
 };
 
 let activeMembersInRoom = [];

@@ -2512,4 +2512,29 @@ body.theme-light .theme-panel {
     box-shadow: 0 0 12px rgba(245,60,60,0.35);
 }
 
-
+/* Delete Message Button */
+.message-item {
+    position: relative; /* Para posicionar el botón de borrar */
+}
+.delete-msg-btn {
+    position: absolute;
+    top: 6px;
+    right: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: var(--transition-fast);
+    padding: 4px;
+    border-radius: 4px;
+}
+.message-item:hover .delete-msg-btn {
+    opacity: 0.6;
+}
+.delete-msg-btn:hover {
+    opacity: 1 !important;
+    color: var(--accent-orange);
+    background: rgba(245,60,60,0.1);
+}

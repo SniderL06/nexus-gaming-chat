@@ -38,22 +38,10 @@ function startTimestampRefreshLoop() {
 const NOW = Date.now();
 const MIN = 60_000;
 const initialChannelMessages = {
-    general: [
-        { id: 1, author: 'Kaizen',     avatar: 'K', avatarBg: 'bg-purple', ts: NOW - 5 * MIN, text: '¡Bienvenidos a Nexus! Qué locura lo rápido que carga esto. Por fin un chat digno para jugar.' },
-        { id: 2, author: 'ApexPro',    avatar: 'A', avatarBg: 'bg-green',  ts: NOW - 4 * MIN, text: 'Sí, hermano. Mi CPU está literalmente al 0.05% de uso. Discord me consumía 10% y me daba tirones en Valorant.' },
-        { id: 3, author: 'GamerGirl99',avatar: 'G', avatarBg: 'bg-orange', ts: NOW - 2 * MIN, text: 'Literalmente. Oigan, ¿alguien para unas partidas de Apex hoy en la noche?' }
-    ],
-    lounge: [
-        { id: 1, author: 'Snide',  avatar: 'S', avatarBg: 'bg-blue',   ts: NOW - 60 * MIN, text: 'El fin de semana fue genial, jugué unas 14 horas seguidas y Nexus ni parpadeó.' },
-        { id: 2, author: 'Kaizen', avatar: 'K', avatarBg: 'bg-purple', ts: NOW - 30 * MIN, text: 'Qué envidia, yo tuve que estudiar. Pero hoy me desquito.' }
-    ],
-    'clips-and-memes': [
-        { id: 1, author: 'Snide',   avatar: 'S', avatarBg: 'bg-blue',  ts: NOW - 10 * MIN, text: 'Acabo de hacer esta plantilla para celebrar lo rápido que es Nexus 😂', image: 'assets/nexus_optimized.png' },
-        { id: 2, author: 'ApexPro', avatar: 'A', avatarBg: 'bg-green', ts: NOW - 8  * MIN, text: 'JAJAJA, excelente. Mi setup con Nexus está en modo bestia.', image: 'assets/doge_gaming.png' }
-    ],
-    estrategia: [
-        { id: 1, author: 'ApexPro', avatar: 'A', avatarBg: 'bg-green', ts: NOW - 2 * 60 * MIN, text: 'Guía rápida para Duo Queue en Valorant:\n1. Mantener control de medio en Split.\n2. Usar humos de Omen de forma reactiva.\n3. Activar el chat de voz de Nexus.' }
-    ]
+    general: [],
+    lounge: [],
+    'clips-and-memes': [],
+    estrategia: []
 };
 
 const memeTemplates = [
@@ -213,39 +201,50 @@ function subscribeToChannel(channelId) {
         currentRealtimeChannel = null;
     }
 
-    // Suscribirse a inserciones en tiempo real
+    // Suscribirse a inserciones y borrados en tiempo real
     currentRealtimeChannel = supabase
         .channel(`chat:${channelId}`)
         .on('postgres_changes', {
-            event: 'INSERT',
+            event: '*', // Escuchar todo (INSERT, DELETE, UPDATE)
             schema: 'public',
             table: 'messages',
             filter: `channel_id=eq.${channelId}`
         }, (payload) => {
-            const row = payload.new;
-            const myName = getLocalUserName();
-            // No duplicar mensajes propios que ya renderizamos localmente
-            if (row.author === myName) return;
+            if (payload.eventType === 'INSERT') {
+                const row = payload.new;
+                const myName = getLocalUserName();
+                // No duplicar mensajes propios que ya renderizamos localmente
+                if (row.author === myName) return;
 
-            const msg = {
-                id: row.id,
-                author: row.author,
-                avatar: row.avatar || row.author.charAt(0).toUpperCase(),
-                avatarBg: row.avatar_bg || 'bg-blue',
-                ts: new Date(row.created_at).getTime(),
-                text: row.text || '',
-                image: row.image || null,
-                file: row.file ? (typeof row.file === 'string' ? JSON.parse(row.file) : row.file) : null
-            };
+                const msg = {
+                    id: row.id,
+                    author: row.author,
+                    avatar: row.avatar || row.author.charAt(0).toUpperCase(),
+                    avatarBg: row.avatar_bg || 'bg-blue',
+                    ts: new Date(row.created_at).getTime(),
+                    text: row.text || '',
+                    image: row.image || null,
+                    file: row.file ? (typeof row.file === 'string' ? JSON.parse(row.file) : row.file) : null
+                };
 
-            if (!currentMessages[channelId]) currentMessages[channelId] = [];
-            currentMessages[channelId].push(msg);
+                if (!currentMessages[channelId]) currentMessages[channelId] = [];
+                currentMessages[channelId].push(msg);
 
-            if (state.activeChannel === channelId && chatContainer) {
-                chatContainer.appendChild(createMessageElement(msg));
-                scrollToBottom();
-                // Flash de notificación
-                showIncomingMessageIndicator(msg.author);
+                if (state.activeChannel === channelId && chatContainer) {
+                    chatContainer.appendChild(createMessageElement(msg));
+                    scrollToBottom();
+                    // Flash de notificación
+                    showIncomingMessageIndicator(msg.author);
+                }
+            } else if (payload.eventType === 'DELETE') {
+                const deletedId = payload.old.id;
+                // Remover del estado
+                if (currentMessages[channelId]) {
+                    currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== deletedId);
+                }
+                // Remover del DOM
+                const el = document.querySelector(`.message-item[data-id="${deletedId}"]`);
+                if (el) el.remove();
             }
         })
         .subscribe((status) => {
@@ -373,6 +372,10 @@ function createMessageElement(msg) {
     const isMusicBot = msg.author === 'Nexus Music Bot';
     const botBadge = isMusicBot ? '<span style="background:#db2777;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 4px;border-radius:4px;margin-left:6px;font-family:\'Orbitron\'">BOT</span>' : '';
 
+    const amIOp = isUserOp(getLocalUserName());
+    // Only OP can see delete button (and music bot messages can't be deleted as they are local)
+    const deleteBtnHtml = (amIOp && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Borrar mensaje">🗑️</button>` : '';
+
     item.innerHTML = `
         <div class="avatar-container small">${avatarHtml}</div>
         <div class="message-content-wrapper">
@@ -384,6 +387,7 @@ function createMessageElement(msg) {
             ${imageHtml}
             ${fileHtml}
         </div>
+        ${deleteBtnHtml}
     `;
     return item;
 }
@@ -626,3 +630,28 @@ function escapeHTML(str) {
     if (typeof str !== 'string') return '';
     return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
 }
+
+// Global function to delete messages from UI
+window.deleteMessage = async function(id) {
+    if (!confirm('¿Estás seguro de que quieres borrar este mensaje?')) return;
+    
+    // Si estamos usando Supabase, borramos de la DB
+    if (isUsingSupabase && supabase) {
+        try {
+            const { error } = await supabase.from('messages').delete().eq('id', id);
+            if (error) throw error;
+            // El Realtime se encargará de removerlo del DOM al recibir el evento DELETE
+        } catch (e) {
+            console.error('[Chat] Error borrando mensaje:', e);
+            alert('Error al borrar el mensaje. Revisa si configuraste RLS en Supabase para permitir DELETE.');
+        }
+    } else {
+        // Modo local
+        const channelId = state.activeChannel;
+        if (currentMessages[channelId]) {
+            currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== id);
+        }
+        const el = document.querySelector(`.message-item[data-id="${id}"]`);
+        if (el) el.remove();
+    }
+};
