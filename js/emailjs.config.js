@@ -39,13 +39,13 @@
 
 export const EMAILJS_CONFIG = {
     // ⬇ Pega tu Public Key aquí (de EmailJS → Account → General)
-    publicKey: 'YOUR_PUBLIC_KEY_HERE',
+    publicKey: 'c0CipP7cNXt_9ZWG6',
 
     // ⬇ Pega tu Service ID aquí (de EmailJS → Email Services)
-    serviceId: 'YOUR_SERVICE_ID_HERE',
+    serviceId: 'service_tjwn8yb',
 
     // ⬇ Pega tu Template ID aquí (de EmailJS → Email Templates)
-    templateId: 'YOUR_TEMPLATE_ID_HERE',
+    templateId: 'template_wd8jahl',
 };
 
 /*
@@ -55,4 +55,4 @@ export const EMAILJS_CONFIG = {
  *  directamente en la consola del navegador (F12) para que puedas
  *  probarlo de inmediato. Perfecto para desarrollo local.
  */
-export const DEMO_MODE = true; // Cambia a `false` una vez configures EmailJS
+export const DEMO_MODE = false; // Cambia a `false` una vez configures EmailJS
