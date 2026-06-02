@@ -635,23 +635,28 @@ function escapeHTML(str) {
 window.deleteMessage = async function(id) {
     if (!confirm('¿Estás seguro de que quieres borrar este mensaje?')) return;
     
-    // Si estamos usando Supabase, borramos de la DB
-    if (isUsingSupabase && supabase) {
-        try {
-            const { error } = await supabase.from('messages').delete().eq('id', id);
-            if (error) throw error;
-            // El Realtime se encargará de removerlo del DOM al recibir el evento DELETE
-        } catch (e) {
-            console.error('[Chat] Error borrando mensaje:', e);
-            alert('Error al borrar el mensaje. Revisa si configuraste RLS en Supabase para permitir DELETE.');
-        }
-    } else {
-        // Modo local
+    // Función auxiliar para borrarlo de la pantalla inmediatamente
+    const removeLocally = () => {
         const channelId = state.activeChannel;
         if (currentMessages[channelId]) {
             currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== id);
         }
         const el = document.querySelector(`.message-item[data-id="${id}"]`);
         if (el) el.remove();
+    };
+
+    if (isUsingSupabase && supabase) {
+        try {
+            const { error } = await supabase.from('messages').delete().eq('id', id);
+            if (error) throw error;
+            // Lo borramos de la pantalla inmediatamente tras confirmar que se borró en DB
+            removeLocally();
+        } catch (e) {
+            console.error('[Chat] Error borrando mensaje:', e);
+            alert('Error al borrar el mensaje. Revisa si configuraste RLS en Supabase para permitir DELETE.');
+        }
+    } else {
+        // Modo local
+        removeLocally();
     }
 };
