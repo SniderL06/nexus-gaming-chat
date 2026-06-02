@@ -45,7 +45,7 @@ export const EMAILJS_CONFIG = {
     serviceId: 'service_tjwn8yb',
 
     // ⬇ Pega tu Template ID aquí (de EmailJS → Email Templates)
-    templateId: 'template_wd8jahl',
+    templateId: 'template_me8n4fa',
 };
 
 /*
