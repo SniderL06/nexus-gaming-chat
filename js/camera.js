@@ -1,7 +1,7 @@
 /* NEXUS CAMERA MODULE — WebRTC Webcam Capture & PiP Preview */
 
 import { state } from './app.js';
-import { peer, activePeers, isMultiplayerMode, presenceChannel } from './voice.js';
+import { peer, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream } from './voice.js';
 
 // ─── State ───────────────────────────────────────────
 let cameraStream = null;        // MediaStream from getUserMedia (video)
@@ -75,11 +75,20 @@ async function startCamera() {
         // Show local user's own card with the camera stream
         attachLocalCameraToCard();
 
-        // Send to all peers in room
+        // Send to all peers in room — combine video track with mic audio so voice doesn't drop
         if (isMultiplayerMode && peer && activePeers.size > 0) {
+            const micStream = getMicrophoneStream();
+            // Build a combined stream: video from camera + audio from mic (if available)
+            let streamToSend = cameraStream;
+            if (micStream && micStream.getAudioTracks().length > 0) {
+                streamToSend = new MediaStream([
+                    ...cameraStream.getVideoTracks(),
+                    ...micStream.getAudioTracks()
+                ]);
+            }
             activePeers.forEach(({ name }, remotePeerId) => {
                 try {
-                    const videoCall = peer.call(remotePeerId, cameraStream, {
+                    const videoCall = peer.call(remotePeerId, streamToSend, {
                         metadata: { type: 'camera' }
                     });
                     const peerObj = activePeers.get(remotePeerId);

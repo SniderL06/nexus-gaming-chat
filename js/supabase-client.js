@@ -1,14 +1,18 @@
 /* NEXUS SUPABASE CLIENT MODULE (ES MODULE) */
 
+// ─── Credenciales hardcodeadas — los usuarios no necesitan configurar nada ───
+const NEXUS_SUPABASE_URL = 'https://postlkgqpuirhfcyyqje.supabase.co';
+const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvc3Rsa2dxcHVpcmhmY3l5cWplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzY5MDgsImV4cCI6MjA5NTg1MjkwOH0.gclaXRWKgon1Wys5-M_PLHzS_7sPuCXw9voPurez0Bo';
+
 export let supabase = null;
-export let supabaseUrl = localStorage.getItem('nexus_supabase_url') || '';
-export let supabaseKey = localStorage.getItem('nexus_supabase_key') || '';
+export let supabaseUrl = NEXUS_SUPABASE_URL;
+export let supabaseKey = NEXUS_SUPABASE_KEY;
 export let supabaseReady = false;
 
 // ─── Canal de presencia global (quién está en línea) ─────────
 let globalPresenceChannel = null;
 
-// Inicializar cliente si existen las credenciales
+// Inicializar cliente automáticamente con las credenciales hardcodeadas
 function tryInitClient(url, key) {
     if (url && key && window.supabase) {
         try {
@@ -30,7 +34,7 @@ function tryInitClient(url, key) {
     return false;
 }
 
-tryInitClient(supabaseUrl, supabaseKey);
+tryInitClient(NEXUS_SUPABASE_URL, NEXUS_SUPABASE_KEY);
 
 // ─────────────────────────────────────────────────────────────
 // PRESENCIA GLOBAL: quién está conectado en tiempo real
@@ -111,7 +115,6 @@ function updateOnlineMembersSidebar(presenceState) {
     onlineUsers.forEach(user => {
         const isMe = user.name === myName;
         const initial = user.name.charAt(0).toUpperCase();
-        // Colores de avatar consistentes por inicial
         const bgColors = ['bg-blue', 'bg-purple', 'bg-green', 'bg-orange', 'bg-cyan'];
         const colorIdx = user.name.charCodeAt(0) % bgColors.length;
         const bgClass = bgColors[colorIdx];
@@ -133,7 +136,6 @@ function updateOnlineMembersSidebar(presenceState) {
         membersList.appendChild(li);
     });
 
-    // Si no hay nadie (raro, pero por si acaso)
     if (onlineUsers.length === 0 && onlineCountEl) {
         onlineCountEl.textContent = '0';
     }
@@ -148,6 +150,9 @@ function escapeHTMLPresence(str) {
 
 // ─────────────────────────────────────────────────────────────
 // SETUP DEL MODAL DE CONFIGURACIÓN
+// El modal ya no se abre automáticamente porque las credenciales
+// están hardcodeadas. Solo queda disponible desde el botón
+// de configuración manual si el admin lo necesita.
 // ─────────────────────────────────────────────────────────────
 export function initSupabaseSetup() {
     const modal = document.getElementById('database-setup-modal');
@@ -158,10 +163,13 @@ export function initSupabaseSetup() {
     const overlay = document.getElementById('database-setup-overlay');
     const saveBtn = document.getElementById('db-setup-save-btn');
 
+    // Disparar evento para que el resto de la app sepa que Supabase está listo
+    window.dispatchEvent(new CustomEvent('supabase-ready', { detail: { client: supabase } }));
+
     if (openBtn) {
         openBtn.addEventListener('click', () => {
-            if (urlInput) urlInput.value = localStorage.getItem('nexus_supabase_url') || '';
-            if (keyInput) keyInput.value = localStorage.getItem('nexus_supabase_key') || '';
+            if (urlInput) urlInput.value = NEXUS_SUPABASE_URL;
+            if (keyInput) keyInput.value = NEXUS_SUPABASE_KEY;
             if (modal) modal.classList.remove('hidden');
         });
     }
@@ -170,15 +178,12 @@ export function initSupabaseSetup() {
     if (skipBtn) {
         skipBtn.addEventListener('click', () => {
             if (modal) modal.classList.add('hidden');
-            localStorage.setItem('nexus_supabase_skipped', '1');
         });
     }
 
     if (overlay) {
         overlay.addEventListener('click', () => {
-            if (supabaseReady || localStorage.getItem('nexus_supabase_skipped')) {
-                if (modal) modal.classList.add('hidden');
-            }
+            if (modal) modal.classList.add('hidden');
         });
     }
 
@@ -206,8 +211,6 @@ export function initSupabaseSetup() {
                     throw new Error(error.message);
                 }
 
-                localStorage.setItem('nexus_supabase_url', urlVal);
-                localStorage.setItem('nexus_supabase_key', keyVal);
                 supabaseUrl = urlVal;
                 supabaseKey = keyVal;
                 supabase = testClient;
@@ -230,11 +233,7 @@ export function initSupabaseSetup() {
         });
     }
 
-    if (!supabaseReady && !localStorage.getItem('nexus_supabase_skipped')) {
-        setTimeout(() => {
-            if (modal) modal.classList.remove('hidden');
-        }, 1200);
-    }
+    // ✅ El modal NO se abre automáticamente — las credenciales ya están en el código
 }
 
 function showConnectionSuccess() {

@@ -1,7 +1,7 @@
 /* NEXUS REAL-TIME SCREEN CAPTURE & GAME STREAMING ENGINE (ES MODULE) */
 
 import { state, updateRenderLatency } from './app.js';
-import { peer, activePeers, isMultiplayerMode, presenceChannel } from './voice.js';
+import { peer, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream } from './voice.js';
 
 export let activeStream = null;
 let streamVideoElement = null;
@@ -97,10 +97,27 @@ async function startLocalStream() {
         // Transmisión PeerJS en multijugador
         if (isMultiplayerMode && peer) {
             console.log(`[Stream] Compartiendo pantalla con ${activePeers.size} participantes reales.`);
+
+            // Combinar audio del micrófono con el stream de pantalla para no perder la voz
+            const micStream = getMicrophoneStream();
+            let streamToSend = activeStream;
+            if (micStream && micStream.getAudioTracks().length > 0) {
+                const tracks = [
+                    ...activeStream.getVideoTracks(),
+                    ...micStream.getAudioTracks()  // voz del mic sobre el stream de pantalla
+                ];
+                // Añadir también el audio del sistema si lo capturó getDisplayMedia
+                activeStream.getAudioTracks().forEach(t => {
+                    if (!tracks.includes(t)) tracks.push(t);
+                });
+                streamToSend = new MediaStream(tracks);
+                console.log('[Stream] Audio del micrófono combinado con stream de pantalla.');
+            }
+
             activePeers.forEach(({ name }, remotePeerId) => {
                 if (remotePeerId) {
                     console.log(`[Stream] Enviando video de pantalla a: ${name} (${remotePeerId})`);
-                    const videoCall = peer.call(remotePeerId, activeStream);
+                    const videoCall = peer.call(remotePeerId, streamToSend);
                     // Guardar referencia para poder colgarla después
                     const peerObj = activePeers.get(remotePeerId);
                     if (peerObj) peerObj.videoCall = videoCall;

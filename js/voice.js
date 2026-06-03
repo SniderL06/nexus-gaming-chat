@@ -15,6 +15,9 @@ export let isMultiplayerMode = false;      // True when Supabase is configured
 let audioCtx = null;
 let analyser = null;
 let microphoneStream = null;
+
+// Getter exportado para que camera.js y stream.js puedan combinar el audio del mic
+export function getMicrophoneStream() { return microphoneStream; }
 let sourceNode = null;
 let javascriptNode = null;
 let visualizerAnimationId = null;
@@ -525,7 +528,19 @@ function callPeer(remotePeerId, remoteName) {
     import('./stream.js').then(({ activeStream }) => {
         if (state.isStreaming && activeStream) {
             console.log(`[PeerJS] Enviando vídeo de pantalla a nuevo participante: ${remoteName}`);
-            const videoCall = peer.call(remotePeerId, activeStream);
+            // Combinar con audio del mic para que la voz no se pierda
+            let streamToSend = activeStream;
+            if (microphoneStream && microphoneStream.getAudioTracks().length > 0) {
+                const tracks = [
+                    ...activeStream.getVideoTracks(),
+                    ...microphoneStream.getAudioTracks()
+                ];
+                activeStream.getAudioTracks().forEach(t => {
+                    if (!tracks.includes(t)) tracks.push(t);
+                });
+                streamToSend = new MediaStream(tracks);
+            }
+            const videoCall = peer.call(remotePeerId, streamToSend);
             const peerObj = activePeers.get(remotePeerId);
             if (peerObj) peerObj.videoCall = videoCall;
         }
@@ -675,9 +690,20 @@ export function disconnectVoiceChannel(triggerUI = true) {
 // Iniciar Captura de Audio Real (WebRTC Simulator)
 async function startAudioEngine() {
     try {
-        // Detener streams anteriores para evitar fugas de memoria
-        if (microphoneStream) {
+        // Solo detener el stream anterior si NO hay peers activos.
+        // Si hay peers conectados, reutilizamos el stream existente para no
+        // romper las llamadas WebRTC activas (evita el bug de "micrófono mudo al activar cámara/stream").
+        const hasPeers = activePeers.size > 0;
+        if (microphoneStream && !hasPeers) {
             microphoneStream.getTracks().forEach(track => track.stop());
+            microphoneStream = null;
+        } else if (microphoneStream && hasPeers) {
+            // Ya tenemos un stream de mic activo con peers — solo reiniciar el analizador y salir
+            console.log('[Audio] Reutilizando microphoneStream existente (hay peers activos).');
+            resizeCanvas();
+            drawVisualizer();
+            startLocalVAD();
+            return;
         }
 
         // Constraints con id de dispositivo seleccionado
