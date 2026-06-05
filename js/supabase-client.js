@@ -174,91 +174,14 @@ function escapeHTMLPresence(str) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SETUP DEL MODAL DE CONFIGURACIÓN
-// El modal ya no se abre automáticamente porque las credenciales
-// están hardcodeadas. Solo queda disponible desde el botón
-// de configuración manual si el admin lo necesita.
+// INICIALIZACIÓN DE SUPABASE
+// Las credenciales están configuradas en el código.
+// El modal de configuración ha sido removido por seguridad.
 // ─────────────────────────────────────────────────────────────
 export function initSupabaseSetup() {
-    const modal = document.getElementById('database-setup-modal');
-    const form = document.getElementById('database-setup-form');
-    const urlInput = document.getElementById('db-supabase-url');
-    const keyInput = document.getElementById('db-supabase-key');
-    const openBtn = document.getElementById('open-db-config-btn');
-    const overlay = document.getElementById('database-setup-overlay');
-    const saveBtn = document.getElementById('db-setup-save-btn');
-
     // Disparar evento para que el resto de la app sepa que Supabase está listo
     window.dispatchEvent(new CustomEvent('supabase-ready', { detail: { client: supabase } }));
-
-    if (openBtn) {
-        openBtn.addEventListener('click', () => {
-            if (urlInput) urlInput.value = NEXUS_SUPABASE_URL;
-            if (keyInput) keyInput.value = NEXUS_SUPABASE_KEY;
-            if (modal) modal.classList.remove('hidden');
-        });
-    }
-
-    const skipBtn = document.getElementById('db-skip-btn');
-    if (skipBtn) {
-        skipBtn.addEventListener('click', () => {
-            if (modal) modal.classList.add('hidden');
-        });
-    }
-
-    if (overlay) {
-        overlay.addEventListener('click', () => {
-            if (modal) modal.classList.add('hidden');
-        });
-    }
-
-    if (form) {
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const urlVal = urlInput?.value.trim();
-            const keyVal = keyInput?.value.trim();
-
-            if (!urlVal || !keyVal) {
-                alert('Por favor introduce la URL y la Anon Key de tu proyecto Supabase.');
-                return;
-            }
-
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.textContent = 'Conectando...';
-            }
-
-            try {
-                const testClient = window.supabase.createClient(urlVal, keyVal);
-                const { error } = await testClient.from('channels').select('id').limit(1);
-
-                if (error && error.code !== 'PGRST116') {
-                    throw new Error(error.message);
-                }
-
-                supabaseUrl = urlVal;
-                supabaseKey = keyVal;
-                supabase = testClient;
-                supabaseReady = true;
-
-                if (modal) modal.classList.add('hidden');
-                showConnectionSuccess();
-
-                window.dispatchEvent(new CustomEvent('supabase-ready', { detail: { client: supabase } }));
-
-            } catch (err) {
-                console.error('[Supabase] Error al conectar:', err);
-                alert(`Error al conectar con Supabase: ${err.message}\n\nVerifica que la URL y la Anon Key sean correctas.`);
-            } finally {
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = '✅ Guardar y Conectar';
-                }
-            }
-        });
-    }
-
-    // ✅ El modal NO se abre automáticamente — las credenciales ya están en el código
+    updateStatusIndicator();
 }
 
 function showConnectionSuccess() {

@@ -348,10 +348,11 @@ body {
 .user-panel {
     height: 62px;
     background-color: var(--bg-tertiary);
-    padding: 0 12px;
+    padding: 0 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 6px;
     border-top: var(--border-dark);
 }
 
@@ -360,6 +361,8 @@ body {
     align-items: center;
     gap: 8px;
     overflow: hidden;
+    flex: 1;
+    min-width: 0;
 }
 
 .avatar-container {
@@ -412,6 +415,14 @@ body {
     flex-direction: column;
     line-height: 1.2;
     overflow: hidden;
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.user-info:hover {
+    background-color: rgba(255, 255, 255, 0.07);
 }
 
 .username {
@@ -421,6 +432,11 @@ body {
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
+    transition: color 0.2s ease;
+}
+
+.user-info:hover .username {
+    color: var(--accent-cyan);
 }
 
 .usertag {
@@ -431,6 +447,8 @@ body {
 .user-panel-actions {
     display: flex;
     align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .panel-btn {
@@ -438,15 +456,23 @@ body {
     border: none;
     color: #fff;
     border-radius: 6px;
-    padding: 6px 10px;
+    padding: 4px 6px;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: 0;
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 0;
     transition: var(--transition-fast);
-    box-shadow: 0 2px 10px rgba(138, 43, 226, 0.2);
+    box-shadow: 0 2px 6px rgba(138, 43, 226, 0.2);
+    min-width: 25px;
+    height: 25px;
+    title: attr(title);
+}
+
+.panel-btn span {
+    display: none;
 }
 
 .panel-btn:hover {
@@ -463,6 +489,40 @@ body {
 @keyframes flashStream {
     0% { opacity: 0.9; }
     100% { opacity: 1; box-shadow: 0 0 16px rgba(255, 51, 0, 0.5); }
+}
+
+/* Tooltip nativo para botones de acción compactos */
+.panel-btn,
+.logout-action-btn {
+    position: relative;
+}
+
+.panel-btn::after,
+.logout-action-btn::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) scale(0.85);
+    background: hsl(230, 20%, 18%);
+    color: var(--text-normal);
+    font-size: 0.72rem;
+    font-weight: 500;
+    white-space: nowrap;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid hsl(230, 14%, 26%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 9999;
+}
+
+.panel-btn:hover::after,
+.logout-action-btn:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
 }
 
 /* PANEL CENTRAL: CABECERA Y CHAT */
@@ -1678,18 +1738,20 @@ body {
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    margin-left: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: var(--transition-fast);
-    padding: 6px;
+    padding: 5px;
     border-radius: 6px;
+    width: 25px;
+    height: 25px;
+    position: relative;
 }
 
 .logout-action-btn:hover {
     color: var(--accent-orange);
-    background-color: var(--bg-hover);
+    background-color: rgba(255, 80, 0, 0.1);
     transform: scale(1.05);
 }
 

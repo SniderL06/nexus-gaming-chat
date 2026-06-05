@@ -123,6 +123,22 @@ document.addEventListener('DOMContentLoaded', () => {
         loadAndRenderChannels();
     });
 
+    // Abrir Ajustes & Temas al hacer clic en el nombre de usuario de la barra inferior
+    const userInfo = document.querySelector('.user-panel .user-info');
+    if (userInfo) {
+        userInfo.addEventListener('click', () => {
+            const panel = document.getElementById('theme-panel');
+            const profileNameInput = document.getElementById('profile-display-name');
+            if (panel) {
+                panel.classList.add('open');
+            }
+            if (profileNameInput) {
+                profileNameInput.focus();
+                profileNameInput.select();
+            }
+        });
+    }
+
     // Control de transmisiones
     const goLiveBtn = document.getElementById('go-live-btn');
     if (goLiveBtn) {
