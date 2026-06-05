@@ -358,9 +358,13 @@ async function loadMessagesFromSupabase(channelId) {
             image: row.image || null,
             file: row.file || null
         }));
-        renderMessages();
+        // Renderizar siempre con el channelId explícito para evitar mezclar mensajes de servidores distintos
+        renderMessages(channelId);
     } catch (err) {
         console.warn('[Chat] No se pudieron cargar mensajes de Supabase:', err.message);
+        // En caso de error, limpiar el canal para no mostrar mensajes obsoletos
+        currentMessages[channelId] = [];
+        renderMessages(channelId);
     }
 }
 
@@ -450,6 +454,9 @@ export function switchChatChannel(channelId) {
     const titleEl = document.getElementById('active-channel-title');
     const descEl  = document.getElementById('active-channel-desc');
 
+    // Actualizar el canal activo ANTES de cualquier operación asíncrona
+    state.activeChannel = channelId;
+
     if (titleEl) titleEl.textContent = channelId;
     if (descEl) {
         const descs = {
@@ -476,10 +483,13 @@ export function switchChatChannel(channelId) {
 // ─────────────────────────────────────────────────────────────
 // RENDER DE MENSAJES
 // ─────────────────────────────────────────────────────────────
-function renderMessages() {
+function renderMessages(channelId) {
     if (!chatContainer) return;
+    const targetChannel = channelId || state.activeChannel;
+    // Solo renderizar si es el canal actualmente activo, para evitar mezclar canales
+    if (targetChannel !== state.activeChannel) return;
     chatContainer.innerHTML = '';
-    const messages = currentMessages[state.activeChannel] || [];
+    const messages = currentMessages[targetChannel] || [];
     messages.forEach(msg => chatContainer.appendChild(createMessageElement(msg)));
     scrollToBottom();
 }
@@ -717,14 +727,23 @@ async function sendSticker(stickerImg, stickerName) {
     // Persistir en Supabase
     if (isUsingSupabase && supabase) {
         try {
-            await supabase.from('messages').insert({
+            const { data: insertedRows, error } = await supabase.from('messages').insert({
                 channel_id: state.activeChannel,
                 author: displayName,
                 avatar: avatarPayload,
                 avatar_bg: 'bg-blue',
                 text: `[Sticker]`,
                 image: stickerImg
-            });
+            }).select('id');
+            if (!error && insertedRows && insertedRows[0]) {
+                const realId = insertedRows[0].id;
+                const oldId = newMsg.id;
+                newMsg.id = realId;
+                const arr = currentMessages[state.activeChannel];
+                if (arr) { const idx = arr.findIndex(m => m.id === oldId); if (idx !== -1) arr[idx].id = realId; }
+                const el = document.querySelector(`.message-item[data-id="${oldId}"]`);
+                if (el) el.setAttribute('data-id', realId);
+            }
         } catch (err) {
             console.error('[Chat] Error al guardar sticker en Supabase:', err);
         }
@@ -868,8 +887,24 @@ async function sendMessage() {
                 image: newMsg.image || null,
                 file: newMsg.file ? JSON.stringify(newMsg.file) : null
             };
-            const { error } = await supabase.from('messages').insert(payload);
-            if (error) console.error('[Chat] Error al guardar mensaje en Supabase:', error.message);
+            const { data: insertedRows, error } = await supabase.from('messages').insert(payload).select('id');
+            if (error) {
+                console.error('[Chat] Error al guardar mensaje en Supabase:', error.message);
+            } else if (insertedRows && insertedRows[0]) {
+                // Actualizar el ID local con el UUID real de Supabase para que el botón borrar funcione
+                const realId = insertedRows[0].id;
+                const oldId = newMsg.id;
+                newMsg.id = realId;
+                // Actualizar en el array de mensajes
+                const arr = currentMessages[state.activeChannel];
+                if (arr) {
+                    const idx = arr.findIndex(m => m.id === oldId);
+                    if (idx !== -1) arr[idx].id = realId;
+                }
+                // Actualizar el atributo data-id del elemento del DOM
+                const el = document.querySelector(`.message-item[data-id="${oldId}"]`);
+                if (el) el.setAttribute('data-id', realId);
+            }
         } catch (err) {
             console.error('[Chat] Error en insert de Supabase:', err);
         }
@@ -914,14 +949,23 @@ async function sendMeme(memeImg, memeName) {
     // Persistir en Supabase
     if (isUsingSupabase && supabase) {
         try {
-            await supabase.from('messages').insert({
+            const { data: insertedRows, error } = await supabase.from('messages').insert({
                 channel_id: state.activeChannel,
                 author: displayName,
                 avatar: avatarPayload,
                 avatar_bg: 'bg-blue',
                 text: newMsg.text,
                 image: memeImg
-            });
+            }).select('id');
+            if (!error && insertedRows && insertedRows[0]) {
+                const realId = insertedRows[0].id;
+                const oldId = newMsg.id;
+                newMsg.id = realId;
+                const arr = currentMessages[state.activeChannel];
+                if (arr) { const idx = arr.findIndex(m => m.id === oldId); if (idx !== -1) arr[idx].id = realId; }
+                const el = document.querySelector(`.message-item[data-id="${oldId}"]`);
+                if (el) el.setAttribute('data-id', realId);
+            }
         } catch (err) {
             console.error('[Chat] Error al guardar meme en Supabase:', err);
         }
@@ -967,14 +1011,17 @@ function escapeHTML(str) {
 }
 
 // Global function to delete messages from UI
+// NOTE: id can be a UUID string (Supabase) or a numeric timestamp (local-only)
 window.deleteMessage = async function(id) {
     if (!confirm('¿Estás seguro de que quieres borrar este mensaje?')) return;
     
     // Función auxiliar para borrarlo de la pantalla inmediatamente
+    // Usa == (loose) para comparar por si hay mezcla de tipos string/number
     const removeLocally = () => {
         const channelId = state.activeChannel;
         if (currentMessages[channelId]) {
-            currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== id);
+            // eslint-disable-next-line eqeqeq
+            currentMessages[channelId] = currentMessages[channelId].filter(m => m.id != id);
         }
         const el = document.querySelector(`.message-item[data-id="${id}"]`);
         if (el) el.remove();
@@ -988,7 +1035,15 @@ window.deleteMessage = async function(id) {
             removeLocally();
         } catch (e) {
             console.error('[Chat] Error borrando mensaje:', e);
-            alert('Error al borrar el mensaje. Revisa si configuraste RLS en Supabase para permitir DELETE.');
+            // Si falla en Supabase (RLS, o mensaje local sin UUID), borrarlo solo localmente
+            const arr = currentMessages[state.activeChannel];
+            // eslint-disable-next-line eqeqeq
+            const isLocalOnly = arr && arr.some(m => m.id == id && typeof m.id === 'number');
+            if (isLocalOnly) {
+                removeLocally();
+            } else {
+                alert('Error al borrar el mensaje. Revisa si configuraste RLS en Supabase para permitir DELETE.');
+            }
         }
     } else {
         // Modo local

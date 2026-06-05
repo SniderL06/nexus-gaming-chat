@@ -1067,6 +1067,8 @@ function toggleDeafen() {
 function getLocalUserName() {
     const email = localStorage.getItem('nexus_user_email') || '';
     if (!email) return 'Usuario Nexus';
+    const customName = localStorage.getItem('nexus_username_' + email);
+    if (customName) return customName;
     const base = email.split('@')[0];
     return base.charAt(0).toUpperCase() + base.slice(1);
 }
