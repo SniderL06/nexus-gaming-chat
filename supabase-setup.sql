@@ -40,9 +40,11 @@ create table if not exists messages (
 );
 
 -- ─────────────────────────────────────────────────────────────
--- 3. HABILITAR REALTIME EN LA TABLA MESSAGES
+-- 3. HABILITAR REALTIME EN LAS TABLAS MESSAGES, SERVERS Y CHANNELS
 -- ─────────────────────────────────────────────────────────────
 alter publication supabase_realtime add table messages;
+alter publication supabase_realtime add table servers;
+alter publication supabase_realtime add table channels;
 
 -- ─────────────────────────────────────────────────────────────
 -- 4. ROW LEVEL SECURITY (RLS) - Acceso público (sin autenticación)

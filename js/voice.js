@@ -58,22 +58,26 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // Supresión de ruido: noise gate via DynamicsCompressor + high-pass
+            // Supresión de ruido: Filtro pasa banda para voz (150Hz - 3000Hz)
+            // Esto elimina el zumbido de baja frecuencia (aire acondicionado, línea eléctrica)
+            // y el siseo de alta frecuencia (ventiladores de PC) sin comprimir ni distorsionar la voz.
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 120;
+            hp.frequency.value = 150;
+            hp.Q.value = 1.0;
 
-            const gate = audioCtx.createDynamicsCompressor();
-            gate.threshold.value = -45;
-            gate.knee.value = 10;
-            gate.ratio.value = 20;
-            gate.attack.value = 0.001;
-            gate.release.value = 0.1;
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 3000;
+            lp.Q.value = 1.0;
 
             inputNode.connect(hp);
-            hp.connect(gate);
-            filterCleanupFns.push(() => { try { hp.disconnect(); gate.disconnect(); } catch(e){} });
-            return gate;
+            hp.connect(lp);
+
+            filterCleanupFns.push(() => {
+                try { hp.disconnect(); lp.disconnect(); } catch(e){}
+            });
+            return lp;
         }
 
         case 'robot': {
@@ -773,7 +777,8 @@ async function joinSupabasePresence(channelId, myName, peerId) {
                 peerId: localPeerId,
                 avatar: myAvatar,
                 avatarStyle: myAvatarStyle,
-                isMuted: state.isMuted,
+                isMuted: state.isMuted || state.isDeafened,
+                isOp: email === OP_EMAIL,
                 joinedAt: Date.now()
             });
             console.log(`[Presence] Presencia publicada en ${roomChannel}`);
@@ -796,7 +801,8 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
                     isMuted: presence.isMuted || false,
                     activeSpeaker: false,
                     isLocalUser: presence.peerId === localPeerId,
-                    peerId: presence.peerId
+                    peerId: presence.peerId,
+                    isOp: presence.isOp || false
                 });
             }
         });
@@ -1048,8 +1054,8 @@ async function startAudioEngine() {
         // El stream procesado es el que sale por WebRTC
         processedStream = audioDestNode.stream;
 
-        // Si el usuario está muteado inicialmente, apagamos las pistas
-        if (state.isMuted) {
+        // Si el usuario está muteado o ensordecido inicialmente, apagamos las pistas
+        if (state.isMuted || state.isDeafened) {
             toggleMicStreamTracks(false);
         }
 
@@ -1167,6 +1173,12 @@ function stopAudioEngine() {
 const OP_EMAIL = 'sniderquiros5@gmail.com';
 
 export function isUserOp(name) {
+    if (!name) return false;
+
+    // Buscar en los miembros activos de la sala de voz si ya está marcado como OP
+    const member = activeMembersInRoom.find(m => m.name === name);
+    if (member && member.isOp) return true;
+
     // Comprobar si el nombre pertenece al email con OP hardcodeado
     const sessionEmail = localStorage.getItem('nexus_user_email') || '';
     const sessionCustomName = sessionEmail ? localStorage.getItem('nexus_username_' + sessionEmail) : null;
@@ -1175,20 +1187,16 @@ export function isUserOp(name) {
         : '';
     const sessionDisplayName = sessionCustomName || sessionDefaultName;
 
-    // Si el nombre coincide con el del propietario OP hardcodeado, conceder OP
+    // Solo sniderquiros5@gmail.com tiene OP
     if (sessionEmail === OP_EMAIL && name === sessionDisplayName) return true;
 
-    // Para los demás usuarios, consultar la lista dinámica de OP en localStorage
-    // (asignada por OPs con el menú de miembros, pero solo sniderquiros5 puede darlo)
-    try {
-        const ops = JSON.parse(localStorage.getItem('nexus_op_list') || '[]');
-        // Nunca incluir otros nombres que no sean el OP hardcodeado,
-        // para evitar que queden OPs de sesiones anteriores.
-        // Solo retorna true si el nombre está en la lista Y no es el OP base.
-        return ops.includes(name);
-    } catch {
-        return false;
+    // Para compatibilidad con otros clientes/vistas (remotos)
+    const normalized = name.toLowerCase().trim();
+    if (normalized === 'sniderquiros5' || normalized === 'snider') {
+        return true;
     }
+
+    return false;
 }
 
 // Retorna el AnalyserNode activo del motor WebRTC (para acoplar el bot de música)
@@ -1314,9 +1322,10 @@ function renderVoiceMembers() {
 
 // Activar/desactivar pistas del micrófono físico
 function toggleMicStreamTracks(enabled) {
+    const shouldEnable = enabled && !state.isMuted && !state.isDeafened;
     if (microphoneStream) {
         microphoneStream.getTracks().forEach(track => {
-            track.enabled = enabled;
+            track.enabled = shouldEnable;
         });
     }
 }
@@ -1349,7 +1358,18 @@ function toggleMute() {
     // Actualizar presencia en Supabase si está en modo multiplayer
     if (isMultiplayerMode && presenceChannel && localPeerId) {
         const myName = getLocalUserName();
-        presenceChannel.track({ name: myName, peerId: localPeerId, isMuted: state.isMuted, joinedAt: Date.now() }).catch(() => {});
+        const email = localStorage.getItem('nexus_user_email') || '';
+        const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+        const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+        presenceChannel.track({
+            name: myName,
+            peerId: localPeerId,
+            avatar: myAvatar,
+            avatarStyle: myAvatarStyle,
+            isMuted: state.isMuted || state.isDeafened,
+            isOp: email === OP_EMAIL,
+            joinedAt: Date.now()
+        }).catch(() => {});
     }
 
     // Refrescar tarjetas de la sala de voz
@@ -1382,6 +1402,9 @@ function toggleDeafen() {
     // Actualizar volumen general (muteará la salida de audio/música en caliente)
     applyOutputVolumeGlobal();
 
+    // Silenciar el propio micrófono si estamos ensordecidos
+    toggleMicStreamTracks(!state.isMuted && !state.isDeafened);
+
     // CRÍTICO: aplicar el silenciado/desilenciado inmediatamente a todos los
     // elementos <audio> de los peers WebRTC que ya están reproduciéndose
     activePeers.forEach(peerData => {
@@ -1394,6 +1417,26 @@ function toggleDeafen() {
     // También silenciar/desilenciar el vídeo remoto de stream compartido
     const remoteVideo = document.getElementById('local-stream-video');
     if (remoteVideo) remoteVideo.muted = state.isDeafened;
+
+    // Actualizar presencia en Supabase si está en modo multiplayer
+    if (isMultiplayerMode && presenceChannel && localPeerId) {
+        const myName = getLocalUserName();
+        const email = localStorage.getItem('nexus_user_email') || '';
+        const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+        const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+        presenceChannel.track({
+            name: myName,
+            peerId: localPeerId,
+            avatar: myAvatar,
+            avatarStyle: myAvatarStyle,
+            isMuted: state.isMuted || state.isDeafened,
+            isOp: email === OP_EMAIL,
+            joinedAt: Date.now()
+        }).catch(() => {});
+    }
+
+    // Refrescar tarjetas de la sala de voz
+    updateUserInRoomState();
 }
 
 // Obtener el nombre de display del usuario autenticado

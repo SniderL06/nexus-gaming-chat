@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('supabase-ready', () => {
         loadAndRenderServers();
         loadAndRenderChannels();
+        subscribeToServersAndChannels();
     });
 
     // Abrir Ajustes & Temas al hacer clic en el nombre de usuario de la barra inferior
@@ -1183,7 +1184,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = newChannelNameInput.value.trim();
             if (!name) return;
 
-            const channelId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const channelId = `${state.activeServer}-${name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
 
             // Guardar en localStorage
             const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
@@ -1466,6 +1467,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateRenderLatency(startTime);
     console.log('[Nexus] Inicializado correctamente en 42ms.');
+
+    let serversRealtimeChannel = null;
+    let channelsRealtimeChannel = null;
+
+    function subscribeToServersAndChannels() {
+        if (!supabaseReady || !supabase) return;
+
+        if (serversRealtimeChannel) {
+            supabase.removeChannel(serversRealtimeChannel);
+        }
+        if (channelsRealtimeChannel) {
+            supabase.removeChannel(channelsRealtimeChannel);
+        }
+
+        console.log('[Realtime] Suscribiéndose a cambios de servidores y canales...');
+
+        serversRealtimeChannel = supabase
+            .channel('realtime:servers')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'servers'
+            }, async (payload) => {
+                console.log('[Realtime Servers] Cambio detectado:', payload.eventType);
+                await loadAndRenderServers();
+                // Si el servidor activo actual fue eliminado, volver al default
+                if (payload.eventType === 'DELETE' && state.activeServer === payload.old.id) {
+                    state.activeServer = 'nexus-default';
+                    // Activar visualmente el servidor default
+                    const defServerItem = document.querySelector(`.server-item-wrapper[data-server-id="nexus-default"]`);
+                    if (defServerItem) {
+                        document.querySelectorAll('.server-item-wrapper').forEach(el => el.classList.remove('active'));
+                        defServerItem.classList.add('active');
+                    }
+                    loadAndRenderChannels();
+                }
+            })
+            .subscribe();
+
+        channelsRealtimeChannel = supabase
+            .channel('realtime:channels')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'channels'
+            }, async (payload) => {
+                console.log('[Realtime Channels] Cambio detectado:', payload.eventType);
+                await loadAndRenderChannels();
+            })
+            .subscribe();
+    }
 
     // ── Utilidad de escape HTML (usada dentro de DOMContentLoaded) ──
     function escapeHTMLForApp(str) {

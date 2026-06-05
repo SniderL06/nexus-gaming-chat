@@ -394,11 +394,33 @@ function subscribeToChannel(channelId) {
             if (payload.eventType === 'INSERT') {
                 const row = payload.new;
                 const myName = getLocalUserName();
-                // No duplicar mensajes propios que ya renderizamos localmente
-                if (row.author === myName) return;
-                // Evitar duplicados si el mensaje ya existe en el estado local
+                
+                // No duplicar mensajes propios que ya renderizamos localmente (ignorando mayúsculas/minúsculas)
+                if (row.author.toLowerCase().trim() === myName.toLowerCase().trim()) return;
+                
+                // Evitar duplicados si el mensaje ya existe en el estado local (por ID de DB)
                 const existing = currentMessages[channelId]?.find(m => m.id === row.id);
                 if (existing) return;
+
+                // Evitar duplicados por carrera realtime: si existe un mensaje temporal local (con ID numérico)
+                // del mismo autor y texto enviado hace menos de 5 segundos, actualizamos su ID en caliente
+                const recentDuplicate = currentMessages[channelId]?.find(m => 
+                    typeof m.id === 'number' && 
+                    m.author.toLowerCase().trim() === row.author.toLowerCase().trim() && 
+                    m.text === row.text &&
+                    Math.abs(m.ts - new Date(row.created_at).getTime()) < 5000
+                );
+                
+                if (recentDuplicate) {
+                    const oldId = recentDuplicate.id;
+                    recentDuplicate.id = row.id;
+                    recentDuplicate.ts = new Date(row.created_at).getTime();
+                    
+                    // Actualizar el data-id en el DOM
+                    const el = document.querySelector(`.message-item[data-id="${oldId}"]`);
+                    if (el) el.setAttribute('data-id', row.id);
+                    return;
+                }
 
                 const msg = {
                     id: row.id,
