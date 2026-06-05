@@ -883,6 +883,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data, error } = await supabase.from('servers').select('*').order('created_at', { ascending: true });
                 if (!error && data) {
                     servers = data;
+
+                    // Sincronizar servidores locales que falten en la base de datos (Auto-migración)
+                    const localServers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
+                    for (const localS of localServers) {
+                        if (!servers.some(s => s.id === localS.id)) {
+                            console.log(`[Auto-Sync] Sincronizando servidor local a Supabase: ${localS.name}`);
+                            await supabase.from('servers').insert({ id: localS.id, name: localS.name, icon: localS.icon });
+                            servers.push(localS);
+                        }
+                    }
                 }
             } catch (err) {
                 console.warn('[Servidores] Error leyendo de Supabase, usando local:', err);
@@ -1012,8 +1022,25 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const { data, error } = await supabase.from('channels').select('*').order('created_at', { ascending: true });
                 if (!error && data) {
+                    let dbChannels = data;
+
+                    // Sincronizar canales locales que falten en la base de datos (Auto-migración)
+                    const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+                    for (const localCh of localChannels) {
+                        if (!dbChannels.some(ch => ch.id === localCh.id)) {
+                            console.log(`[Auto-Sync] Sincronizando canal local a Supabase: ${localCh.name}`);
+                            await supabase.from('channels').insert({
+                                id: localCh.id,
+                                name: localCh.name,
+                                type: localCh.type,
+                                server_id: localCh.server_id
+                            });
+                            dbChannels.push(localCh);
+                        }
+                    }
+
                     // Filtrar por servidor activo
-                    channels = data.filter(ch => {
+                    channels = dbChannels.filter(ch => {
                         const sId = ch.server_id || 'nexus-default';
                         return sId === state.activeServer;
                     });
@@ -1156,6 +1183,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function getLocalUserName() {
         const email = localStorage.getItem('nexus_user_email') || '';
         if (!email) return 'Usuario Nexus';
+        const customName = localStorage.getItem('nexus_username_' + email);
+        if (customName) return customName;
         const base = email.split('@')[0];
         return base.charAt(0).toUpperCase() + base.slice(1);
     }
@@ -1170,6 +1199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (createChannelForm) {
         createChannelForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            if (channelCreateError) channelCreateError.classList.add('hidden');
             
             // Validar si el usuario es OP
             const myName = getLocalUserName();
@@ -1208,16 +1238,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 }).then(({ error }) => {
                     if (error) {
                         console.error('[Supabase] Error al crear canal:', error.message);
+                        if (channelCreateError) {
+                            channelCreateError.textContent = `Error en base de datos: ${error.message}`;
+                            channelCreateError.classList.remove('hidden');
+                        }
                     } else {
                         console.log('[Supabase] Canal creado en base de datos.');
                         loadAndRenderChannels(); // Sincronizar
+                        closeChannelModal();
                     }
                 });
             } else {
                 loadAndRenderChannels(); // Sincronizar local
+                closeChannelModal();
             }
-
-            closeChannelModal();
         });
     }
 
@@ -1316,6 +1350,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (createServerForm) {
         createServerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const serverError = document.getElementById('server-create-error');
+            if (serverError) serverError.classList.add('hidden');
+
             const name = newServerNameInput.value.trim();
             if (!name) return;
 
@@ -1327,30 +1364,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const serverId = 'server-' + Date.now();
 
-            // Guardar localmente
+            // Guardar en Supabase primero (para validar RLS y FK)
+            if (supabaseReady && supabase) {
+                // Insertar servidor
+                const { error: serverErr } = await supabase.from('servers').insert({ id: serverId, name, icon });
+                if (serverErr) {
+                    console.error('[Supabase] Error al crear nuevo servidor:', serverErr.message);
+                    if (serverError) {
+                        serverError.textContent = `Error al crear servidor: ${serverErr.message}`;
+                        serverError.classList.remove('hidden');
+                    }
+                    return;
+                }
+
+                // Insertar canales por defecto en Supabase
+                const { error: channelsErr } = await supabase.from('channels').insert([
+                    { id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId },
+                    { id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId }
+                ]);
+                if (channelsErr) {
+                    console.error('[Supabase] Error al crear canales por defecto:', channelsErr.message);
+                    if (serverError) {
+                        serverError.textContent = `Error al crear canales: ${channelsErr.message}`;
+                        serverError.classList.remove('hidden');
+                    }
+                    return;
+                }
+            }
+
+            // Guardar localmente tras éxito en DB
             const localServers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
             localServers.push({ id: serverId, name, icon });
             localStorage.setItem('nexus_servers', JSON.stringify(localServers));
 
-            // Crear canales por defecto localmente
             const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
             localChannels.push({ id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId });
             localChannels.push({ id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId });
             localStorage.setItem('nexus_local_channels', JSON.stringify(localChannels));
-
-            // Guardar en Supabase
-            if (supabaseReady && supabase) {
-                try {
-                    await supabase.from('servers').insert({ id: serverId, name, icon });
-                    await supabase.from('channels').insert([
-                        { id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId },
-                        { id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId }
-                    ]);
-                    console.log('[Supabase] Servidor y canales creados.');
-                } catch (err) {
-                    console.warn('[Supabase] Error al guardar nuevo servidor:', err.message);
-                }
-            }
 
             closeServerModal();
 
