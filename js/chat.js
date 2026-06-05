@@ -471,7 +471,7 @@ function showIncomingMessageIndicator(author) {
 // ─────────────────────────────────────────────────────────────
 // CAMBIO DE CANAL
 // ─────────────────────────────────────────────────────────────
-export function switchChatChannel(channelId) {
+export function switchChatChannel(channelId, channelName) {
     const startTime = performance.now();
     const titleEl = document.getElementById('active-channel-title');
     const descEl  = document.getElementById('active-channel-desc');
@@ -479,7 +479,23 @@ export function switchChatChannel(channelId) {
     // Actualizar el canal activo ANTES de cualquier operación asíncrona
     state.activeChannel = channelId;
 
-    if (titleEl) titleEl.textContent = channelId;
+    // Si no se proporciona el nombre, extraerlo limpiando el prefijo del ID (ej: server-123-general -> general)
+    let displayName = channelName;
+    if (!displayName) {
+        if (channelId.includes('-')) {
+            const parts = channelId.split('-');
+            // Si el ID empieza con "server-" o tiene formato de servidor, tomamos la última parte
+            if (channelId.includes('server-')) {
+                displayName = parts[parts.length - 1];
+            } else {
+                displayName = channelId;
+            }
+        } else {
+            displayName = channelId;
+        }
+    }
+
+    if (titleEl) titleEl.textContent = displayName.toLowerCase();
     if (descEl) {
         const descs = {
             'general':        'Canal general de chat y discusiones.',
@@ -487,9 +503,9 @@ export function switchChatChannel(channelId) {
             'clips-and-memes':'¡Comparte tus jugadas y memes más épicos!',
             'estrategia':     'Análisis táctico y guías de juego.'
         };
-        descEl.textContent = descs[channelId] || '';
+        descEl.textContent = descs[displayName] || descs[channelId] || '';
     }
-    if (chatTextarea) chatTextarea.placeholder = `Enviar mensaje a #${channelId}... (Enter para enviar)`;
+    if (chatTextarea) chatTextarea.placeholder = `Enviar mensaje a #${displayName.toLowerCase()}... (Enter para enviar)`;
 
     // Si Supabase está activo, cargar mensajes reales y re-suscribir
     if (isUsingSupabase && supabase) {

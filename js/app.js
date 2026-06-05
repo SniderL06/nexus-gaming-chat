@@ -1093,7 +1093,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (itemEl) {
                     itemEl.classList.add('active');
                     state.activeChannel = firstText.id;
-                    switchChatChannel(firstText.id);
+                    switchChatChannel(firstText.id, firstText.name);
                 }
             } else {
                 state.activeChannel = '';
@@ -1232,7 +1232,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.channel-item[data-type="text"]').forEach(el => el.classList.remove('active'));
                 item.classList.add('active');
                 state.activeChannel = channelId;
-                switchChatChannel(channelId);
+                const channelName = item.querySelector('.channel-name')?.textContent || channelId;
+                switchChatChannel(channelId, channelName);
             } else if (type === 'voice') {
                 if (state.activeVoiceChannel === channelId) {
                     disconnectVoiceChannel();
