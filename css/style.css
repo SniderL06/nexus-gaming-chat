@@ -774,6 +774,122 @@ body {
     gap: 16px;
 }
 
+/* ── PANEL DE FILTROS DE MICRÓFONO ── */
+.mic-filters-panel {
+    background: linear-gradient(135deg, rgba(139,92,246,0.07) 0%, rgba(0,212,255,0.05) 100%);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(4px);
+}
+
+.filters-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.filters-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: 'Orbitron', monospace;
+    color: var(--text-normal);
+    letter-spacing: 0.04em;
+}
+
+.filters-hint {
+    font-size: 0.67rem;
+    color: var(--text-muted);
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.mic-filter-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 6px;
+    background: var(--bg-secondary);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.mic-filter-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    border-radius: inherit;
+}
+
+.mic-filter-btn:hover {
+    border-color: rgba(139,92,246,0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(139,92,246,0.2);
+}
+
+.mic-filter-btn:hover::before {
+    opacity: 0.08;
+}
+
+.mic-filter-btn.active {
+    border-color: var(--accent-purple);
+    background: rgba(139,92,246,0.15);
+    box-shadow: 0 0 0 1px var(--accent-purple), 0 0 16px rgba(139,92,246,0.3);
+}
+
+.mic-filter-btn.active::before {
+    opacity: 0.12;
+}
+
+.filter-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.18s ease;
+}
+
+.mic-filter-btn:hover .filter-icon,
+.mic-filter-btn.active .filter-icon {
+    transform: scale(1.15);
+}
+
+.filter-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    transition: color 0.18s ease;
+}
+
+.mic-filter-btn.active .filter-label {
+    color: var(--accent-purple);
+}
+
+.mic-filter-btn:hover .filter-label {
+    color: var(--text-normal);
+}
+
+
 .voice-members-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

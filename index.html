@@ -258,6 +258,48 @@
                             <span>Analizador de Frecuencia WebRTC</span>
                         </div>
                     </div>
+
+                    <!-- PANEL DE FILTROS DE MICRÓFONO -->
+                    <div class="mic-filters-panel" id="mic-filters-panel">
+                        <div class="filters-header">
+                            <span class="filters-title">🎙️ Filtros de Micrófono</span>
+                            <span class="filters-hint">Se aplican en tiempo real a tu voz</span>
+                        </div>
+                        <div class="filters-grid">
+                            <button class="mic-filter-btn active" data-filter="none" title="Sin filtro — voz natural">
+                                <span class="filter-icon">🎤</span>
+                                <span class="filter-label">Sin Filtro</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="noise" title="Supresión de ruido de fondo">
+                                <span class="filter-icon">🔇</span>
+                                <span class="filter-label">Anti-Ruido</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="robot" title="Efecto de voz robótica">
+                                <span class="filter-icon">🤖</span>
+                                <span class="filter-label">Robot</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="radio" title="Efecto de radio / walkie-talkie">
+                                <span class="filter-icon">📻</span>
+                                <span class="filter-label">Radio</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="megaphone" title="Efecto de megáfono">
+                                <span class="filter-icon">📢</span>
+                                <span class="filter-label">Megáfono</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="echo" title="Eco y reverb de cueva">
+                                <span class="filter-icon">🌊</span>
+                                <span class="filter-label">Eco</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="bass" title="Voz profunda y grave">
+                                <span class="filter-icon">🔊</span>
+                                <span class="filter-label">Voz Grave</span>
+                            </button>
+                            <button class="mic-filter-btn" data-filter="chipmunk" title="Voz aguda tipo ardilla">
+                                <span class="filter-icon">🐿️</span>
+                                <span class="filter-label">Ardilla</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- HISTORIAL DE CHAT -->

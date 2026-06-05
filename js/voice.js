@@ -27,6 +27,277 @@ let isLocalUserSpeaking = false; // estado en tiempo real del hablante local
 let canvas = null;
 let canvasCtx = null;
 
+// ─────────────────────────────────────────────────────────────
+// SISTEMA DE FILTROS DE MICRÓFONO (Web Audio API)
+// ─────────────────────────────────────────────────────────────
+let processedStream   = null;  // Stream filtrado que se envía por WebRTC
+let audioDestNode     = null;  // MediaStreamDestination que captura el audio filtrado
+let filterOutputNode  = null;  // Nodo final de la cadena de filtros (antes de dest)
+let filterCleanupFns  = [];    // Funciones de cleanup del filtro activo
+export let currentFilter = 'none';
+
+// Curva de distorsión para WaveShaperNode
+function makeDistortionCurve(amount) {
+    const n = 256;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; ++i) {
+        const x = (i * 2) / n - 1;
+        curve[i] = ((Math.PI + amount) * x) / (Math.PI + amount * Math.abs(x));
+    }
+    return curve;
+}
+
+// Construir cadena de filtros y retornar el nodo de salida
+function buildFilterChain(filterName, inputNode) {
+    // Limpiar filtro anterior
+    filterCleanupFns.forEach(fn => fn());
+    filterCleanupFns = [];
+
+    if (!audioCtx) return inputNode;
+
+    switch (filterName) {
+
+        case 'noise': {
+            // Supresión de ruido: noise gate via DynamicsCompressor + high-pass
+            const hp = audioCtx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 120;
+
+            const gate = audioCtx.createDynamicsCompressor();
+            gate.threshold.value = -45;
+            gate.knee.value = 10;
+            gate.ratio.value = 20;
+            gate.attack.value = 0.001;
+            gate.release.value = 0.1;
+
+            inputNode.connect(hp);
+            hp.connect(gate);
+            filterCleanupFns.push(() => { try { hp.disconnect(); gate.disconnect(); } catch(e){} });
+            return gate;
+        }
+
+        case 'robot': {
+            // Robot: ring modulation (multiplicar señal por oscilaación)
+            const osc = audioCtx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.value = 60;
+            osc.start();
+
+            const ringModGain = audioCtx.createGain();
+            ringModGain.gain.value = 0; // modulado por el oscilador
+
+            // AM: conectar osc al parámetro gain del nodo de ring mod
+            osc.connect(ringModGain.gain);
+            inputNode.connect(ringModGain);
+
+            // Pasamos también la señal original mezclada para legibilidad
+            const dryGain = audioCtx.createGain();
+            dryGain.gain.value = 0.3;
+            inputNode.connect(dryGain);
+
+            const merger = audioCtx.createGain();
+            merger.gain.value = 1;
+            ringModGain.connect(merger);
+            dryGain.connect(merger);
+
+            filterCleanupFns.push(() => {
+                try { osc.stop(); osc.disconnect(); ringModGain.disconnect(); dryGain.disconnect(); merger.disconnect(); } catch(e){}
+            });
+            return merger;
+        }
+
+        case 'radio': {
+            // Radio: bandpass estrecho + distorsión ligera
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = 1800;
+            bp.Q.value = 0.7;
+
+            const dist = audioCtx.createWaveShaper();
+            dist.curve = makeDistortionCurve(60);
+            dist.oversample = '4x';
+
+            const hiss = audioCtx.createBiquadFilter();
+            hiss.type = 'highshelf';
+            hiss.frequency.value = 4000;
+            hiss.gain.value = 6;
+
+            inputNode.connect(bp);
+            bp.connect(dist);
+            dist.connect(hiss);
+
+            filterCleanupFns.push(() => { try { bp.disconnect(); dist.disconnect(); hiss.disconnect(); } catch(e){} });
+            return hiss;
+        }
+
+        case 'megaphone': {
+            // Megáfono: bandpass angosto + distorsión fuerte
+            const hp = audioCtx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 700;
+
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 3500;
+
+            const dist = audioCtx.createWaveShaper();
+            dist.curve = makeDistortionCurve(200);
+            dist.oversample = '2x';
+
+            const boost = audioCtx.createGain();
+            boost.gain.value = 1.5;
+
+            inputNode.connect(hp);
+            hp.connect(lp);
+            lp.connect(dist);
+            dist.connect(boost);
+
+            filterCleanupFns.push(() => { try { hp.disconnect(); lp.disconnect(); dist.disconnect(); boost.disconnect(); } catch(e){} });
+            return boost;
+        }
+
+        case 'echo': {
+            // Eco/Reverb: delay con feedback
+            const delay = audioCtx.createDelay(2.0);
+            delay.delayTime.value = 0.25;
+
+            const feedback = audioCtx.createGain();
+            feedback.gain.value = 0.45;
+
+            const wetGain = audioCtx.createGain();
+            wetGain.gain.value = 0.6;
+
+            const dryGain = audioCtx.createGain();
+            dryGain.gain.value = 1.0;
+
+            const merger = audioCtx.createGain();
+
+            // Dry path
+            inputNode.connect(dryGain);
+            dryGain.connect(merger);
+
+            // Wet path (con feedback loop)
+            inputNode.connect(delay);
+            delay.connect(feedback);
+            feedback.connect(delay);  // loop
+            delay.connect(wetGain);
+            wetGain.connect(merger);
+
+            filterCleanupFns.push(() => {
+                try {
+                    feedback.gain.value = 0; // romper el loop de feedback antes de desconectar
+                    delay.disconnect(); feedback.disconnect(); wetGain.disconnect();
+                    dryGain.disconnect(); merger.disconnect();
+                } catch(e){}
+            });
+            return merger;
+        }
+
+        case 'bass': {
+            // Voz grave: boost de bajas frecuencias
+            const peak = audioCtx.createBiquadFilter();
+            peak.type = 'peaking';
+            peak.frequency.value = 150;
+            peak.Q.value = 1;
+            peak.gain.value = 12;
+
+            const lowShelf = audioCtx.createBiquadFilter();
+            lowShelf.type = 'lowshelf';
+            lowShelf.frequency.value = 400;
+            lowShelf.gain.value = 6;
+
+            const comp = audioCtx.createDynamicsCompressor();
+            comp.threshold.value = -12;
+            comp.ratio.value = 3;
+
+            inputNode.connect(peak);
+            peak.connect(lowShelf);
+            lowShelf.connect(comp);
+
+            filterCleanupFns.push(() => { try { peak.disconnect(); lowShelf.disconnect(); comp.disconnect(); } catch(e){} });
+            return comp;
+        }
+
+        case 'chipmunk': {
+            // Voz aguda: treble boost + supresión de graves
+            const hp = audioCtx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 400;
+
+            const highShelf = audioCtx.createBiquadFilter();
+            highShelf.type = 'highshelf';
+            highShelf.frequency.value = 2500;
+            highShelf.gain.value = 14;
+
+            const presence = audioCtx.createBiquadFilter();
+            presence.type = 'peaking';
+            presence.frequency.value = 3500;
+            presence.Q.value = 0.8;
+            presence.gain.value = 8;
+
+            inputNode.connect(hp);
+            hp.connect(highShelf);
+            highShelf.connect(presence);
+
+            filterCleanupFns.push(() => { try { hp.disconnect(); highShelf.disconnect(); presence.disconnect(); } catch(e){} });
+            return presence;
+        }
+
+        default: // 'none' — sin filtro
+            return inputNode;
+    }
+}
+
+// Aplicar filtro: reconstruir la cadena y reemplazar la pista en peers activos
+export function setVoiceFilter(filterName) {
+    if (!audioCtx || !inputVolumeNode || !audioDestNode) {
+        currentFilter = filterName; // guardar para aplicar cuando empiece el audio
+        updateFilterUI(filterName);
+        return;
+    }
+
+    currentFilter = filterName;
+
+    // Desconectar cadena anterior del destino
+    try { if (filterOutputNode) filterOutputNode.disconnect(audioDestNode); } catch(e){}
+    try { if (filterOutputNode) filterOutputNode.disconnect(analyser); } catch(e){}
+    try { inputVolumeNode.disconnect(); } catch(e){}
+
+    // Reconstruir cadena de filtros
+    filterOutputNode = buildFilterChain(filterName, inputVolumeNode);
+
+    // Reconectar al analyser y al destino
+    filterOutputNode.connect(analyser);
+    filterOutputNode.connect(audioDestNode);
+
+    // Reemplazar la pista de audio en todos los peers WebRTC activos
+    if (processedStream) {
+        const newTrack = processedStream.getAudioTracks()[0];
+        if (newTrack) {
+            activePeers.forEach((peerData, peerId) => {
+                const pc = peerData.call?.peerConnection;
+                if (pc) {
+                    const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                    if (sender) {
+                        sender.replaceTrack(newTrack).catch(err =>
+                            console.warn(`[Filtro] No se pudo reemplazar pista en ${peerId}:`, err)
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    updateFilterUI(filterName);
+    console.log(`[Filtro] Filtro aplicado: ${filterName}`);
+}
+
+function updateFilterUI(filterName) {
+    document.querySelectorAll('.mic-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filterName);
+    });
+}
+
 // Datos de miembros virtuales en la sala de voz
 const voiceChannelMembers = {
     'general-voice': [],
@@ -49,6 +320,11 @@ let micTestStream = null;
 let micTestAnimationId = null;
 
 export function initVoice() {
+    // Limpiar la lista OP de sesiones anteriores al iniciar.
+    // Solo el email hardcodeado (OP_EMAIL) tiene OP permanente;
+    // la lista dinámica solo sirve para grants temporales de esa sesión.
+    localStorage.removeItem('nexus_op_list');
+
     canvas = document.getElementById('audio-canvas');
     if (canvas) {
         canvasCtx = canvas.getContext('2d');
@@ -70,6 +346,13 @@ export function initVoice() {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', disconnectVoiceChannel);
     }
+
+    // Vincular botones del panel de filtros de micrófono
+    document.querySelectorAll('.mic-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setVoiceFilter(btn.dataset.filter);
+        });
+    });
 
     // --- ENLACE A AJUSTES DE AUDIO (ENTRADA Y SALIDA) ---
     initAudioDevicesConfig();
@@ -394,7 +677,8 @@ async function joinMultiplayerVoice(channelId) {
         const callType = call.metadata?.type || 'audio'; // 'audio' | 'camera' | 'screen'
         console.log(`[PeerJS] Llamada entrante de: ${call.peer} (tipo: ${callType})`);
 
-        // Answer with the appropriate local stream
+        // Responder llamadas entrantes con el stream filtrado si está disponible
+        const audioAnswerStream = processedStream || microphoneStream;
         if (callType === 'camera') {
             // Dynamically import camera module to avoid circular deps
             const { getCameraStream } = await import('./camera.js');
@@ -403,9 +687,9 @@ async function joinMultiplayerVoice(channelId) {
         } else if (callType === 'screen') {
             call.answer(); // screen share: no need to send anything back
         } else {
-            // Audio call
-            if (microphoneStream) {
-                call.answer(microphoneStream);
+            // Audio call — responder con stream filtrado
+            if (audioAnswerStream) {
+                call.answer(audioAnswerStream);
             } else {
                 call.answer();
             }
@@ -526,11 +810,13 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
 }
 
 function callPeer(remotePeerId, remoteName) {
-    if (!peer || !microphoneStream) return;
+    // Usar stream procesado (filtrado) si está disponible, fallback al raw
+    const streamToCall = processedStream || microphoneStream;
+    if (!peer || !streamToCall) return;
     if (activePeers.has(remotePeerId)) return;
 
     console.log(`[PeerJS] Llamando a ${remoteName} (${remotePeerId})`);
-    const call = peer.call(remotePeerId, microphoneStream, {
+    const call = peer.call(remotePeerId, streamToCall, {
         metadata: { type: 'audio' }
     });
 
@@ -750,9 +1036,17 @@ async function startAudioEngine() {
         inputVolumeNode = audioCtx.createGain();
         inputVolumeNode.gain.setValueAtTime(audioInputVolume, audioCtx.currentTime);
 
-        // Encadenar: source -> volumen -> analyser
+        // Encadenar: source -> volumen -> [filtros] -> analyser + destino procesado
         sourceNode.connect(inputVolumeNode);
-        inputVolumeNode.connect(analyser);
+
+        // Crear nodo destino para capturar audio procesado (el que se envía por WebRTC)
+        audioDestNode    = audioCtx.createMediaStreamDestination();
+        filterOutputNode = buildFilterChain(currentFilter, inputVolumeNode);
+        filterOutputNode.connect(analyser);
+        filterOutputNode.connect(audioDestNode);
+
+        // El stream procesado es el que sale por WebRTC
+        processedStream = audioDestNode.stream;
 
         // Si el usuario está muteado inicialmente, apagamos las pistas
         if (state.isMuted) {
@@ -841,6 +1135,13 @@ function stopAudioEngine() {
         microphoneStream = null;
     }
 
+    // Limpiar filtros y stream procesado
+    filterCleanupFns.forEach(fn => fn());
+    filterCleanupFns = [];
+    filterOutputNode = null;
+    audioDestNode    = null;
+    processedStream  = null;
+
     if (audioCtx) {
         if (audioCtx.state !== 'closed') {
             audioCtx.close();
@@ -858,13 +1159,32 @@ function stopAudioEngine() {
 }
 
 // Comprobar si un usuario tiene rango OP (Operator)
-export function isUserOp(name) {
-    const myName = getLocalUserName();
-    // El usuario local es OP por defecto para facilitar pruebas
-    if (name === myName) return true;
+// ─── OP hardcodeado por email ─────────────────────────────────
+// Solo sniderquiros5@gmail.com tiene OP permanente.
+// Nadie más es OP por defecto; el sistema de rango local funciona
+// además de este control, pero nunca sobreescribe la lista de
+// emails sin OP.
+const OP_EMAIL = 'sniderquiros5@gmail.com';
 
+export function isUserOp(name) {
+    // Comprobar si el nombre pertenece al email con OP hardcodeado
+    const sessionEmail = localStorage.getItem('nexus_user_email') || '';
+    const sessionCustomName = sessionEmail ? localStorage.getItem('nexus_username_' + sessionEmail) : null;
+    const sessionDefaultName = sessionEmail
+        ? (sessionEmail.split('@')[0].charAt(0).toUpperCase() + sessionEmail.split('@')[0].slice(1))
+        : '';
+    const sessionDisplayName = sessionCustomName || sessionDefaultName;
+
+    // Si el nombre coincide con el del propietario OP hardcodeado, conceder OP
+    if (sessionEmail === OP_EMAIL && name === sessionDisplayName) return true;
+
+    // Para los demás usuarios, consultar la lista dinámica de OP en localStorage
+    // (asignada por OPs con el menú de miembros, pero solo sniderquiros5 puede darlo)
     try {
         const ops = JSON.parse(localStorage.getItem('nexus_op_list') || '[]');
+        // Nunca incluir otros nombres que no sean el OP hardcodeado,
+        // para evitar que queden OPs de sesiones anteriores.
+        // Solo retorna true si el nombre está en la lista Y no es el OP base.
         return ops.includes(name);
     } catch {
         return false;
@@ -1061,6 +1381,19 @@ function toggleDeafen() {
 
     // Actualizar volumen general (muteará la salida de audio/música en caliente)
     applyOutputVolumeGlobal();
+
+    // CRÍTICO: aplicar el silenciado/desilenciado inmediatamente a todos los
+    // elementos <audio> de los peers WebRTC que ya están reproduciéndose
+    activePeers.forEach(peerData => {
+        if (peerData.audioEl) {
+            peerData.audioEl.volume = state.isDeafened ? 0 : audioOutputVolume;
+            peerData.audioEl.muted  = state.isDeafened;
+        }
+    });
+
+    // También silenciar/desilenciar el vídeo remoto de stream compartido
+    const remoteVideo = document.getElementById('local-stream-video');
+    if (remoteVideo) remoteVideo.muted = state.isDeafened;
 }
 
 // Obtener el nombre de display del usuario autenticado
