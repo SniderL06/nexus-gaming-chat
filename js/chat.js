@@ -347,20 +347,18 @@ async function loadMessagesFromSupabase(channelId) {
 
         if (error) throw error;
 
-        if (data && data.length > 0) {
-            // Convertir formato Supabase a formato interno
-            currentMessages[channelId] = data.map(row => ({
-                id: row.id,
-                author: row.author,
-                avatar: row.avatar || row.author.charAt(0).toUpperCase(),
-                avatarBg: row.avatar_bg || 'bg-blue',
-                ts: new Date(row.created_at).getTime(),
-                text: row.text || '',
-                image: row.image || null,
-                file: row.file || null
-            }));
-            renderMessages();
-        }
+        // Convertir formato Supabase a formato interno (si está vacío, limpia la pantalla de mensajes anteriores)
+        currentMessages[channelId] = (data || []).map(row => ({
+            id: row.id,
+            author: row.author,
+            avatar: row.avatar || row.author.charAt(0).toUpperCase(),
+            avatarBg: row.avatar_bg || 'bg-blue',
+            ts: new Date(row.created_at).getTime(),
+            text: row.text || '',
+            image: row.image || null,
+            file: row.file || null
+        }));
+        renderMessages();
     } catch (err) {
         console.warn('[Chat] No se pudieron cargar mensajes de Supabase:', err.message);
     }
@@ -579,8 +577,8 @@ function createMessageElement(msg) {
     const botBadge = isMusicBot ? '<span style="background:#db2777;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 4px;border-radius:4px;margin-left:6px;font-family:\'Orbitron\'">BOT</span>' : '';
 
     const amIOp = isUserOp(getLocalUserName());
-    // Only OP can see delete button (and music bot messages can't be deleted as they are local)
-    const deleteBtnHtml = (amIOp && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Borrar mensaje">🗑️</button>` : '';
+    // Users can delete their own messages, and OPs can delete any messages (except local music bot messages)
+    const deleteBtnHtml = ((amIOp || msg.author === myName) && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Borrar mensaje">🗑️</button>` : '';
 
     item.innerHTML = `
         <div class="avatar-container small">${avatarHtml}</div>

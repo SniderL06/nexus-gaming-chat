@@ -911,20 +911,28 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.setAttribute('data-server-id', server.id);
             wrapper.id = `server-item-${server.id}`;
 
+            const deleteBtnHtml = server.id !== 'nexus-default' ? `
+                <button class="delete-server-btn" title="Eliminar Servidor" data-server-id="${server.id}">✕</button>
+            ` : '';
+
             wrapper.innerHTML = `
                 <div class="server-pill"></div>
                 <button class="server-btn" title="${escapeHTMLForApp(server.name)}">${escapeHTMLForApp(server.icon)}</button>
+                ${deleteBtnHtml}
             `;
 
             serversList.appendChild(wrapper);
         });
 
         bindServerItemClicks();
+        bindDeleteServerClicks();
     }
 
     function bindServerItemClicks() {
         document.querySelectorAll('.server-item-wrapper').forEach(item => {
             item.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-server-btn')) return;
+
                 const serverId = item.getAttribute('data-server-id');
                 if (state.activeServer === serverId) return;
 
@@ -939,6 +947,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Cargar canales del nuevo servidor
                 loadAndRenderChannels();
+            });
+        });
+    }
+
+    function bindDeleteServerClicks() {
+        document.querySelectorAll('.delete-server-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+
+                const myName = getLocalUserName();
+                if (!isUserOp(myName)) {
+                    alert('No tienes rango de Operator (OP) para eliminar servidores.');
+                    return;
+                }
+
+                const serverId = btn.getAttribute('data-server-id');
+                const serverWrapper = btn.closest('.server-item-wrapper');
+                const serverNameBtn = serverWrapper.querySelector('.server-btn');
+                const serverName = serverNameBtn.title;
+
+                if (confirm(`¿Estás seguro de eliminar el servidor "${serverName}" y todos sus canales?`)) {
+                    if (state.activeServer === serverId) {
+                        state.activeServer = 'nexus-default';
+                    }
+
+                    // Eliminar localmente
+                    const localServers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
+                    const filteredServers = localServers.filter(s => s.id !== serverId);
+                    localStorage.setItem('nexus_servers', JSON.stringify(filteredServers));
+
+                    const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+                    const filteredChannels = localChannels.filter(ch => ch.server_id !== serverId);
+                    localStorage.setItem('nexus_local_channels', JSON.stringify(filteredChannels));
+
+                    // Eliminar de Supabase
+                    if (supabaseReady && supabase) {
+                        try {
+                            await supabase.from('channels').delete().eq('server_id', serverId);
+                            await supabase.from('servers').delete().eq('id', serverId);
+                            console.log('[Supabase] Servidor eliminado.');
+                        } catch (err) {
+                            console.error('[Supabase] Error al eliminar servidor:', err.message);
+                        }
+                    }
+
+                    await loadAndRenderServers();
+                    await loadAndRenderChannels();
+                }
             });
         });
     }

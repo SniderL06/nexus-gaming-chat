@@ -103,3 +103,11 @@ create policy "Todos pueden insertar canales" on channels
   for insert with check (true);
 create policy "Todos pueden eliminar canales" on channels
   for delete using (true);
+
+-- Agregar política de eliminación para servidores
+create policy "Todos pueden eliminar servidores" on servers
+  for delete using (true);
+
+-- Agregar política de eliminación para mensajes
+create policy "Todos pueden eliminar mensajes" on messages
+  for delete using (true);
