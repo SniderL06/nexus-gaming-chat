@@ -43,6 +43,11 @@ tryInitClient(NEXUS_SUPABASE_URL, NEXUS_SUPABASE_KEY);
 export function startGlobalPresence(userName) {
     if (!supabase || !userName) return;
 
+    // Obtener avatar y estilo del correo actual
+    const email = localStorage.getItem('nexus_user_email') || '';
+    const userAvatar = email ? localStorage.getItem('nexus_user_avatar_' + email) : null;
+    const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+
     // Limpiar canal anterior si existía
     if (globalPresenceChannel) {
         supabase.removeChannel(globalPresenceChannel);
@@ -68,6 +73,8 @@ export function startGlobalPresence(userName) {
             if (status === 'SUBSCRIBED') {
                 await globalPresenceChannel.track({
                     name: userName,
+                    avatar: userAvatar || '',
+                    avatarStyle: userAvatarStyle,
                     online_at: new Date().toISOString()
                 });
                 console.log(`[Presencia] ${userName} marcado como en línea.`);
@@ -95,7 +102,12 @@ function updateOnlineMembersSidebar(presenceState) {
     Object.values(presenceState).forEach(presences => {
         presences.forEach(p => {
             if (p.name && !onlineUsers.find(u => u.name === p.name)) {
-                onlineUsers.push({ name: p.name, online_at: p.online_at });
+                onlineUsers.push({
+                    name: p.name,
+                    online_at: p.online_at,
+                    avatar: p.avatar || '',
+                    avatarStyle: p.avatarStyle || 'circle'
+                });
             }
         });
     });
@@ -103,14 +115,18 @@ function updateOnlineMembersSidebar(presenceState) {
     // Actualizar contador
     if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;
 
-    // Reconstruir lista
-    membersList.innerHTML = '';
+    // Obtener nombre propio (considerando nombre personalizado)
+    const myEmail = localStorage.getItem('nexus_user_email') || '';
     const myName = (() => {
-        const email = localStorage.getItem('nexus_user_email') || '';
-        if (!email) return null;
-        const base = email.split('@')[0];
+        if (!myEmail) return null;
+        const customName = localStorage.getItem('nexus_username_' + myEmail);
+        if (customName) return customName;
+        const base = myEmail.split('@')[0];
         return base.charAt(0).toUpperCase() + base.slice(1);
     })();
+
+    // Reconstruir lista
+    membersList.innerHTML = '';
 
     onlineUsers.forEach(user => {
         const isMe = user.name === myName;
@@ -118,6 +134,15 @@ function updateOnlineMembersSidebar(presenceState) {
         const bgColors = ['bg-blue', 'bg-purple', 'bg-green', 'bg-orange', 'bg-cyan'];
         const colorIdx = user.name.charCodeAt(0) % bgColors.length;
         const bgClass = bgColors[colorIdx];
+        const borderRadius = user.avatarStyle === 'circle' ? '50%' : '8px';
+
+        // Construir el HTML del avatar
+        let avatarInnerHtml;
+        if (user.avatar && user.avatar.startsWith('data:image/')) {
+            avatarInnerHtml = `<div class="avatar ${bgClass}" style="background-image: url(${user.avatar}); background-size: cover; background-position: center; border-radius: ${borderRadius}; text-indent: -9999px;"></div>`;
+        } else {
+            avatarInnerHtml = `<div class="avatar ${bgClass}">${initial}</div>`;
+        }
 
         const li = document.createElement('li');
         li.className = 'member-item';
@@ -125,7 +150,7 @@ function updateOnlineMembersSidebar(presenceState) {
 
         li.innerHTML = `
             <div class="avatar-container small">
-                <div class="avatar ${bgClass}">${initial}</div>
+                ${avatarInnerHtml}
                 <span class="user-status online"></span>
             </div>
             <div class="member-info">

@@ -542,26 +542,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const usernameSpan = document.getElementById('user-display-name');
         const emailSpan = document.getElementById('user-display-email');
         const avatarLetter = document.getElementById('user-avatar-letter');
+        const profileNameInput = document.getElementById('profile-display-name');
         
         if (email) {
             const namePart = email.split('@')[0];
-            const cleanName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+            const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+            const savedName = localStorage.getItem('nexus_username_' + email) || defaultName;
             
-            if (usernameSpan) usernameSpan.textContent = cleanName;
+            if (usernameSpan) usernameSpan.textContent = savedName;
             if (emailSpan) emailSpan.textContent = email;
-            if (avatarLetter && !localStorage.getItem('nexus_user_avatar')) {
-                avatarLetter.textContent = cleanName.charAt(0);
-            }
+            if (profileNameInput) profileNameInput.value = savedName;
+
+            updateAvatarUI();
 
             // Actualizar el item local en la sidebar de miembros
             const sidebarName = document.getElementById('sidebar-local-name');
-            if (sidebarName) sidebarName.textContent = cleanName;
-            const sidebarAvatar = document.getElementById('sidebar-local-avatar');
-            if (sidebarAvatar) sidebarAvatar.textContent = cleanName.charAt(0);
+            if (sidebarName) sidebarName.textContent = savedName;
 
             // Iniciar presencia global para que todos vean quién está conectado
             if (supabaseReady && supabase) {
-                startGlobalPresence(cleanName);
+                startGlobalPresence(savedName);
             }
         }
     }
@@ -570,9 +570,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('supabase-ready', () => {
         const savedEmail = localStorage.getItem('nexus_user_email');
         if (savedEmail) {
-            const base = savedEmail.split('@')[0];
-            const cleanName = base.charAt(0).toUpperCase() + base.slice(1);
-            startGlobalPresence(cleanName);
+            const namePart = savedEmail.split('@')[0];
+            const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+            const savedName = localStorage.getItem('nexus_username_' + savedEmail) || defaultName;
+            startGlobalPresence(savedName);
         }
     });
 
@@ -594,7 +595,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropOverlay = document.getElementById('avatar-crop-overlay');
 
     let tempAvatarBase64 = null;
-    let selectedCropStyle = localStorage.getItem('nexus_user_avatar_style') || 'circle'; // 'circle' o 'full'
+    const initialEmail = localStorage.getItem('nexus_user_email') || '';
+    let selectedCropStyle = initialEmail ? (localStorage.getItem('nexus_user_avatar_style_' + initialEmail) || 'circle') : 'circle';
 
     if (userAvatarContainer && avatarUploadInput) {
         userAvatarContainer.addEventListener('click', (e) => {
@@ -612,6 +614,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('La foto de perfil supera el límite optimizado de 5 MB.');
                 return;
             }
+
+            const email = localStorage.getItem('nexus_user_email') || '';
+            selectedCropStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
 
             const reader = new FileReader();
             reader.onload = (event) => {
@@ -688,19 +693,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cropSaveBtn) {
         cropSaveBtn.addEventListener('click', () => {
             if (tempAvatarBase64) {
-                localStorage.setItem('nexus_user_avatar', tempAvatarBase64);
-                localStorage.setItem('nexus_user_avatar_style', selectedCropStyle);
+                const email = localStorage.getItem('nexus_user_email') || '';
+                if (email) {
+                    localStorage.setItem('nexus_user_avatar_' + email, tempAvatarBase64);
+                    localStorage.setItem('nexus_user_avatar_style_' + email, selectedCropStyle);
+                }
                 closeCropModal();
                 updateAvatarUI();
                 // Actualizar todos los avatares del usuario actual en el chat sin recargar
                 updateAllChatAvatars(tempAvatarBase64, selectedCropStyle);
+
+                // Volver a transmitir presencia global
+                const savedName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : 'Usuario Nexus';
+                if (supabaseReady && supabase) {
+                    startGlobalPresence(savedName);
+                }
+                // Si está en sala de voz, actualizar la presencia en la sala de voz también
+                if (state.activeVoiceChannel) {
+                    import('./voice.js').then(({ presenceChannel, peer, getLocalUserName }) => {
+                        if (presenceChannel && peer) {
+                            const myName = getLocalUserName();
+                            presenceChannel.track({
+                                name: myName,
+                                peerId: peer.id,
+                                isMuted: state.isMuted,
+                                avatar: tempAvatarBase64,
+                                avatarStyle: selectedCropStyle,
+                                joinedAt: Date.now()
+                            }).catch(() => {});
+                        }
+                    });
+                }
             }
         });
     }
 
     function updateAvatarUI() {
-        const savedAvatar = localStorage.getItem('nexus_user_avatar');
-        const savedStyle = localStorage.getItem('nexus_user_avatar_style') || 'circle';
+        const email = localStorage.getItem('nexus_user_email') || '';
+        const savedAvatar = email ? localStorage.getItem('nexus_user_avatar_' + email) : null;
+        const savedStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
         const borderRadius = savedStyle === 'circle' ? '50%' : '10px';
         
         if (savedAvatar && userAvatarLetter) {
@@ -710,6 +741,29 @@ document.addEventListener('DOMContentLoaded', () => {
             userAvatarLetter.style.backgroundRepeat = 'no-repeat';
             userAvatarLetter.textContent = ''; // Limpiar inicial
             userAvatarLetter.style.borderRadius = borderRadius;
+
+            // Sincronizar el item local en la sidebar de miembros
+            const sidebarAvatar = document.getElementById('sidebar-local-avatar');
+            if (sidebarAvatar) {
+                sidebarAvatar.style.backgroundImage = `url(${savedAvatar})`;
+                sidebarAvatar.style.backgroundSize = 'cover';
+                sidebarAvatar.style.backgroundPosition = 'center';
+                sidebarAvatar.style.backgroundRepeat = 'no-repeat';
+                sidebarAvatar.textContent = '';
+                sidebarAvatar.style.borderRadius = borderRadius;
+            }
+        } else if (userAvatarLetter) {
+            userAvatarLetter.style.backgroundImage = '';
+            userAvatarLetter.style.borderRadius = '50%';
+            const myName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : 'U';
+            userAvatarLetter.textContent = myName.charAt(0).toUpperCase();
+
+            const sidebarAvatar = document.getElementById('sidebar-local-avatar');
+            if (sidebarAvatar) {
+                sidebarAvatar.style.backgroundImage = '';
+                sidebarAvatar.style.borderRadius = '50%';
+                sidebarAvatar.textContent = myName.charAt(0).toUpperCase();
+            }
         }
     }
 
@@ -718,12 +772,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const borderRadius = style === 'circle' ? '50%' : '10px';
         const email = localStorage.getItem('nexus_user_email') || '';
         if (!email) return;
-        const myName = email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1);
+        const myName = localStorage.getItem('nexus_username_' + email) || (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1));
         
         // Buscar todos los avatares del usuario actual en los mensajes del chat
         document.querySelectorAll('.message-item').forEach(item => {
             const authorEl = item.querySelector('.message-author');
-            if (authorEl && authorEl.textContent.startsWith(myName)) {
+            if (authorEl && authorEl.textContent.trim().startsWith(myName)) {
                 const avatarDiv = item.querySelector('.avatar');
                 if (avatarDiv) {
                     avatarDiv.style.backgroundImage = `url(${avatarDataUrl})`;
@@ -733,6 +787,66 @@ document.addEventListener('DOMContentLoaded', () => {
                     avatarDiv.textContent = '';
                 }
             }
+        });
+    }
+
+    // Vincular botón para guardar perfil (nombre de usuario)
+    const saveProfileBtn = document.getElementById('save-profile-btn');
+    const profileNameInput = document.getElementById('profile-display-name');
+    if (saveProfileBtn && profileNameInput) {
+        saveProfileBtn.addEventListener('click', () => {
+            const email = localStorage.getItem('nexus_user_email') || '';
+            if (!email) {
+                alert('Debes iniciar sesión para cambiar tu nombre.');
+                return;
+            }
+            const newName = profileNameInput.value.trim();
+            if (!newName) {
+                alert('El nombre de usuario no puede estar vacío.');
+                return;
+            }
+            if (newName.length > 25) {
+                alert('El nombre de usuario no puede tener más de 25 caracteres.');
+                return;
+            }
+            
+            // Guardar
+            localStorage.setItem('nexus_username_' + email, newName);
+            
+            // Actualizar interfaz local
+            updateUserProfileUI(email);
+
+            // Retransmitir presencia global con el nuevo nombre
+            if (supabaseReady && supabase) {
+                startGlobalPresence(newName);
+            }
+
+            // Si está en sala de voz, actualizar la presencia en la sala de voz también
+            if (state.activeVoiceChannel) {
+                import('./voice.js').then(({ presenceChannel, peer }) => {
+                    if (presenceChannel && peer) {
+                        const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
+                        const savedStyle = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
+                        
+                        presenceChannel.track({
+                            name: newName,
+                            peerId: peer.id,
+                            isMuted: state.isMuted,
+                            avatar: savedAvatar,
+                            avatarStyle: savedStyle,
+                            joinedAt: Date.now()
+                        }).catch(() => {});
+                    }
+                });
+            }
+
+            // Notificación visual de guardado exitoso
+            saveProfileBtn.textContent = '✅ Perfil Guardado';
+            saveProfileBtn.style.background = 'var(--accent-green)';
+            setTimeout(() => {
+                saveProfileBtn.textContent = '💾 Guardar Perfil';
+                saveProfileBtn.style.background = '';
+            }, 2000);
         });
     }
 

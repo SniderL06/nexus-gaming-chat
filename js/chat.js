@@ -486,11 +486,25 @@ function renderMessages() {
     scrollToBottom();
 }
 
-function getLocalUserName() {
+export function getLocalUserName() {
     const email = localStorage.getItem('nexus_user_email') || '';
     if (!email) return 'Usuario Nexus';
+    const customName = localStorage.getItem('nexus_username_' + email);
+    if (customName) return customName;
     const base = email.split('@')[0];
     return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+export function getLocalUserAvatar() {
+    const email = localStorage.getItem('nexus_user_email') || '';
+    if (!email) return null;
+    return localStorage.getItem('nexus_user_avatar_' + email);
+}
+
+export function getLocalUserAvatarStyle() {
+    const email = localStorage.getItem('nexus_user_email') || '';
+    if (!email) return 'circle';
+    return localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
 }
 
 function createMessageElement(msg) {
@@ -546,13 +560,15 @@ function createMessageElement(msg) {
 
     let avatarHtml = '';
     const myName = getLocalUserName();
-    const savedAvatar = localStorage.getItem('nexus_user_avatar');
-    const savedStyle = localStorage.getItem('nexus_user_avatar_style') || 'circle';
-    const borderRadiusStyle = savedStyle === 'circle' ? '50%' : '6px';
+    const savedAvatar = getLocalUserAvatar();
+    const savedStyle = getLocalUserAvatarStyle();
+    const borderRadiusStyle = savedStyle === 'circle' ? '50%' : '10px';
     if (msg.author === myName && savedAvatar) {
         avatarHtml = `<div class="avatar" style="background-image: url(${savedAvatar}); background-size: cover; background-position: center; border-radius: ${borderRadiusStyle}; width: 100%; height: 100%;"></div>`;
     } else if (msg.author === 'Nexus Music Bot') {
         avatarHtml = `<div class="avatar" style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%); color:#fff; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; border-radius: 50%;">🎵</div>`;
+    } else if (msg.avatar && msg.avatar.startsWith('data:image/')) {
+        avatarHtml = `<div class="avatar" style="background-image: url(${msg.avatar}); background-size: cover; background-position: center; border-radius: 50%; width: 100%; height: 100%;"></div>`;
     } else {
         avatarHtml = `<div class="avatar ${msg.avatarBg || 'bg-blue'}">${escapeHTML(msg.avatar || msg.author.charAt(0))}</div>`;
     }
@@ -677,15 +693,14 @@ function renderStickers() {
 async function sendSticker(stickerImg, stickerName) {
     const startTime = performance.now();
     const ts = Date.now();
-    const savedEmail = localStorage.getItem('nexus_user_email') || '';
-    const displayName = savedEmail
-        ? savedEmail.split('@')[0].charAt(0).toUpperCase() + savedEmail.split('@')[0].slice(1)
-        : 'Usuario Nexus';
+    const displayName = getLocalUserName();
+    const savedAvatar = getLocalUserAvatar();
+    const avatarPayload = savedAvatar || displayName.charAt(0);
 
     const newMsg = {
         id: ts,
         author: displayName,
-        avatar: displayName.charAt(0),
+        avatar: avatarPayload,
         avatarBg: 'bg-blue',
         ts,
         text: `[Sticker]`,
@@ -707,7 +722,7 @@ async function sendSticker(stickerImg, stickerName) {
             await supabase.from('messages').insert({
                 channel_id: state.activeChannel,
                 author: displayName,
-                avatar: displayName.charAt(0),
+                avatar: avatarPayload,
                 avatar_bg: 'bg-blue',
                 text: `[Sticker]`,
                 image: stickerImg
@@ -812,18 +827,15 @@ async function sendMessage() {
 
     const startTime = performance.now();
     const ts = Date.now();
-    const savedEmail = localStorage.getItem('nexus_user_email') || '';
-    const displayName = savedEmail
-        ? savedEmail.split('@')[0].charAt(0).toUpperCase() + savedEmail.split('@')[0].slice(1)
-        : 'Usuario Nexus';
-    const avatarLetter = displayName.charAt(0);
-    const savedAvatar = localStorage.getItem('nexus_user_avatar');
+    const displayName = getLocalUserName();
+    const savedAvatar = getLocalUserAvatar();
+    const avatarPayload = savedAvatar || displayName.charAt(0);
     const savedAvatarBg = 'bg-blue';
 
     const newMsg = {
         id: ts,
         author: displayName,
-        avatar: avatarLetter,
+        avatar: avatarPayload,
         avatarBg: savedAvatarBg,
         ts,
         text
@@ -852,7 +864,7 @@ async function sendMessage() {
             const payload = {
                 channel_id: state.activeChannel,
                 author: displayName,
-                avatar: avatarLetter,
+                avatar: avatarPayload,
                 avatar_bg: savedAvatarBg,
                 text: text || null,
                 image: newMsg.image || null,
@@ -880,15 +892,14 @@ async function sendMessage() {
 async function sendMeme(memeImg, memeName) {
     const startTime = performance.now();
     const ts = Date.now();
-    const savedEmail = localStorage.getItem('nexus_user_email') || '';
-    const displayName = savedEmail
-        ? savedEmail.split('@')[0].charAt(0).toUpperCase() + savedEmail.split('@')[0].slice(1)
-        : 'Usuario Nexus';
+    const displayName = getLocalUserName();
+    const savedAvatar = getLocalUserAvatar();
+    const avatarPayload = savedAvatar || displayName.charAt(0);
 
     const newMsg = {
         id: ts,
         author: displayName,
-        avatar: displayName.charAt(0),
+        avatar: avatarPayload,
         avatarBg: 'bg-blue',
         ts,
         text: `¡Meme enviado: ${memeName}! 😂`,
@@ -908,7 +919,7 @@ async function sendMeme(memeImg, memeName) {
             await supabase.from('messages').insert({
                 channel_id: state.activeChannel,
                 author: displayName,
-                avatar: displayName.charAt(0),
+                avatar: avatarPayload,
                 avatar_bg: 'bg-blue',
                 text: newMsg.text,
                 image: memeImg

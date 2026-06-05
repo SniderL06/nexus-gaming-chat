@@ -481,9 +481,14 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
     await presenceChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+            const email = localStorage.getItem('nexus_user_email') || '';
+            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             await presenceChannel.track({
                 name: myName,
                 peerId: localPeerId,
+                avatar: myAvatar,
+                avatarStyle: myAvatarStyle,
                 isMuted: state.isMuted,
                 joinedAt: Date.now()
             });
@@ -496,13 +501,13 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
     const realMembers = [];
     const seenPeers = new Set();
     Object.values(presenceState).forEach(presenceList => {
-        // En Supabase, a veces el state guarda la misma presencia si se re-conecta rápido
         presenceList.forEach(presence => {
             if (!seenPeers.has(presence.peerId)) {
                 seenPeers.add(presence.peerId);
                 realMembers.push({
                     name: presence.name,
-                    avatar: presence.name.charAt(0).toUpperCase(),
+                    avatar: presence.avatar || presence.name.charAt(0).toUpperCase(),
+                    avatarStyle: presence.avatarStyle || 'circle',
                     avatarBg: 'bg-blue',
                     isMuted: presence.isMuted || false,
                     activeSpeaker: false,
@@ -913,6 +918,11 @@ function renderVoiceMembers() {
 
     grid.innerHTML = '';
 
+    // Avatar del usuario local (email-specific)
+    const localEmail = localStorage.getItem('nexus_user_email') || '';
+    const localAvatar = localEmail ? (localStorage.getItem('nexus_user_avatar_' + localEmail) || '') : '';
+    const localAvatarStyle = localEmail ? (localStorage.getItem('nexus_user_avatar_style_' + localEmail) || 'circle') : 'circle';
+
     activeMembersInRoom.forEach(member => {
         const isUser = !!member.isLocalUser;
         
@@ -949,22 +959,27 @@ function renderVoiceMembers() {
             `;
         }
 
-        // Cargar avatar personalizado si existe
+        // Determinar qué avatar usar para este miembro
         let avatarHtml = '';
-        const savedAvatar = localStorage.getItem('nexus_user_avatar');
-        const savedStyle = localStorage.getItem('nexus_user_avatar_style') || 'circle';
-        const borderRadiusStyle = savedStyle === 'circle' ? '50%' : '6px';
-        if (isUser && savedAvatar) {
-            avatarHtml = `<div class="voice-member-avatar" style="background-image: url(${savedAvatar}); background-size: cover; background-position: center; border: 1px solid rgba(255,255,255,0.1); border-radius: ${borderRadiusStyle};"></div>`;
-        } else if (member.isMusicBot) {
-            avatarHtml = `<div class="voice-member-avatar" style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%); border-radius: 50%;">🎵</div>`;
+        if (member.isMusicBot) {
+            avatarHtml = `<div class="voice-member-avatar" style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%); border-radius: 50%;">&#127925;</div>`;
+        } else if (isUser && localAvatar && localAvatar.startsWith('data:image/')) {
+            // Usuario local: usar avatar guardado en localStorage con clave por email
+            const bRadius = localAvatarStyle === 'circle' ? '50%' : '6px';
+            avatarHtml = `<div class="voice-member-avatar" style="background-image: url(${localAvatar}); background-size: cover; background-position: center; border-radius: ${bRadius};"></div>`;
+        } else if (!isUser && member.avatar && member.avatar.startsWith('data:image/')) {
+            // Usuario remoto: usar avatar recibido por Supabase Presence
+            const bRadius = (member.avatarStyle || 'circle') === 'circle' ? '50%' : '6px';
+            avatarHtml = `<div class="voice-member-avatar" style="background-image: url(${member.avatar}); background-size: cover; background-position: center; border-radius: ${bRadius};"></div>`;
         } else {
-            avatarHtml = `<div class="voice-member-avatar ${member.avatarBg || 'bg-blue'}">${member.avatar}</div>`;
+            // Fallback: inicial del nombre
+            const initial = member.name ? member.name.charAt(0).toUpperCase() : '?';
+            avatarHtml = `<div class="voice-member-avatar ${member.avatarBg || 'bg-blue'}">${initial}</div>`;
         }
 
         // Renderizar corona dorada si tiene rango OP
         const isOp = isUserOp(member.name);
-        const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">👑</span>' : '';
+        const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">&#128081;</span>' : '';
 
         card.innerHTML = `
             ${speakingWave}
