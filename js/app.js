@@ -103,13 +103,17 @@ function updatePerformanceMetrics() {
 document.addEventListener('DOMContentLoaded', () => {
     const startTime = performance.now();
     
+    // Elementos del panel de usuario y avatar (declarados al inicio para evitar Temporal Dead Zone)
+    const userAvatarContainer = document.getElementById('user-avatar-container');
+    const avatarUploadInput = document.getElementById('avatar-upload-input');
+    const userAvatarLetter = document.getElementById('user-avatar-letter');
+
     // Inicializar sub-módulos
     initChat();
     initVoice();
     initStream();
     initCamera();
     initThemePanel();
-    initSupabaseSetup();
     
     // Iniciar loop de rendimiento
     runPerformanceLoop();
@@ -597,9 +601,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initMusic();
 
     // --- CARGAR AVATAR PERSONALIZADO AL INICIAR CON CORTES ---
-    const userAvatarContainer = document.getElementById('user-avatar-container');
-    const avatarUploadInput = document.getElementById('avatar-upload-input');
-    const userAvatarLetter = document.getElementById('user-avatar-letter');
     
     // Modal de corte
     const cropModal = document.getElementById('avatar-crop-modal');
@@ -1403,6 +1404,9 @@ document.addEventListener('DOMContentLoaded', () => {
             memberActionMenu.classList.add('hidden');
         }
     });
+
+    // Inicializar Supabase al final para que todos los listeners registrados reciban el evento 'supabase-ready'
+    initSupabaseSetup();
 
     updateRenderLatency(startTime);
     console.log('[Nexus] Inicializado correctamente en 42ms.');
