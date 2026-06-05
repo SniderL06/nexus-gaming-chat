@@ -199,6 +199,20 @@ async function applyOutputVolumeGlobal() {
     const { updateMusicVolume } = await import('./music.js');
     const targetVol = getOutputVolume();
     updateMusicVolume(targetVol);
+
+    // Actualizar volumen de todos los peers activos
+    activePeers.forEach(peer => {
+        if (peer.audioEl) {
+            peer.audioEl.volume = targetVol;
+        }
+    });
+
+    // Silenciar/desilenciar video de directo
+    const remoteVideo = document.getElementById('local-stream-video');
+    if (remoteVideo) {
+        remoteVideo.muted = state.isDeafened;
+    }
+
     console.log(`[Audio Config] Salida global de audio ajustada al: ${Math.round(targetVol * 100)}%`);
 }
 

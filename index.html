@@ -22,6 +22,20 @@
     <div class="app-container">
         
         <!-- ══════════════════════════════════════════ -->
+        <!-- SIDEBAR DE SERVIDORES (MÚLTIPLES COMUNIDADES) -->
+        <!-- ══════════════════════════════════════════ -->
+        <aside class="sidebar-servers" id="sidebar-servers">
+            <div class="servers-scroll" id="servers-list">
+                <!-- Se poblará dinámicamente -->
+                <div class="server-item-wrapper active" data-server-id="nexus-default" id="server-item-nexus-default">
+                    <div class="server-pill"></div>
+                    <button class="server-btn" title="Nexus Global">🌌</button>
+                </div>
+            </div>
+            <button class="add-server-btn" id="add-server-btn" title="Crear un Servidor">+</button>
+        </aside>
+
+        <!-- ══════════════════════════════════════════ -->
         <!-- SIDEBAR IZQUIERDA: LOGO, CANALES, USUARIO  -->
         <!-- ══════════════════════════════════════════ -->
         <aside class="sidebar-left" id="sidebar-left">
@@ -270,9 +284,47 @@
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                     </button>
                     <textarea class="chat-input" id="chat-textarea" placeholder="Enviar mensaje a #general... (Presiona Enter para enviar)"></textarea>
+                    
+                    <!-- Botón de Emojis -->
+                    <button class="input-action-btn" id="emoji-btn" title="Insertar Emojis">
+                        <span class="emoji-icon">😀</span>
+                    </button>
+
+                    <!-- Botón de Stickers -->
+                    <button class="input-action-btn" id="sticker-btn" title="Enviar Stickers">
+                        <span class="emoji-icon">✨</span>
+                    </button>
+
                     <button class="input-action-btn" id="meme-btn" title="Buscar Meme / GIF">
                         <span class="emoji-icon">😂</span>
                     </button>
+                </div>
+
+                <!-- POPOVER DE EMOJIS -->
+                <div class="memes-popover hidden" id="emoji-popover">
+                    <div class="popover-header">
+                        <h3>Emojis</h3>
+                        <button class="popover-close" id="emoji-popover-close">✕</button>
+                    </div>
+                    <div class="popover-search">
+                        <input type="text" id="emoji-search-input" placeholder="Buscar emoji...">
+                    </div>
+                    <div class="emojis-grid" id="emojis-grid-list"></div>
+                </div>
+
+                <!-- POPOVER DE STICKERS -->
+                <div class="memes-popover hidden" id="sticker-popover">
+                    <div class="popover-header">
+                        <h3>Stickers</h3>
+                        <button class="popover-close" id="sticker-popover-close">✕</button>
+                    </div>
+                    <div class="popover-search" style="display: flex; gap: 8px; align-items: center; justify-content: center; padding: 10px 14px; border-bottom: var(--border-dark);">
+                        <button class="theme-reset-btn" id="upload-sticker-btn" style="margin: 0; width: 100%; padding: 8px; font-size: 0.78rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; border-radius: 6px;">
+                            📤 Subir Sticker
+                        </button>
+                        <input type="file" id="sticker-upload-input" accept="image/*" class="hidden">
+                    </div>
+                    <div class="stickers-grid" id="stickers-grid-list"></div>
                 </div>
 
                 <!-- POPOVER DE MEMES -->
@@ -602,6 +654,28 @@
                     <span class="error-msg hidden" id="channel-create-error">No tienes permisos de Operator (OP).</span>
                 </div>
                 <button type="submit" class="login-submit-btn" id="channel-create-submit-btn">Crear Canal</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CREAR SERVIDOR -->
+    <div class="channel-modal hidden" id="server-modal">
+        <div class="channel-modal-overlay" id="server-modal-overlay"></div>
+        <div class="channel-modal-card">
+            <div class="channel-modal-header">
+                <h3>Crear Nuevo Servidor</h3>
+                <button class="channel-modal-close" id="server-modal-close-btn">✕</button>
+            </div>
+            <form id="create-server-form" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="new-server-name">NOMBRE DEL SERVIDOR</label>
+                    <input type="text" id="new-server-name" required placeholder="ej: Mi Comunidad" maxlength="25">
+                </div>
+                <div class="form-group" style="margin-top: 14px;">
+                    <label for="new-server-icon">ICONO (EMOJI O LETRA)</label>
+                    <input type="text" id="new-server-icon" placeholder="ej: 🎮 (Dejar vacío para usar iniciales)" maxlength="2" style="font-size: 1.2rem; text-align: center;">
+                </div>
+                <button type="submit" class="login-submit-btn" id="server-create-submit-btn" style="margin-top: 20px;">Crear Servidor</button>
             </form>
         </div>
     </div>

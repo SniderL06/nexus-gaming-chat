@@ -67,3 +67,39 @@ create policy "Todos pueden insertar mensajes" on messages
 -- ─────────────────────────────────────────────────────────────
 create index if not exists messages_channel_id_idx on messages(channel_id);
 create index if not exists messages_created_at_idx on messages(created_at);
+
+-- ─────────────────────────────────────────────────────────────
+-- 6. MODIFICACIONES PARA MÚLTIPLES SERVIDORES
+-- ─────────────────────────────────────────────────────────────
+
+-- Crear tabla de servidores
+create table if not exists servers (
+  id text primary key,
+  name text not null,
+  icon text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Insertar servidor por defecto inicial
+insert into servers (id, name, icon) values
+  ('nexus-default', 'Nexus Global', '🌌')
+on conflict (id) do nothing;
+
+-- Añadir columna server_id a la tabla de canales
+alter table channels add column if not exists server_id text references servers(id) on delete cascade;
+
+-- Asignar los canales existentes al servidor por defecto
+update channels set server_id = 'nexus-default' where server_id is null;
+
+-- Habilitar RLS en la tabla servers
+alter table servers enable row level security;
+create policy "Todos pueden leer servidores" on servers
+  for select using (true);
+create policy "Todos pueden insertar servidores" on servers
+  for insert with check (true);
+
+-- Agregar políticas de inserción y eliminación para canales
+create policy "Todos pueden insertar canales" on channels
+  for insert with check (true);
+create policy "Todos pueden eliminar canales" on channels
+  for delete using (true);

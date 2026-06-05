@@ -12,6 +12,7 @@ import { initCamera, stopCamera } from './camera.js';
 
 // Estado global de la aplicación (Single Source of Truth)
 export const state = {
+    activeServer: 'nexus-default',
     activeChannel: 'general',
     activeChannelType: 'text',
     activeVoiceChannel: null,
@@ -113,12 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Iniciar loop de rendimiento
     runPerformanceLoop();
 
-    // Vincular selectores de canales (estáticos del HTML)
-    document.querySelectorAll('.channel-item').forEach(item => bindChannelItemClickAtInit(item));
+    // Cargar servidores y canales iniciales
+    loadAndRenderServers();
+    loadAndRenderChannels();
 
-    // Si Supabase está disponible, cargar canales desde la BD
-    if (supabase) loadChannelsFromSupabase();
-    window.addEventListener('supabase-ready', () => loadChannelsFromSupabase());
+    window.addEventListener('supabase-ready', () => {
+        loadAndRenderServers();
+        loadAndRenderChannels();
+    });
 
     // Control de transmisiones
     const goLiveBtn = document.getElementById('go-live-btn');
@@ -736,71 +739,184 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAvatarUI(); // Invocar de inmediato
     applyCropStyleUI(selectedCropStyle); // Inicializar estado visual de botones
 
-    // Función de enlace inicial de channel items (usada en DOMContentLoaded)
-    function bindChannelItemClickAtInit(item) {
-        item.addEventListener('click', (e) => {
-            if (e.target.closest('.delete-channel-btn')) return;
-            const channelId = item.getAttribute('data-channel');
-            const type = item.getAttribute('data-type');
-            if (type === 'text') {
-                document.querySelectorAll('.channel-item[data-type="text"]').forEach(el => el.classList.remove('active'));
-                item.classList.add('active');
-                state.activeChannel = channelId;
-                switchChatChannel(channelId);
-            } else if (type === 'voice') {
-                if (state.activeVoiceChannel === channelId) disconnectVoiceChannel();
-                else joinVoiceChannel(channelId, item.querySelector('.channel-name')?.textContent || channelId);
+    // Cargar y Renderizar Servidores
+    async function loadAndRenderServers() {
+        const serversList = document.getElementById('servers-list');
+        if (!serversList) return;
+
+        let servers = [];
+
+        if (supabaseReady && supabase) {
+            try {
+                const { data, error } = await supabase.from('servers').select('*').order('created_at', { ascending: true });
+                if (!error && data) {
+                    servers = data;
+                }
+            } catch (err) {
+                console.warn('[Servidores] Error leyendo de Supabase, usando local:', err);
             }
+        }
+
+        // Si no hay Supabase o falló la consulta, usar localStorage
+        if (servers.length === 0) {
+            try {
+                servers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
+            } catch {}
+            
+            // Si está vacío, inicializar con el servidor predeterminado
+            if (servers.length === 0) {
+                servers = [{ id: 'nexus-default', name: 'Nexus Global', icon: '🌌' }];
+                localStorage.setItem('nexus_servers', JSON.stringify(servers));
+            }
+        }
+
+        serversList.innerHTML = '';
+
+        servers.forEach(server => {
+            const isActive = state.activeServer === server.id;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = `server-item-wrapper ${isActive ? 'active' : ''}`;
+            wrapper.setAttribute('data-server-id', server.id);
+            wrapper.id = `server-item-${server.id}`;
+
+            wrapper.innerHTML = `
+                <div class="server-pill"></div>
+                <button class="server-btn" title="${escapeHTMLForApp(server.name)}">${escapeHTMLForApp(server.icon)}</button>
+            `;
+
+            serversList.appendChild(wrapper);
+        });
+
+        bindServerItemClicks();
+    }
+
+    function bindServerItemClicks() {
+        document.querySelectorAll('.server-item-wrapper').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const serverId = item.getAttribute('data-server-id');
+                if (state.activeServer === serverId) return;
+
+                document.querySelectorAll('.server-item-wrapper').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+
+                state.activeServer = serverId;
+                console.log(`[Servidores] Cambiado al servidor: ${serverId}`);
+
+                // Desconectar voz del canal anterior al cambiar de servidor
+                disconnectVoiceChannel();
+
+                // Cargar canales del nuevo servidor
+                loadAndRenderChannels();
+            });
         });
     }
 
-    // Cargar canales desde Supabase (cuando está configurado)
-    async function loadChannelsFromSupabase() {
-        if (!supabase) return;
-        try {
-            const { data, error } = await supabase.from('channels').select('*').order('created_at', { ascending: true });
-            if (error || !data) return;
+    // Cargar y Renderizar Canales (Supabase o Local)
+    async function loadAndRenderChannels() {
+        const textList = document.getElementById('text-channels');
+        const voiceList = document.getElementById('voice-channels');
+        if (!textList || !voiceList) return;
 
-            const textList = document.getElementById('text-channels');
-            const voiceList = document.getElementById('voice-channels');
-            if (!textList || !voiceList) return;
+        let channels = [];
 
-            // Limpiar listas existentes del HTML estático
-            textList.innerHTML = '';
-            voiceList.innerHTML = '';
-
-            data.forEach(ch => {
-                const li = document.createElement('li');
-                li.className = 'channel-item';
-                li.setAttribute('data-channel', ch.id);
-                li.setAttribute('data-type', ch.type);
-
-                if (ch.type === 'text') {
-                    li.innerHTML = `<span class="channel-icon">#</span><span class="channel-name">${escapeHTMLForApp(ch.name)}</span>`;
-                    textList.appendChild(li);
-                } else if (ch.type === 'voice') {
-                    li.innerHTML = `
-                        <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                        <span class="channel-name">${escapeHTMLForApp(ch.name)}</span>
-                        <span class="active-count" id="voice-count-${ch.id}">0</span>
-                    `;
-                    voiceList.appendChild(li);
+        if (supabaseReady && supabase) {
+            try {
+                const { data, error } = await supabase.from('channels').select('*').order('created_at', { ascending: true });
+                if (!error && data) {
+                    // Filtrar por servidor activo
+                    channels = data.filter(ch => {
+                        const sId = ch.server_id || 'nexus-default';
+                        return sId === state.activeServer;
+                    });
                 }
+            } catch (err) {
+                console.warn('[Canales] Error leyendo de Supabase, usando local:', err);
+            }
+        }
 
-                bindChannelItemClickAtInit(li);
-            });
-
-            // Activar el primer canal de texto por defecto
-            const firstText = textList.querySelector('.channel-item[data-type="text"]');
-            if (firstText) {
-                firstText.classList.add('active');
-                state.activeChannel = firstText.getAttribute('data-channel');
-                switchChatChannel(state.activeChannel);
+        // Si no hay Supabase o falló la consulta, usar localStorage
+        if (channels.length === 0) {
+            let localCh = [];
+            try {
+                localCh = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+            } catch {}
+            
+            // Si está vacío, inicializar con los canales predeterminados
+            if (localCh.length === 0) {
+                localCh = [
+                    { id: 'general', name: 'general', type: 'text', server_id: 'nexus-default' },
+                    { id: 'lounge', name: 'lounge', type: 'text', server_id: 'nexus-default' },
+                    { id: 'clips-and-memes', name: 'clips-and-memes', type: 'text', server_id: 'nexus-default' },
+                    { id: 'estrategia', name: 'estrategia', type: 'text', server_id: 'nexus-default' },
+                    { id: 'general-voice', name: 'General Voice', type: 'voice', server_id: 'nexus-default' },
+                    { id: 'squad-1', name: 'Squad Alpha', type: 'voice', server_id: 'nexus-default' },
+                    { id: 'squad-2', name: 'Duo Queue', type: 'voice', server_id: 'nexus-default' }
+                ];
+                localStorage.setItem('nexus_local_channels', JSON.stringify(localCh));
             }
 
-            console.log(`[Supabase] ${data.length} canales cargados correctamente.`);
-        } catch (err) {
-            console.warn('[Supabase] Error cargando canales:', err.message);
+            channels = localCh.filter(ch => {
+                const sId = ch.server_id || 'nexus-default';
+                return sId === state.activeServer;
+            });
+        }
+
+        // Limpiar listas en la UI
+        textList.innerHTML = '';
+        voiceList.innerHTML = '';
+
+        channels.forEach(ch => {
+            const li = document.createElement('li');
+            li.className = 'channel-item';
+            li.setAttribute('data-channel', ch.id);
+            li.setAttribute('data-type', ch.type);
+
+            if (ch.type === 'text') {
+                li.innerHTML = `
+                    <span class="channel-icon">#</span>
+                    <span class="channel-name">${escapeHTMLForApp(ch.name.toLowerCase())}</span>
+                    <button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>
+                `;
+            } else if (ch.type === 'voice') {
+                li.innerHTML = `
+                    <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    <span class="channel-name">${escapeHTMLForApp(ch.name)}</span>
+                    <span class="active-count" id="voice-count-${ch.id}">0</span>
+                    <button class="delete-channel-btn" title="Eliminar Sala">🗑️</button>
+                `;
+            }
+
+            bindChannelItemClick(li);
+            
+            if (ch.type === 'text') {
+                textList.appendChild(li);
+            } else {
+                voiceList.appendChild(li);
+            }
+        });
+
+        // Seleccionar automáticamente el primer canal de texto del servidor si el canal activo no es del servidor o no existe
+        const activeExists = channels.find(ch => ch.id === state.activeChannel && ch.type === 'text');
+        if (!activeExists) {
+            const firstText = channels.find(ch => ch.type === 'text');
+            if (firstText) {
+                const itemEl = textList.querySelector(`.channel-item[data-channel="${firstText.id}"]`);
+                if (itemEl) {
+                    itemEl.classList.add('active');
+                    state.activeChannel = firstText.id;
+                    switchChatChannel(firstText.id);
+                }
+            } else {
+                state.activeChannel = '';
+                const titleEl = document.getElementById('active-channel-title');
+                if (titleEl) titleEl.textContent = 'Ninguno';
+                const chatArea = document.getElementById('chat-messages-container');
+                if (chatArea) chatArea.innerHTML = '';
+            }
+        } else {
+            const itemEl = textList.querySelector(`.channel-item[data-channel="${state.activeChannel}"]`);
+            if (itemEl) itemEl.classList.add('active');
         }
     }
 
@@ -882,41 +998,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const channelId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-            if (currentAddingChannelType === 'text') {
-                const textChannelsList = document.getElementById('text-channels');
-                if (textChannelsList) {
-                    const li = document.createElement('li');
-                    li.className = 'channel-item';
-                    li.setAttribute('data-channel', channelId);
-                    li.setAttribute('data-type', 'text');
-                    li.innerHTML = `
-                        <span class="channel-icon">#</span>
-                        <span class="channel-name">${escapeHTMLForApp(name.toLowerCase())}</span>
-                        <button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>
-                    `;
-                    textChannelsList.appendChild(li);
-                    
-                    // Enlazar click
-                    bindChannelItemClick(li);
-                }
-            } else {
-                const voiceChannelsList = document.getElementById('voice-channels');
-                if (voiceChannelsList) {
-                    const li = document.createElement('li');
-                    li.className = 'channel-item';
-                    li.setAttribute('data-channel', channelId);
-                    li.setAttribute('data-type', 'voice');
-                    li.innerHTML = `
-                        <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                        <span class="channel-name">${escapeHTMLForApp(name)}</span>
-                        <span class="active-count" id="voice-count-${channelId}">0</span>
-                        <button class="delete-channel-btn" title="Eliminar Sala">🗑️</button>
-                    `;
-                    voiceChannelsList.appendChild(li);
-                    
-                    // Enlazar click
-                    bindChannelItemClick(li);
-                }
+            // Guardar en localStorage
+            const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+            if (!localChannels.some(ch => ch.id === channelId && ch.server_id === state.activeServer)) {
+                localChannels.push({
+                    id: channelId,
+                    name: name,
+                    type: currentAddingChannelType,
+                    server_id: state.activeServer
+                });
+                localStorage.setItem('nexus_local_channels', JSON.stringify(localChannels));
             }
 
             // Persistir canal en Supabase si está disponible
@@ -924,39 +1015,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 supabase.from('channels').insert({
                     id: channelId,
                     name: name,
-                    type: currentAddingChannelType
+                    type: currentAddingChannelType,
+                    server_id: state.activeServer
                 }).then(({ error }) => {
                     if (error) {
                         console.error('[Supabase] Error al crear canal:', error.message);
                     } else {
                         console.log('[Supabase] Canal creado en base de datos.');
-                        loadChannelsFromSupabase(); // Sincronizar
+                        loadAndRenderChannels(); // Sincronizar
                     }
                 });
+            } else {
+                loadAndRenderChannels(); // Sincronizar local
             }
 
             closeChannelModal();
         });
     }
-
-    // Agregar botón de borrar a los canales iniciales
-    function addDeleteButtonsToPresetChannels() {
-        const presetChannels = document.querySelectorAll('.channel-item');
-        presetChannels.forEach(item => {
-            const hasDelete = item.querySelector('.delete-channel-btn');
-            if (!hasDelete) {
-                const btn = document.createElement('button');
-                btn.className = 'delete-channel-btn';
-                btn.title = item.getAttribute('data-type') === 'text' ? 'Eliminar Canal' : 'Eliminar Sala';
-                btn.innerHTML = '🗑️';
-                item.appendChild(btn);
-                
-                // Vincular evento de eliminación
-                bindDeleteChannelClick(btn, item);
-            }
-        });
-    }
-    addDeleteButtonsToPresetChannels();
 
     function bindChannelItemClick(item) {
         item.addEventListener('click', (e) => {
@@ -995,14 +1070,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            if (confirm(`¿Estás seguro de eliminar el canal #${item.querySelector('.channel-name').textContent}?`)) {
+            const channelName = item.querySelector('.channel-name').textContent;
+            if (confirm(`¿Estás seguro de eliminar el canal #${channelName}?`)) {
                 const channelId = item.getAttribute('data-channel');
                 if (state.activeVoiceChannel === channelId) {
                     disconnectVoiceChannel();
                 }
                 
+                // Eliminar de localStorage
+                const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+                const filteredChannels = localChannels.filter(ch => !(ch.id === channelId && ch.server_id === state.activeServer));
+                localStorage.setItem('nexus_local_channels', JSON.stringify(filteredChannels));
+                
                 item.remove();
-                console.log(`[Canales] Canal ${channelId} eliminado por Operator.`);
+                console.log(`[Canales] Canal ${channelId} eliminado.`);
 
                 // Eliminar de Supabase si está disponible
                 if (supabaseReady && supabase) {
@@ -1011,22 +1092,89 @@ document.addEventListener('DOMContentLoaded', () => {
                             console.error('[Supabase] Error al eliminar canal:', error.message);
                         } else {
                             console.log('[Supabase] Canal eliminado de base de datos.');
-                            loadChannelsFromSupabase(); // Sincronizar
+                            loadAndRenderChannels(); // Sincronizar
                         }
                     });
+                } else {
+                    loadAndRenderChannels();
                 }
             }
         });
     }
 
-    // Vincular clicks a preset channels iniciales
-    document.querySelectorAll('.channel-item').forEach(item => {
-        const type = item.getAttribute('data-type');
-        const delBtn = item.querySelector('.delete-channel-btn');
-        if (delBtn) {
-            bindDeleteChannelClick(delBtn, item);
-        }
-    });
+    // --- GESTIÓN DE SERVIDORES ---
+    const addServerBtn = document.getElementById('add-server-btn');
+    const serverModal = document.getElementById('server-modal');
+    const serverModalOverlay = document.getElementById('server-modal-overlay');
+    const serverModalCloseBtn = document.getElementById('server-modal-close-btn');
+    const createServerForm = document.getElementById('create-server-form');
+    const newServerNameInput = document.getElementById('new-server-name');
+    const newServerIconInput = document.getElementById('new-server-icon');
+
+    if (addServerBtn) {
+        addServerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (newServerNameInput) newServerNameInput.value = '';
+            if (newServerIconInput) newServerIconInput.value = '';
+            if (serverModal) serverModal.classList.remove('hidden');
+        });
+    }
+
+    const closeServerModal = () => serverModal && serverModal.classList.add('hidden');
+    if (serverModalCloseBtn) serverModalCloseBtn.addEventListener('click', closeServerModal);
+    if (serverModalOverlay) serverModalOverlay.addEventListener('click', closeServerModal);
+
+    if (createServerForm) {
+        createServerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = newServerNameInput.value.trim();
+            if (!name) return;
+
+            let icon = newServerIconInput.value.trim();
+            if (!icon) {
+                // Usar inicial
+                icon = name.charAt(0).toUpperCase();
+            }
+
+            const serverId = 'server-' + Date.now();
+
+            // Guardar localmente
+            const localServers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
+            localServers.push({ id: serverId, name, icon });
+            localStorage.setItem('nexus_servers', JSON.stringify(localServers));
+
+            // Crear canales por defecto localmente
+            const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
+            localChannels.push({ id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId });
+            localChannels.push({ id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId });
+            localStorage.setItem('nexus_local_channels', JSON.stringify(localChannels));
+
+            // Guardar en Supabase
+            if (supabaseReady && supabase) {
+                try {
+                    await supabase.from('servers').insert({ id: serverId, name, icon });
+                    await supabase.from('channels').insert([
+                        { id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId },
+                        { id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId }
+                    ]);
+                    console.log('[Supabase] Servidor y canales creados.');
+                } catch (err) {
+                    console.warn('[Supabase] Error al guardar nuevo servidor:', err.message);
+                }
+            }
+
+            closeServerModal();
+
+            // Renderizar servidores y activar el nuevo
+            await loadAndRenderServers();
+            
+            // Activar el nuevo servidor
+            const newServerItem = document.querySelector(`.server-item-wrapper[data-server-id="${serverId}"]`);
+            if (newServerItem) {
+                newServerItem.click();
+            }
+        });
+    }
 
     // --- SISTEMA DE RANGOS "OP" INTERACTIVO ---
     const memberActionMenu = document.getElementById('member-action-menu');

@@ -54,6 +54,82 @@ const memeTemplates = [
 let currentMessages = JSON.parse(JSON.stringify(initialChannelMessages));
 let activeAttachment = null;
 
+// Emojis list with search keywords
+const emojiData = [
+    { char: '😀', tags: 'grinning smile happy face alegre' },
+    { char: '😃', tags: 'smiley smile happy face feliz' },
+    { char: '😄', tags: 'smile happy face risa jaja' },
+    { char: '😁', tags: 'grin happy face teeth risa' },
+    { char: '😆', tags: 'laugh happy face risa lol' },
+    { char: '😅', tags: 'sweat smile happy face' },
+    { char: '😂', tags: 'joy laugh tears happy risa jaja lol' },
+    { char: '🤣', tags: 'rofl laugh tears happy risa lol' },
+    { char: '😊', tags: 'blush happy face shy sonrojo' },
+    { char: '😇', tags: 'halo angel innocent santo' },
+    { char: '🙂', tags: 'slight smile happy' },
+    { char: '😉', tags: 'wink face guino' },
+    { char: '😌', tags: 'relieved face paz' },
+    { char: '😍', tags: 'heart eyes love happy amor' },
+    { char: '🥰', tags: 'smiling face hearts love amor' },
+    { char: '😘', tags: 'kissing heart love beso' },
+    { char: '😋', tags: 'yum delicious food face rico' },
+    { char: '😛', tags: 'tongue face lengua' },
+    { char: '😜', tags: 'wink tongue face lengua' },
+    { char: '🤪', tags: 'crazy face loco' },
+    { char: '😎', tags: 'sunglasses cool face style genial' },
+    { char: '🥳', tags: 'party face celebrate fiesta' },
+    { char: '😏', tags: 'smirk face' },
+    { char: '😒', tags: 'unamused face' },
+    { char: '😔', tags: 'pensive sad face triste' },
+    { char: '🥺', tags: 'pleading eyes sad face begging porfi' },
+    { char: '😢', tags: 'cry sad tears face llorar' },
+    { char: '😭', tags: 'sob cry sad tears face llorar' },
+    { char: '😤', tags: 'triumph angry face enojo' },
+    { char: '😠', tags: 'angry face mad enojo' },
+    { char: '😡', tags: 'rage angry face mad red rabia' },
+    { char: '🤬', tags: 'cursing face angry' },
+    { char: '🤯', tags: 'exploding head mind blown shock explosion' },
+    { char: '😳', tags: 'flushed face shock sonrojo' },
+    { char: '😱', tags: 'scream fear face shock miedo' },
+    { char: '🤔', tags: 'thinking face pensar' },
+    { char: '🤫', tags: 'shush quiet face silencio' },
+    { char: '😬', tags: 'grimace face mueca' },
+    { char: '😴', tags: 'sleeping sleep tired face dormir' },
+    { char: '🤤', tags: 'drooling face' },
+    { char: '🤢', tags: 'nauseated face sick asco' },
+    { char: '🤮', tags: 'vomit face sick vomito' },
+    { char: '💩', tags: 'poop caca' },
+    { char: '👻', tags: 'ghost halloween fantasma' },
+    { char: '💀', tags: 'skull dead skeleton muerte' },
+    { char: '👽', tags: 'alien ufo marciano' },
+    { char: '👾', tags: 'space invader monster game retro gamer' },
+    { char: '🤖', tags: 'robot bot tech' },
+    { char: '👍', tags: 'thumbs up like ok yes bien ok' },
+    { char: '👎', tags: 'thumbs down dislike no mal' },
+    { char: '👊', tags: 'fist punch hit golpe' },
+    { char: '👏', tags: 'clap bravo aplauso' },
+    { char: '🙏', tags: 'pray please thanks rezar porfavor gracias' },
+    { char: '💪', tags: 'muscle flex strong fuerza' },
+    { char: '❤️', tags: 'red heart love corazon' },
+    { char: '💔', tags: 'broken heart sad corazon roto' },
+    { char: '✨', tags: 'sparkles glow magic shiny brillo' },
+    { char: '⚡', tags: 'zap lightning thunder energy power rayo' },
+    { char: '🔥', tags: 'fire hot flame fuego' },
+    { char: '🌟', tags: 'star glow estrella' },
+    { char: '⭐', tags: 'star gold estrella' },
+    { char: '🎮', tags: 'game controller play console mando' },
+    { char: '🕹️', tags: 'joystick retro game' },
+    { char: '🚀', tags: 'rocket space launch ship cohete' }
+];
+
+// Presets stickers
+const defaultStickers = [
+    { id: 'sticker_gg_ez', name: 'GG EZ', img: 'assets/sticker_gg_ez.png' },
+    { id: 'sticker_nexus_shield', name: 'Nexus Shield', img: 'assets/sticker_nexus_shield.png' },
+    { id: 'sticker_hype_cat', name: 'Hype Cat', img: 'assets/sticker_hype_cat.png' },
+    { id: 'sticker_rage_quit', name: 'Rage Quit', img: 'assets/sticker_rage_quit.png' }
+];
+
 // Supabase Realtime subscription
 let currentRealtimeChannel = null;
 let isUsingSupabase = false;
@@ -66,6 +142,15 @@ let attachmentPreviewBar;
 let memesPopover;
 let memesGrid;
 
+// Nuevas referencias DOM para Emojis y Stickers
+let emojiPopover;
+let emojisGrid;
+let emojiSearchInput;
+let stickerPopover;
+let stickersGrid;
+let stickerUploadInput;
+let uploadStickerBtn;
+
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
@@ -76,6 +161,15 @@ export function initChat() {
     attachmentPreviewBar= document.getElementById('attachment-preview-bar');
     memesPopover        = document.getElementById('memes-popover');
     memesGrid           = document.getElementById('memes-grid-list');
+
+    // Inicializar elementos de Emojis y Stickers
+    emojiPopover        = document.getElementById('emoji-popover');
+    emojisGrid          = document.getElementById('emojis-grid-list');
+    emojiSearchInput    = document.getElementById('emoji-search-input');
+    stickerPopover      = document.getElementById('sticker-popover');
+    stickersGrid        = document.getElementById('stickers-grid-list');
+    stickerUploadInput  = document.getElementById('sticker-upload-input');
+    uploadStickerBtn    = document.getElementById('upload-sticker-btn');
 
     renderMessages();
     startTimestampRefreshLoop();
@@ -129,10 +223,13 @@ export function initChat() {
     const previewRemoveBtn = document.getElementById('preview-remove-btn');
     if (previewRemoveBtn) previewRemoveBtn.addEventListener('click', clearAttachment);
 
+    // --- EVENTOS DEL PANEL DE MEMES ---
     const memeBtn = document.getElementById('meme-btn');
     if (memeBtn && memesPopover) {
         memeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            emojiPopover?.classList.add('hidden');
+            stickerPopover?.classList.add('hidden');
             memesPopover.classList.toggle('hidden');
             renderMemeTemplates(memeTemplates);
         });
@@ -149,9 +246,86 @@ export function initChat() {
         });
     }
 
+    // --- EVENTOS DEL PANEL DE EMOJIS ---
+    const emojiBtn = document.getElementById('emoji-btn');
+    if (emojiBtn && emojiPopover) {
+        emojiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            memesPopover?.classList.add('hidden');
+            stickerPopover?.classList.add('hidden');
+            emojiPopover.classList.toggle('hidden');
+            renderEmojis(emojiData);
+            if (emojiSearchInput) {
+                emojiSearchInput.value = '';
+                setTimeout(() => emojiSearchInput.focus(), 100);
+            }
+        });
+    }
+
+    const emojiCloseBtn = document.getElementById('emoji-popover-close');
+    if (emojiCloseBtn) emojiCloseBtn.addEventListener('click', () => emojiPopover?.classList.add('hidden'));
+
+    if (emojiSearchInput) {
+        emojiSearchInput.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            if (!q) {
+                renderEmojis(emojiData);
+            } else {
+                renderEmojis(emojiData.filter(emo => emo.tags.includes(q)));
+            }
+        });
+    }
+
+    // --- EVENTOS DEL PANEL DE STICKERS ---
+    const stickerBtn = document.getElementById('sticker-btn');
+    if (stickerBtn && stickerPopover) {
+        stickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            memesPopover?.classList.add('hidden');
+            emojiPopover?.classList.add('hidden');
+            stickerPopover.classList.toggle('hidden');
+            renderStickers();
+        });
+    }
+
+    const stickerCloseBtn = document.getElementById('sticker-popover-close');
+    if (stickerCloseBtn) stickerCloseBtn.addEventListener('click', () => stickerPopover?.classList.add('hidden'));
+
+    // Subida de stickers personalizados
+    if (uploadStickerBtn && stickerUploadInput) {
+        uploadStickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            stickerUploadInput.click();
+        });
+
+        stickerUploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                alert('Los stickers deben pesar menos de 2 MB.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const name = file.name.split('.')[0];
+                saveCustomSticker(name, event.target.result);
+                renderStickers();
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Cerrar popovers al hacer clic fuera
     document.addEventListener('click', (e) => {
         if (memesPopover && !memesPopover.classList.contains('hidden') && !memesPopover.contains(e.target) && e.target.id !== 'meme-btn' && !e.target.closest('#meme-btn')) {
             memesPopover.classList.add('hidden');
+        }
+        if (emojiPopover && !emojiPopover.classList.contains('hidden') && !emojiPopover.contains(e.target) && e.target.id !== 'emoji-btn' && !e.target.closest('#emoji-btn')) {
+            emojiPopover.classList.add('hidden');
+        }
+        if (stickerPopover && !stickerPopover.classList.contains('hidden') && !stickerPopover.contains(e.target) && e.target.id !== 'sticker-btn' && !e.target.closest('#sticker-btn')) {
+            stickerPopover.classList.add('hidden');
         }
     });
 
@@ -321,7 +495,8 @@ function getLocalUserName() {
 
 function createMessageElement(msg) {
     const item = document.createElement('div');
-    item.className = 'message-item';
+    const isSticker = msg.text && msg.text.startsWith('[Sticker]');
+    item.className = `message-item ${isSticker ? 'sticker-msg' : ''}`;
     item.setAttribute('data-id', msg.id);
 
     const ts = msg.ts || Date.now();
@@ -329,14 +504,20 @@ function createMessageElement(msg) {
 
     let imageHtml = '';
     if (msg.image) {
-        const safeImg    = msg.image.replace(/'/g, "\\'");
-        const safeAuthor = msg.author.replace(/'/g, "\\'");
-        imageHtml = `
-            <div class="shared-image-container" onclick="window.openLightbox('${safeImg}', '${safeAuthor}')">
-                <img src="${msg.image}" alt="Imagen compartida por ${escapeHTML(msg.author)}">
-                <div class="shared-image-overlay">🔍 AMPLIAR</div>
-            </div>
-        `;
+        if (isSticker) {
+            imageHtml = `
+                <img class="sticker-display" src="${msg.image}" alt="Sticker">
+            `;
+        } else {
+            const safeImg    = msg.image.replace(/'/g, "\\'");
+            const safeAuthor = msg.author.replace(/'/g, "\\'");
+            imageHtml = `
+                <div class="shared-image-container" onclick="window.openLightbox('${safeImg}', '${safeAuthor}')">
+                    <img src="${msg.image}" alt="Imagen compartida por ${escapeHTML(msg.author)}">
+                    <div class="shared-image-overlay">🔍 AMPLIAR</div>
+                </div>
+            `;
+        }
     }
 
     let fileHtml = '';
@@ -399,6 +580,142 @@ function createMessageElement(msg) {
         ${deleteBtnHtml}
     `;
     return item;
+}
+
+// ─────────────────────────────────────────────────────────────
+// EMOJIS Y STICKERS HELPER FUNCTIONS
+// ─────────────────────────────────────────────────────────────
+
+// Renderizar emojis en el popover
+function renderEmojis(list) {
+    if (!emojisGrid) return;
+    emojisGrid.innerHTML = '';
+    
+    if (list.length === 0) {
+        emojisGrid.innerHTML = `<div style="grid-column:span 6;text-align:center;color:var(--text-muted);font-size:.8rem;padding:20px;">No se encontraron emojis</div>`;
+        return;
+    }
+    
+    list.forEach(emoji => {
+        const item = document.createElement('div');
+        item.className = 'emoji-item';
+        item.textContent = emoji.char;
+        item.title = emoji.tags;
+        
+        item.addEventListener('click', () => {
+            insertEmoji(emoji.char);
+            if (emojiPopover) emojiPopover.classList.add('hidden');
+        });
+        
+        emojisGrid.appendChild(item);
+    });
+}
+
+// Insertar emoji en el cursor de chatTextarea
+function insertEmoji(emoji) {
+    if (!chatTextarea) return;
+    const start = chatTextarea.selectionStart;
+    const end = chatTextarea.selectionEnd;
+    const text = chatTextarea.value;
+    chatTextarea.value = text.substring(0, start) + emoji + text.substring(end);
+    chatTextarea.selectionStart = chatTextarea.selectionEnd = start + emoji.length;
+    chatTextarea.focus();
+}
+
+// Obtener stickers personalizados de localStorage
+function getCustomStickers() {
+    try {
+        return JSON.parse(localStorage.getItem('nexus_custom_stickers') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+// Guardar sticker personalizado en localStorage
+function saveCustomSticker(name, dataUrl) {
+    const custom = getCustomStickers();
+    const newSticker = {
+        id: 'sticker_custom_' + Date.now(),
+        name: name,
+        img: dataUrl,
+        isCustom: true
+    };
+    custom.push(newSticker);
+    localStorage.setItem('nexus_custom_stickers', JSON.stringify(custom));
+    return newSticker;
+}
+
+// Renderizar stickers (presets + personalizados)
+function renderStickers() {
+    if (!stickersGrid) return;
+    stickersGrid.innerHTML = '';
+    
+    const presets = defaultStickers;
+    const customs = getCustomStickers();
+    const allStickers = [...presets, ...customs];
+    
+    allStickers.forEach(sticker => {
+        const item = document.createElement('div');
+        item.className = 'sticker-item';
+        item.title = sticker.name;
+        
+        item.innerHTML = `
+            <img src="${sticker.img}" alt="${escapeHTML(sticker.name)}" loading="lazy">
+            <span>${escapeHTML(sticker.name)}</span>
+        `;
+        
+        item.addEventListener('click', () => {
+            sendSticker(sticker.img, sticker.name);
+            if (stickerPopover) stickerPopover.classList.add('hidden');
+        });
+        
+        stickersGrid.appendChild(item);
+    });
+}
+
+// Enviar Sticker
+async function sendSticker(stickerImg, stickerName) {
+    const startTime = performance.now();
+    const ts = Date.now();
+    const savedEmail = localStorage.getItem('nexus_user_email') || '';
+    const displayName = savedEmail
+        ? savedEmail.split('@')[0].charAt(0).toUpperCase() + savedEmail.split('@')[0].slice(1)
+        : 'Usuario Nexus';
+
+    const newMsg = {
+        id: ts,
+        author: displayName,
+        avatar: displayName.charAt(0),
+        avatarBg: 'bg-blue',
+        ts,
+        text: `[Sticker]`,
+        image: stickerImg
+    };
+
+    if (!currentMessages[state.activeChannel]) currentMessages[state.activeChannel] = [];
+    currentMessages[state.activeChannel].push(newMsg);
+    
+    if (chatContainer) {
+        chatContainer.appendChild(createMessageElement(newMsg));
+        scrollToBottom();
+    }
+    updateRenderLatency(startTime);
+
+    // Persistir en Supabase
+    if (isUsingSupabase && supabase) {
+        try {
+            await supabase.from('messages').insert({
+                channel_id: state.activeChannel,
+                author: displayName,
+                avatar: displayName.charAt(0),
+                avatar_bg: 'bg-blue',
+                text: `[Sticker]`,
+                image: stickerImg
+            });
+        } catch (err) {
+            console.error('[Chat] Error al guardar sticker en Supabase:', err);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
