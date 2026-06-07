@@ -877,12 +877,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!serversList) return;
 
         let servers = [];
+        let loadedFromSupabase = false;
 
         if (supabaseReady && supabase) {
             try {
                 const { data, error } = await supabase.from('servers').select('*').order('created_at', { ascending: true });
                 if (!error && data) {
                     servers = data;
+                    loadedFromSupabase = true;
 
                     // Sincronizar servidores locales que falten en la base de datos (Auto-migración)
                     const localServers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
@@ -893,6 +895,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             servers.push(localS);
                         }
                     }
+                } else if (error) {
+                    console.error('[Servidores] Error de Supabase:', error.message);
                 }
             } catch (err) {
                 console.warn('[Servidores] Error leyendo de Supabase, usando local:', err);
@@ -900,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Si no hay Supabase o falló la consulta, usar localStorage
-        if (servers.length === 0) {
+        if (!loadedFromSupabase) {
             try {
                 servers = JSON.parse(localStorage.getItem('nexus_servers') || '[]');
             } catch {}
@@ -1016,12 +1020,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!textList || !voiceList) return;
 
         let channels = [];
+        let loadedFromSupabase = false;
 
         if (supabaseReady && supabase) {
             try {
                 const { data, error } = await supabase.from('channels').select('*').order('created_at', { ascending: true });
                 if (!error && data) {
                     let dbChannels = data;
+                    loadedFromSupabase = true;
 
                     // Sincronizar canales locales que falten en la base de datos (Auto-migración)
                     const localChannels = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
@@ -1043,6 +1049,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sId = ch.server_id || 'nexus-default';
                         return sId === state.activeServer;
                     });
+                } else if (error) {
+                    console.error('[Canales] Error de Supabase:', error.message);
                 }
             } catch (err) {
                 console.warn('[Canales] Error leyendo de Supabase, usando local:', err);
@@ -1050,7 +1058,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Si no hay Supabase o falló la consulta, usar localStorage
-        if (channels.length === 0) {
+        if (!loadedFromSupabase) {
             let localCh = [];
             try {
                 localCh = JSON.parse(localStorage.getItem('nexus_local_channels') || '[]');
@@ -1371,26 +1379,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Guardar en Supabase primero (para validar RLS y FK)
             if (supabaseReady && supabase) {
-                // Insertar servidor
-                const { error: serverErr } = await supabase.from('servers').insert({ id: serverId, name, icon });
-                if (serverErr) {
-                    console.error('[Supabase] Error al crear nuevo servidor:', serverErr.message);
-                    if (serverError) {
-                        serverError.textContent = `Error al crear servidor: ${serverErr.message}`;
-                        serverError.classList.remove('hidden');
+                try {
+                    // Insertar servidor
+                    const { error: serverErr } = await supabase.from('servers').insert({ id: serverId, name, icon });
+                    if (serverErr) {
+                        console.error('[Supabase] Error al crear nuevo servidor:', serverErr.message);
+                        if (serverError) {
+                            serverError.textContent = `Error al crear servidor: ${serverErr.message}`;
+                            serverError.classList.remove('hidden');
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                // Insertar canales por defecto en Supabase
-                const { error: channelsErr } = await supabase.from('channels').insert([
-                    { id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId },
-                    { id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId }
-                ]);
-                if (channelsErr) {
-                    console.error('[Supabase] Error al crear canales por defecto:', channelsErr.message);
+                    // Insertar canales por defecto en Supabase
+                    const { error: channelsErr } = await supabase.from('channels').insert([
+                        { id: `${serverId}-general`, name: 'general', type: 'text', server_id: serverId },
+                        { id: `${serverId}-general-voice`, name: 'General Voice', type: 'voice', server_id: serverId }
+                    ]);
+                    if (channelsErr) {
+                        console.error('[Supabase] Error al crear canales por defecto:', channelsErr.message);
+                        if (serverError) {
+                            serverError.textContent = `Error al crear canales: ${channelsErr.message}`;
+                            serverError.classList.remove('hidden');
+                        }
+                        return;
+                    }
+                } catch (dbErr) {
+                    console.error('[Supabase] Error de red al crear servidor/canales:', dbErr);
                     if (serverError) {
-                        serverError.textContent = `Error al crear canales: ${channelsErr.message}`;
+                        serverError.textContent = `Error de conexión con la base de datos (Failed to fetch). Revisa si el proyecto de Supabase está activo.`;
                         serverError.classList.remove('hidden');
                     }
                     return;
