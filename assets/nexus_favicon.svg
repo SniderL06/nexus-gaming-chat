@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <radialGradient id="fgA" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </radialGradient>
+    <radialGradient id="fgB" cx="70%" cy="70%" r="70%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </radialGradient>
+    <filter id="fg">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Fondo oscuro redondeado -->
+  <rect width="100" height="100" rx="22" fill="#0d0d1a"/>
+  <!-- Conexiones -->
+  <g stroke="url(#fgA)" stroke-width="4" stroke-linecap="round" opacity="0.85" filter="url(#fg)">
+    <line x1="22" y1="78" x2="22" y2="22"/>
+    <line x1="22" y1="22" x2="78" y2="78"/>
+    <line x1="78" y1="78" x2="78" y2="22"/>
+    <line x1="22" y1="22" x2="50" y2="50"/>
+    <line x1="50" y1="50" x2="78" y2="22"/>
+    <line x1="22" y1="78" x2="50" y2="50"/>
+    <line x1="50" y1="50" x2="78" y2="78"/>
+  </g>
+  <!-- Nodos -->
+  <circle cx="22" cy="22" r="9" fill="url(#fgA)" filter="url(#fg)"/>
+  <circle cx="78" cy="22" r="9" fill="url(#fgB)" filter="url(#fg)"/>
+  <circle cx="22" cy="78" r="9" fill="url(#fgA)" filter="url(#fg)"/>
+  <circle cx="78" cy="78" r="9" fill="url(#fgB)" filter="url(#fg)"/>
+  <circle cx="50" cy="50" r="7" fill="#c084fc" filter="url(#fg)"/>
+</svg>
