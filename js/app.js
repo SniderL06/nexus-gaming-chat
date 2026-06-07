@@ -6,7 +6,7 @@ import { initStream, toggleLocalStream } from './stream.js';
 import { initThemePanel } from './theme.js';
 import { EMAILJS_CONFIG, DEMO_MODE } from './emailjs.config.js';
 import { initMusic } from './music.js';
-import { isUserOp } from './voice.js';
+import { isUserOp, isCurrentUserOp } from './voice.js';
 import { initSupabaseSetup, supabase, supabaseReady, startGlobalPresence, stopGlobalPresence } from './supabase-client.js';
 import { initCamera, stopCamera } from './camera.js';
 
@@ -967,8 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
 
-                const myName = getLocalUserName();
-                if (!isUserOp(myName)) {
+                if (!isCurrentUserOp()) {
                     alert('No tienes rango de Operator (OP) para eliminar servidores.');
                     return;
                 }
@@ -1202,8 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (channelCreateError) channelCreateError.classList.add('hidden');
             
             // Validar si el usuario es OP
-            const myName = getLocalUserName();
-            if (!isUserOp(myName)) {
+            if (!isCurrentUserOp()) {
                 if (channelCreateError) {
                     channelCreateError.textContent = 'No tienes rango de Operator (OP) para crear canales.';
                     channelCreateError.classList.remove('hidden');
@@ -1287,8 +1285,7 @@ document.addEventListener('DOMContentLoaded', () => {
         delBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             
-            const myName = getLocalUserName();
-            if (!isUserOp(myName)) {
+            if (!isCurrentUserOp()) {
                 alert('No tienes rango de Operator (OP) para eliminar canales.');
                 return;
             }
@@ -1352,6 +1349,14 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const serverError = document.getElementById('server-create-error');
             if (serverError) serverError.classList.add('hidden');
+
+            if (!isCurrentUserOp()) {
+                if (serverError) {
+                    serverError.textContent = 'No tienes rango de Operator (OP) para crear servidores.';
+                    serverError.classList.remove('hidden');
+                }
+                return;
+            }
 
             const name = newServerNameInput.value.trim();
             if (!name) return;
@@ -1468,8 +1473,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!name) return;
 
             // Validar que el usuario local es OP
-            const myName = getLocalUserName();
-            if (!isUserOp(myName)) {
+            if (!isCurrentUserOp()) {
                 alert('No tienes permisos de Operator (OP) para gestionar rangos.');
                 memberActionMenu.classList.add('hidden');
                 return;

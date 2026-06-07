@@ -1216,34 +1216,46 @@ function stopAudioEngine() {
 // Comprobar si un usuario tiene rango OP (Operator)
 // ─── OP hardcodeado por email ─────────────────────────────────
 // Solo sniderquiros5@gmail.com tiene OP permanente.
-// Nadie más es OP por defecto; el sistema de rango local funciona
-// además de este control, pero nunca sobreescribe la lista de
-// emails sin OP.
 const OP_EMAIL = 'sniderquiros5@gmail.com';
 
+/**
+ * Comprueba si el USUARIO LOCAL ACTUAL tiene rango OP.
+ * Usa el email guardado en localStorage — la forma más fiable.
+ */
+export function isCurrentUserOp() {
+    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    return email === OP_EMAIL.toLowerCase();
+}
+
+/**
+ * Comprueba si un usuario (por nombre) tiene rango OP.
+ * Primero intenta la comparación directa por email del usuario local,
+ * luego busca en la sala de voz activa.
+ */
 export function isUserOp(name) {
     if (!name) return false;
 
-    // Buscar en los miembros activos de la sala de voz si ya está marcado como OP
+    // 1. Si el nombre coincide con el usuario local → comprobar email directamente
+    const sessionEmail = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    if (sessionEmail === OP_EMAIL.toLowerCase()) {
+        // El usuario local ES el OP — comprobar si el nombre pedido es el suyo
+        const customName = sessionEmail ? localStorage.getItem('nexus_username_' + sessionEmail) : null;
+        const defaultName = sessionEmail
+            ? (sessionEmail.split('@')[0].charAt(0).toUpperCase() + sessionEmail.split('@')[0].slice(1))
+            : '';
+        const displayName = customName || defaultName;
+
+        // Comparar ignorando mayúsculas/minúsculas y espacios extra
+        if (name.trim().toLowerCase() === displayName.trim().toLowerCase()) return true;
+
+        // También aceptar si es el nombre base del email (ej: "sniderquiros5")
+        const emailBase = sessionEmail.split('@')[0].toLowerCase();
+        if (name.trim().toLowerCase() === emailBase) return true;
+    }
+
+    // 2. Buscar en la sala de voz activa (Supabase Presence marca isOp remotamente)
     const member = activeMembersInRoom.find(m => m.name === name);
     if (member && member.isOp) return true;
-
-    // Comprobar si el nombre pertenece al email con OP hardcodeado
-    const sessionEmail = localStorage.getItem('nexus_user_email') || '';
-    const sessionCustomName = sessionEmail ? localStorage.getItem('nexus_username_' + sessionEmail) : null;
-    const sessionDefaultName = sessionEmail
-        ? (sessionEmail.split('@')[0].charAt(0).toUpperCase() + sessionEmail.split('@')[0].slice(1))
-        : '';
-    const sessionDisplayName = sessionCustomName || sessionDefaultName;
-
-    // Solo sniderquiros5@gmail.com tiene OP
-    if (sessionEmail === OP_EMAIL && name === sessionDisplayName) return true;
-
-    // Para compatibilidad con otros clientes/vistas (remotos)
-    const normalized = name.toLowerCase().trim();
-    if (normalized === 'sniderquiros5' || normalized === 'snider') {
-        return true;
-    }
 
     return false;
 }
