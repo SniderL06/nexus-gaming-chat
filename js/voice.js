@@ -58,26 +58,55 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // Supresión de ruido: Filtro pasa banda para voz (150Hz - 3000Hz)
-            // Esto elimina el zumbido de baja frecuencia (aire acondicionado, línea eléctrica)
-            // y el siseo de alta frecuencia (ventiladores de PC) sin comprimir ni distorsionar la voz.
+            // Cadena de supresión de ruido de 5 nodos:
+            // 1. High-pass 85Hz: elimina zumbido eléctrico (60Hz América / 50Hz Europa)
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 150;
-            hp.Q.value = 1.0;
+            hp.frequency.value = 85;
+            hp.Q.value = 0.7;
 
+            // 2. Notch 50Hz y 60Hz: eliminar zumbido de línea eléctrica
+            const notch50 = audioCtx.createBiquadFilter();
+            notch50.type = 'notch';
+            notch50.frequency.value = 50;
+            notch50.Q.value = 30;
+
+            const notch60 = audioCtx.createBiquadFilter();
+            notch60.type = 'notch';
+            notch60.frequency.value = 60;
+            notch60.Q.value = 30;
+
+            // 3. Low-pass 7500Hz: corta siseo de ventiladores de PC
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 3000;
-            lp.Q.value = 1.0;
+            lp.frequency.value = 7500;
+            lp.Q.value = 0.5;
 
+            // 4. Compresor dinámico: reduce picos de ruido, preserva voz
+            const comp = audioCtx.createDynamicsCompressor();
+            comp.threshold.value = -40;  // dB — por debajo de esto se comprime
+            comp.knee.value = 10;
+            comp.ratio.value = 8;        // 8:1 ratio de compresión
+            comp.attack.value = 0.003;   // 3ms para capturar transitorios rápidos
+            comp.release.value = 0.15;
+
+            // 5. Gain de compensación (makeup gain)
+            const makeup = audioCtx.createGain();
+            makeup.gain.value = 1.4;     // +3dB aproximados para compensar pérdida del compresor
+
+            // Encadenar: input → hp → notch50 → notch60 → lp → comp → makeup
             inputNode.connect(hp);
-            hp.connect(lp);
+            hp.connect(notch50);
+            notch50.connect(notch60);
+            notch60.connect(lp);
+            lp.connect(comp);
+            comp.connect(makeup);
 
             filterCleanupFns.push(() => {
-                try { hp.disconnect(); lp.disconnect(); } catch(e){}
+                try { hp.disconnect(); notch50.disconnect(); notch60.disconnect();
+                      lp.disconnect(); comp.disconnect(); makeup.disconnect(); } catch(e){}
             });
-            return lp;
+            return makeup;
         }
 
         case 'robot': {
@@ -318,6 +347,9 @@ let selectedInputDeviceId = 'default';
 let selectedOutputDeviceId = 'default';
 let audioInputVolume = 1.0;  // 0.0 a 1.5 (sensibilidad)
 let audioOutputVolume = 1.0; // 0.0 a 1.0 (volumen global)
+
+// Mapa de volumen personal por peerId (solo local, no afecta a otros)
+const perUserVolume = new Map(); // peerId -> number (0.0 a 1.0, default 1.0)
 let isTestingMic = false;
 let micTestAnalyser = null;
 let micTestStream = null;
@@ -357,6 +389,23 @@ export function initVoice() {
             setVoiceFilter(btn.dataset.filter);
         });
     });
+
+    // Colapsar / expandir panel de filtros
+    const filtersPanel = document.getElementById('mic-filters-panel');
+    const filtersToggle = document.getElementById('filters-header-toggle');
+    if (filtersPanel && filtersToggle) {
+        // Restaurar estado guardado
+        if (localStorage.getItem('nexus_filters_collapsed') === '1') {
+            filtersPanel.classList.add('collapsed');
+        }
+        filtersToggle.addEventListener('click', (e) => {
+            // Evitar que el click en los propios botones de filtro colapsen el panel
+            if (e.target.closest('.mic-filter-btn')) return;
+            filtersPanel.classList.toggle('collapsed');
+            localStorage.setItem('nexus_filters_collapsed',
+                filtersPanel.classList.contains('collapsed') ? '1' : '0');
+        });
+    }
 
     // --- ENLACE A AJUSTES DE AUDIO (ENTRADA Y SALIDA) ---
     initAudioDevicesConfig();
@@ -1309,14 +1358,42 @@ function renderVoiceMembers() {
         const isOp = isUserOp(member.name);
         const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">&#128081;</span>' : '';
 
+        const volumeSliderHtml = (!isUser && !member.isMusicBot && member.peerId)
+            ? `<div class="user-volume-row">
+                <span class="user-vol-icon">🔊</span>
+                <input type="range" class="user-volume-slider" min="0" max="100" value="100"
+                    title="Volumen de ${member.name}" aria-label="Volumen de ${member.name}">
+               </div>`
+            : '';
+
         card.innerHTML = `
             ${speakingWave}
             ${avatarHtml}
             <span class="voice-member-name">${member.name}${opCrown}</span>
             <div class="voice-member-icons">${statusIcons}</div>
+            ${volumeSliderHtml}
         `;
 
+        // Añadir tarjeta al grid
         grid.appendChild(card);
+
+        // Enlazar slider de volumen personal (solo para usuarios remotos, no para el usuario local ni el bot)
+        if (!isUser && !member.isMusicBot && member.peerId) {
+            const slider = card.querySelector('.user-volume-slider');
+            if (slider) {
+                const savedVol = perUserVolume.get(member.peerId) ?? 1.0;
+                slider.value = Math.round(savedVol * 100);
+                slider.addEventListener('input', (e) => {
+                    e.stopPropagation();
+                    const newVol = e.target.value / 100;
+                    perUserVolume.set(member.peerId, newVol);
+                    const peerData = activePeers.get(member.peerId);
+                    if (peerData && peerData.audioEl) {
+                        peerData.audioEl.volume = state.isDeafened ? 0 : newVol * audioOutputVolume;
+                    }
+                });
+            }
+        }
     });
 }
 
@@ -1685,4 +1762,108 @@ function drawVisualizer() {
 
         x += barWidth;
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOT DE MÚSICA — MEZCLA EN STREAM WEBRTC
+// ─────────────────────────────────────────────────────────────
+let musicMixDestNode = null;   // MediaStreamDestination exclusivo para el bot de música
+let musicMixedTrack  = null;   // AudioTrack mezclado en el processedStream
+
+/**
+ * Conecta el nodo de ganancia del sintetizador al stream WebRTC para
+ * que todos los peers en la sala puedan escuchar la música.
+ * @param {GainNode} synthSourceNode - El nodo de salida del sintetizador (synthGain)
+ */
+export function mixMusicTrackIntoStream(synthSourceNode) {
+    if (!audioCtx || !processedStream) {
+        console.warn('[Music Bot] No hay audioCtx o processedStream activo para mezclar música.');
+        return;
+    }
+
+    // Crear destino de mezcla si no existe
+    if (!musicMixDestNode) {
+        musicMixDestNode = audioCtx.createMediaStreamDestination();
+    }
+
+    // Conectar synth al destino de mezcla (además del destination local para que el host también escuche)
+    try { synthSourceNode.connect(musicMixDestNode); } catch(e) {}
+
+    // Obtener la pista de audio del sintetizador
+    const musicTrack = musicMixDestNode.stream.getAudioTracks()[0];
+    if (!musicTrack) return;
+
+    musicMixedTrack = musicTrack;
+
+    // Reemplazar / añadir la pista de audio en todos los RTCPeerConnections activos
+    activePeers.forEach((peerData, peerId) => {
+        const pc = peerData.call?.peerConnection;
+        if (!pc) return;
+
+        const senders = pc.getSenders();
+        const audioSender = senders.find(s => s.track?.kind === 'audio');
+
+        if (audioSender) {
+            // Mezclar la pista del sintetizador con el stream del mic usando un merger
+            const mergerDest = audioCtx.createMediaStreamDestination();
+            const micTrack = processedStream.getAudioTracks()[0];
+
+            if (micTrack) {
+                // Crear un stream temporal que combina mic + bot
+                const mergedStream = new MediaStream([micTrack, musicTrack]);
+                // Solo podemos enviar una pista de audio por sender; usar la del bot
+                // ya que el mic ya está en el sender. Mezclaremos con un AudioContext mixer.
+                const micSource = audioCtx.createMediaStreamSource(new MediaStream([micTrack]));
+                const botSource = audioCtx.createMediaStreamSource(new MediaStream([musicTrack]));
+                const mixGain = audioCtx.createGain();
+                micSource.connect(mixGain);
+                botSource.connect(mixGain);
+                mixGain.connect(mergerDest);
+
+                const finalTrack = mergerDest.stream.getAudioTracks()[0];
+                if (finalTrack) {
+                    audioSender.replaceTrack(finalTrack).catch(err =>
+                        console.warn(`[Music Bot] No se pudo reemplazar pista en peer ${peerId}:`, err)
+                    );
+                }
+            }
+        } else {
+            // Si no hay sender de audio, añadir la pista del bot
+            try {
+                pc.addTrack(musicTrack, musicMixDestNode.stream);
+            } catch(e) {
+                console.warn('[Music Bot] No se pudo añadir pista al peer:', e);
+            }
+        }
+    });
+
+    console.log('[Music Bot] Audio mezclado en el stream WebRTC. Todos los peers escucharán la música.');
+}
+
+/**
+ * Desconecta el audio del bot de música del stream WebRTC.
+ * Se llama cuando el bot para de reproducir.
+ */
+export function unmixMusicTrack() {
+    if (!musicMixDestNode) return;
+
+    // Restaurar la pista original del micr\u00f3fono en todos los peers
+    if (processedStream) {
+        const micTrack = processedStream.getAudioTracks()[0];
+        if (micTrack) {
+            activePeers.forEach((peerData, peerId) => {
+                const pc = peerData.call?.peerConnection;
+                if (!pc) return;
+                const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                if (audioSender) {
+                    audioSender.replaceTrack(micTrack).catch(() => {});
+                }
+            });
+        }
+    }
+
+    try { musicMixDestNode.disconnect(); } catch(e) {}
+    musicMixDestNode = null;
+    musicMixedTrack = null;
+    console.log('[Music Bot] Pista de música desconectada del stream WebRTC.');
 }

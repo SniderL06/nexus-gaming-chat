@@ -1,7 +1,7 @@
 /* NEXUS RETRO AUDIO SYNTH & MUSIC BOT MODULE (ES MODULE) */
 
 import { state } from './app.js';
-import { getVoiceAnalyser, triggerMusicBotVoiceConnection, getOutputVolume, getVoiceAudioContext } from './voice.js';
+import { getVoiceAnalyser, triggerMusicBotVoiceConnection, getOutputVolume, getVoiceAudioContext, mixMusicTrackIntoStream, unmixMusicTrack } from './voice.js';
 
 // Lista de pistas sintetizables disponibles
 export const PRESETS = [
@@ -327,6 +327,9 @@ function startTrack(preset) {
         playSynthStep(preset);
     }, intervalMs);
 
+    // Mezclar audio del bot en el stream WebRTC para que todos los peers escuchen
+    mixMusicTrackIntoStream(synthGain);
+
     // Iniciar temporizador de la barra de progreso
     if (timeProgressInterval) clearInterval(timeProgressInterval);
     timeProgressInterval = setInterval(updateProgressBar, 1000);
@@ -532,6 +535,8 @@ function stopSynthesizer() {
         clearInterval(timeProgressInterval);
         timeProgressInterval = null;
     }
+    // Desmezclar el audio del bot del stream WebRTC
+    unmixMusicTrack();
     if (synthGain) {
         synthGain.disconnect();
         synthGain = null;
