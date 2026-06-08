@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Política de Privacidad — Nexus</title>
+  <meta name="description" content="Política de Privacidad de Nexus, plataforma de chat y streaming.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --accent-cyan: #00d4ff;
+      --accent-purple: #a855f7;
+      --accent-pink: #ec4899;
+      --cyan-glow: rgba(0,212,255,0.2);
+      --purple-glow: rgba(168,85,247,0.2);
+      --bg-primary: #0d0d1a;
+      --bg-secondary: #111122;
+      --bg-tertiary: #161628;
+      --text-normal: #c8d0e0;
+      --text-muted: #4a5268;
+      --border: rgba(0,212,255,0.1);
+      --border-subtle: rgba(255,255,255,0.04);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-normal);
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      line-height: 1.8;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 20%, rgba(168,85,247,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 80% 80%, rgba(0,212,255,0.06) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    /* Grid lines */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(0,212,255,0.02) 40px, rgba(0,212,255,0.02) 41px),
+        repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(0,212,255,0.02) 40px, rgba(0,212,255,0.02) 41px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,13,26,0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 2rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; }
+    .nav-logo svg { flex-shrink: 0; }
+    .nav-logo-text { font-family: 'Orbitron', sans-serif; font-size: 0.85rem; font-weight: 800; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: 0.08em; }
+    .nav-sep { color: var(--border); }
+    .nav-current { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+    .nav-back { font-size: 0.75rem; color: var(--text-muted); text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; gap: 0.4rem; transition: color 0.2s; }
+    .nav-back:hover { color: var(--accent-cyan); }
+
+    .hero {
+      position: relative; z-index: 1;
+      padding: 5rem 2rem 3.5rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .hero-tag {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.6rem;
+      letter-spacing: 0.4em;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      opacity: 0.8;
+    }
+    .hero h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #fff 30%, var(--accent-cyan) 70%, var(--accent-purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub { color: var(--text-muted); font-size: 0.85rem; letter-spacing: 0.08em; }
+    .hero-line {
+      width: 80px; height: 1px;
+      background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan));
+      margin: 2rem auto 0;
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+
+    .container { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 1.5rem; }
+
+    .toc {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.75rem;
+      margin: 3rem 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .toc::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan));
+    }
+    .toc-title { font-family: 'Orbitron', sans-serif; font-size: 0.6rem; letter-spacing: 0.35em; color: var(--accent-cyan); text-transform: uppercase; margin-bottom: 1.25rem; opacity: 0.8; }
+    .toc ol { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem; counter-reset: toc; }
+    .toc li { counter-increment: toc; }
+    .toc a { display: flex; align-items: center; gap: 0.6rem; color: var(--text-muted); text-decoration: none; font-size: 0.8rem; padding: 0.3rem 0; transition: color 0.2s; }
+    .toc a::before { content: counter(toc, decimal-leading-zero); font-family: 'Orbitron', sans-serif; font-size: 0.6rem; color: var(--accent-purple); flex-shrink: 0; }
+    .toc a:hover { color: var(--accent-cyan); }
+
+    .highlight {
+      background: rgba(0,212,255,0.04);
+      border: 1px solid rgba(0,212,255,0.15);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+
+    .policy-section {
+      margin: 2rem 0;
+      padding: 1.75rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .policy-section:hover { border-color: rgba(0,212,255,0.08); }
+    .policy-section::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(180deg, var(--accent-purple), var(--accent-cyan));
+    }
+    .section-num { font-family: 'Orbitron', sans-serif; font-size: 0.58rem; letter-spacing: 0.3em; color: var(--accent-purple); display: block; margin-bottom: 0.5rem; opacity: 0.8; }
+    .policy-section h2 { font-family: 'Orbitron', sans-serif; font-size: 0.9rem; font-weight: 600; color: #fff; margin-bottom: 1rem; letter-spacing: 0.05em; }
+    .policy-section p { color: var(--text-normal); font-size: 0.88rem; margin-bottom: 0.85rem; }
+    .policy-section p:last-child { margin-bottom: 0; }
+    .policy-section ul { list-style: none; margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.45rem; }
+    .policy-section ul li { font-size: 0.88rem; color: var(--text-normal); padding-left: 1.25rem; position: relative; }
+    .policy-section ul li::before { content: '›'; position: absolute; left: 0; color: var(--accent-cyan); font-size: 1rem; }
+    .policy-section a { color: var(--accent-cyan); text-decoration: none; transition: opacity 0.2s; }
+    .policy-section a:hover { opacity: 0.7; }
+
+    .date-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      background: rgba(168,85,247,0.08);
+      border: 1px solid rgba(168,85,247,0.2);
+      border-radius: 4px;
+      padding: 0.4rem 1rem;
+      color: var(--accent-purple);
+      margin: 3rem auto 0;
+      display: block;
+      text-align: center;
+      width: fit-content;
+    }
+
+    .contact-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2rem;
+      margin: 2.5rem 0 4rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .contact-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+    }
+    .contact-box h3 { font-family: 'Orbitron', sans-serif; font-size: 0.85rem; color: #fff; margin-bottom: 0.75rem; letter-spacing: 0.05em; }
+    .contact-box p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .contact-box a { color: var(--accent-cyan); text-decoration: none; font-size: 0.85rem; }
+
+    footer {
+      position: relative; z-index: 1;
+      border-top: 1px solid var(--border-subtle);
+      padding: 2rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    footer span { color: var(--accent-cyan); }
+    footer a { color: var(--text-muted); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="index.html">
+      <svg width="20" height="20" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="gA" cx="30%" cy="30%" r="70%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#a855f7"/></radialGradient>
+        </defs>
+        <g stroke="url(#gA)" stroke-width="4" stroke-linecap="round" opacity="0.8">
+          <line x1="20" y1="80" x2="20" y2="20"/>
+          <line x1="20" y1="20" x2="80" y2="80"/>
+          <line x1="80" y1="80" x2="80" y2="20"/>
+          <line x1="20" y1="20" x2="50" y2="50"/>
+          <line x1="50" y1="50" x2="80" y2="20"/>
+        </g>
+        <circle cx="20" cy="20" r="7" fill="url(#gA)"/>
+        <circle cx="80" cy="20" r="7" fill="url(#gA)"/>
+        <circle cx="20" cy="80" r="7" fill="url(#gA)"/>
+        <circle cx="80" cy="80" r="7" fill="url(#gA)"/>
+        <circle cx="50" cy="50" r="5" fill="#c084fc"/>
+      </svg>
+      <span class="nav-logo-text">NEXUS</span>
+    </a>
+    <span class="nav-sep">/</span>
+    <span class="nav-current">Política de Privacidad</span>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-tag">Nexus — Documentación Legal</div>
+    <h1>Política de<br>Privacidad</h1>
+    <p class="hero-sub">Última actualización: Junio 2026</p>
+    <div class="hero-line"></div>
+  </div>
+
+  <div class="container">
+    <div class="toc">
+      <div class="toc-title">Índice de Contenidos</div>
+      <ol>
+        <li><a href="#s1">Información que recopilamos</a></li>
+        <li><a href="#s2">Uso de la información</a></li>
+        <li><a href="#s3">Cookies y tecnologías</a></li>
+        <li><a href="#s4">Publicidad</a></li>
+        <li><a href="#s5">Comunicaciones y chat</a></li>
+        <li><a href="#s6">Servicios de terceros</a></li>
+        <li><a href="#s7">Menores de edad</a></li>
+        <li><a href="#s8">Tus derechos</a></li>
+        <li><a href="#s9">Seguridad</a></li>
+        <li><a href="#s10">Contacto</a></li>
+      </ol>
+    </div>
+
+    <div class="highlight">
+      Esta política describe cómo <strong>Nexus</strong> (nexus-gaming-chat.vercel.app) recopila, usa y protege la información de sus usuarios. Al acceder o utilizar la plataforma, aceptas las prácticas descritas a continuación.
+    </div>
+
+    <div class="policy-section" id="s1">
+      <span class="section-num">01 —</span>
+      <h2>Información que Recopilamos</h2>
+      <p>Nexus recopila los siguientes tipos de información:</p>
+      <ul>
+        <li><strong>Datos de cuenta:</strong> dirección de correo electrónico para autenticación por código OTP.</li>
+        <li><strong>Datos de perfil:</strong> nombre de usuario e imagen de perfil configurados voluntariamente.</li>
+        <li><strong>Datos de uso:</strong> mensajes de chat, canales visitados, actividad de voz y streaming dentro de la plataforma.</li>
+        <li><strong>Datos técnicos:</strong> dirección IP, tipo de navegador, sistema operativo y datos de conexión WebRTC.</li>
+        <li><strong>Datos de publicidad:</strong> información generada por redes publicitarias (Google IMA SDK, Google AdSense).</li>
+      </ul>
+      <p>No almacenamos contraseñas. El acceso se realiza mediante verificación por código enviado al correo electrónico.</p>
+    </div>
+
+    <div class="policy-section" id="s2">
+      <span class="section-num">02 —</span>
+      <h2>Uso de la Información</h2>
+      <p>La información recopilada se utiliza para:</p>
+      <ul>
+        <li>Autenticar y gestionar el acceso a la plataforma.</li>
+        <li>Proveer las funciones de chat en tiempo real, voz y streaming.</li>
+        <li>Mejorar el rendimiento y la experiencia del usuario.</li>
+        <li>Mostrar publicidad relevante a través de redes de anuncios.</li>
+        <li>Garantizar la seguridad de la plataforma y prevenir abusos.</li>
+      </ul>
+      <p>No vendemos ni compartimos datos de usuarios con terceros con fines comerciales propios.</p>
+    </div>
+
+    <div class="policy-section" id="s3">
+      <span class="section-num">03 —</span>
+      <h2>Cookies y Tecnologías de Seguimiento</h2>
+      <p>Nexus utiliza almacenamiento local (localStorage) y cookies para:</p>
+      <ul>
+        <li>Mantener la sesión del usuario activa.</li>
+        <li>Recordar preferencias de tema y configuración de audio.</li>
+        <li>Permitir el funcionamiento de las redes publicitarias integradas.</li>
+      </ul>
+      <p>Puedes limpiar estos datos desde la configuración de tu navegador, lo que cerrará tu sesión en la plataforma.</p>
+    </div>
+
+    <div class="policy-section" id="s4">
+      <span class="section-num">04 —</span>
+      <h2>Publicidad</h2>
+      <p>Nexus muestra anuncios de video a través de <strong>Google IMA SDK</strong> y banners a través de <strong>Google AdSense</strong>. Estas tecnologías pueden utilizar cookies para personalizar los anuncios mostrados.</p>
+      <p>Los anuncios de video aparecen en los paneles laterales de la interfaz. Los usuarios pueden omitir anuncios pasados los primeros segundos de reproducción.</p>
+      <p>Puedes gestionar tus preferencias de publicidad personalizada en:</p>
+      <ul>
+        <li><a href="https://www.google.com/settings/ads" target="_blank" rel="noopener">Configuración de anuncios de Google</a></li>
+        <li><a href="https://adssettings.google.com" target="_blank" rel="noopener">Centro de privacidad de anuncios de Google</a></li>
+      </ul>
+    </div>
+
+    <div class="policy-section" id="s5">
+      <span class="section-num">05 —</span>
+      <h2>Comunicaciones y Chat</h2>
+      <p>Los mensajes enviados en los canales de texto de Nexus pueden almacenarse en nuestra base de datos en tiempo real (Supabase) para permitir el historial de conversaciones.</p>
+      <ul>
+        <li>Las comunicaciones de voz en tiempo real se transmiten mediante <strong>WebRTC/PeerJS</strong> y no se graban ni almacenan.</li>
+        <li>El streaming de pantalla también se realiza en tiempo real sin almacenamiento.</li>
+        <li>Los mensajes de texto pueden persistir según la configuración del servidor.</li>
+      </ul>
+      <p>No revisamos el contenido de los mensajes privados salvo requerimiento legal.</p>
+    </div>
+
+    <div class="policy-section" id="s6">
+      <span class="section-num">06 —</span>
+      <h2>Servicios de Terceros</h2>
+      <p>Nexus integra los siguientes servicios de terceros:</p>
+      <ul>
+        <li><strong>Supabase:</strong> base de datos en tiempo real para mensajes y autenticación.</li>
+        <li><strong>PeerJS/WebRTC:</strong> comunicación de voz y video entre usuarios.</li>
+        <li><strong>EmailJS:</strong> envío de códigos de verificación por correo.</li>
+        <li><strong>Google IMA SDK:</strong> reproducción de anuncios de video.</li>
+        <li><strong>Vercel:</strong> plataforma de alojamiento que registra datos básicos de acceso.</li>
+      </ul>
+      <p>Cada servicio tiene su propia política de privacidad independiente.</p>
+    </div>
+
+    <div class="policy-section" id="s7">
+      <span class="section-num">07 —</span>
+      <h2>Menores de Edad</h2>
+      <p>Nexus no está dirigido a menores de 13 años. No recopilamos intencionalmente información de menores. Si detectamos que un usuario es menor de esa edad, eliminaremos su cuenta y datos asociados.</p>
+      <p>Si eres padre o tutor y tienes dudas, contáctanos de inmediato.</p>
+    </div>
+
+    <div class="policy-section" id="s8">
+      <span class="section-num">08 —</span>
+      <h2>Tus Derechos</h2>
+      <p>Tienes los siguientes derechos sobre tus datos personales:</p>
+      <ul>
+        <li><strong>Acceso:</strong> solicitar una copia de tus datos almacenados.</li>
+        <li><strong>Rectificación:</strong> corregir datos incorrectos en tu perfil.</li>
+        <li><strong>Eliminación:</strong> solicitar la eliminación de tu cuenta y datos asociados.</li>
+        <li><strong>Oposición:</strong> oponerte al procesamiento para publicidad personalizada.</li>
+      </ul>
+      <p>Puedes ejercer estos derechos contactándonos por correo electrónico.</p>
+    </div>
+
+    <div class="policy-section" id="s9">
+      <span class="section-num">09 —</span>
+      <h2>Seguridad</h2>
+      <p>Implementamos medidas de seguridad técnicas incluyendo:</p>
+      <ul>
+        <li>Autenticación por código OTP de un solo uso con expiración de 10 minutos.</li>
+        <li>Transmisión cifrada mediante HTTPS y WebRTC con cifrado de extremo a extremo para voz.</li>
+        <li>Sin almacenamiento de contraseñas.</li>
+      </ul>
+      <p>A pesar de estas medidas, ningún sistema es completamente invulnerable. Recomendamos usar correos seguros para el acceso.</p>
+    </div>
+
+    <div class="policy-section" id="s10">
+      <span class="section-num">10 —</span>
+      <h2>Contacto</h2>
+      <p>Para cualquier consulta o solicitud relacionada con tu privacidad:</p>
+      <ul>
+        <li>Correo electrónico: <a href="mailto:sniderquiros5@gmail.com">sniderquiros5@gmail.com</a></li>
+        <li>Sitio oficial: <a href="https://black-dawn.vercel.app" target="_blank" rel="noopener">black-dawn.vercel.app</a></li>
+      </ul>
+      <p>Responderemos a tu solicitud en un plazo máximo de 30 días hábiles.</p>
+    </div>
+
+    <div class="date-badge">VIGENTE DESDE JUNIO 2026 — NEXUS V1.0.0</div>
+
+    <div class="contact-box">
+      <h3>¿Preguntas sobre privacidad?</h3>
+      <p>El equipo de Nexus está disponible para resolver tus dudas.</p>
+      <a href="mailto:sniderquiros5@gmail.com">sniderquiros5@gmail.com</a>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2026 <span>Nexus</span> by Snider. Todos los derechos reservados. — <a href="index.html">Volver a la app</a></p>
+  </footer>
+</body>
+</html>
