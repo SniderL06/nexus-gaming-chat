@@ -117,7 +117,9 @@ async function startLocalStream() {
             activePeers.forEach(({ name }, remotePeerId) => {
                 if (remotePeerId) {
                     console.log(`[Stream] Enviando video de pantalla a: ${name} (${remotePeerId})`);
-                    const videoCall = peer.call(remotePeerId, streamToSend);
+                    const videoCall = peer.call(remotePeerId, streamToSend, {
+                        metadata: { type: 'screen' }
+                    });
                     // Guardar referencia para poder colgarla después
                     const peerObj = activePeers.get(remotePeerId);
                     if (peerObj) peerObj.videoCall = videoCall;
