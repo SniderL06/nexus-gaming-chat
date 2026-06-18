@@ -219,6 +219,15 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             sendVerificationCode();
         });
+        // Respaldo por si onsubmit="return false" bloquea el submit del formulario en algunos navegadores
+        if (loginSendBtn) {
+            loginSendBtn.addEventListener('click', (e) => {
+                if (loginEmailInput.reportValidity()) {
+                    e.preventDefault();
+                    sendVerificationCode();
+                }
+            });
+        }
     }
 
     // Paso 2: Verificar OTP
