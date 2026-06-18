@@ -484,34 +484,40 @@ async function enumerateAudioDevices(inputSelect, outputSelect) {
 
     try {
         // Solicitar permisos rápidos para que se enlisten nombres reales y no vacíos
-        await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (permissionErr) {
+            console.warn('[Audio Devices] Permiso de micrófono denegado para enlistar nombres reales:', permissionErr);
+        }
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
 
         inputSelect.innerHTML = '';
         outputSelect.innerHTML = '';
 
-        let audioInputsCount = 0;
-        let audioOutputsCount = 0;
+        // Añadir una opción por defecto para evitar listas vacías
+        const defaultInputOpt = document.createElement('option');
+        defaultInputOpt.value = 'default';
+        defaultInputOpt.textContent = 'Micrófono por Defecto';
+        inputSelect.appendChild(defaultInputOpt);
+        
+        const defaultOutputOpt = document.createElement('option');
+        defaultOutputOpt.value = 'default';
+        defaultOutputOpt.textContent = 'Altavoz por Defecto';
+        outputSelect.appendChild(defaultOutputOpt);
 
         devices.forEach(device => {
+            // Ignorar los dispositivos con ID 'default' si ya los pusimos manualmente, o agruparlos
+            if (device.deviceId === 'default' || !device.deviceId) return;
+
             const opt = document.createElement('option');
             opt.value = device.deviceId;
-            opt.textContent = device.label || `${device.kind === 'audioinput' ? 'Micrófono' : 'Altavoz'} (${device.deviceId.slice(0, 5)})`;
+            opt.textContent = device.label || `${device.kind === 'audioinput' ? 'Micrófono' : 'Altavoz/Auricular'} (${device.deviceId.slice(0, 5)})`;
 
             if (device.kind === 'audioinput') {
                 inputSelect.appendChild(opt);
-                audioInputsCount++;
             } else if (device.kind === 'audiooutput') {
                 outputSelect.appendChild(opt);
-                audioOutputsCount++;
-            }
-        });
-
-        if (audioInputsCount === 0) {
-            inputSelect.innerHTML = '<option value="default">Ningún micrófono detectado</option>';
-        }
-        if (audioOutputsCount === 0) {
-            outputSelect.innerHTML = '<option value="default">Ningún auricular/altavoz detectado</option>';
         }
 
     } catch (err) {
@@ -568,7 +574,10 @@ export function getOutputVolume() {
     return audioOutputVolume;
 }
 
-// Lógica para encender/apagar el testador LED de micrófono
+// Lógica para encender/apagar el testador LED de micrófono y retorno
+let micTestAudioCtx = null;
+let micTestLocalAudioNode = null;
+
 async function toggleMicTest() {
     const btn = document.getElementById('mic-test-btn');
     const fill = document.getElementById('mic-level-fill');
@@ -587,6 +596,13 @@ async function toggleMicTest() {
             micTestStream.getTracks().forEach(track => track.stop());
             micTestStream = null;
         }
+        if (micTestAudioCtx) {
+            if (micTestAudioCtx.state !== 'closed') {
+                micTestAudioCtx.close();
+            }
+            micTestAudioCtx = null;
+        }
+        micTestLocalAudioNode = null;
         micTestAnalyser = null;
         console.log('[Audio Test] Prueba finalizada.');
     } else {
@@ -599,16 +615,32 @@ async function toggleMicTest() {
             micTestStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
-                    echoCancellation: true
+                    echoCancellation: false,
+                    noiseSuppression: false
                 }
             });
 
-            const testAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            micTestAnalyser = testAudioCtx.createAnalyser();
+            micTestAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Si hay un dispositivo de salida específico y el navegador soporta setSinkId en AudioContext
+            if (selectedOutputDeviceId !== 'default' && typeof micTestAudioCtx.setSinkId === 'function') {
+                micTestAudioCtx.setSinkId(selectedOutputDeviceId).catch(err => 
+                    console.warn('[Audio Test] No se pudo asignar el dispositivo de salida al context de test:', err)
+                );
+            }
+
+            micTestAnalyser = micTestAudioCtx.createAnalyser();
             micTestAnalyser.fftSize = 32;
 
-            const source = testAudioCtx.createMediaStreamSource(micTestStream);
+            const source = micTestAudioCtx.createMediaStreamSource(micTestStream);
             source.connect(micTestAnalyser);
+
+            // Conectar retorno local para poder escucharse a sí mismo (con ganancia controlada)
+            micTestLocalAudioNode = micTestAudioCtx.createGain();
+            micTestLocalAudioNode.gain.setValueAtTime(0.8, micTestAudioCtx.currentTime);
+            
+            source.connect(micTestLocalAudioNode);
+            micTestLocalAudioNode.connect(micTestAudioCtx.destination);
 
             // Bucle rápido para actualizar la barra LED
             runMicTestLoop();
