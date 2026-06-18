@@ -943,7 +943,9 @@ function callPeer(remotePeerId, remoteName) {
                 });
                 streamToSend = new MediaStream(tracks);
             }
-            const videoCall = peer.call(remotePeerId, streamToSend);
+            const videoCall = peer.call(remotePeerId, streamToSend, {
+                metadata: { type: 'screen' }
+            });
             const peerObj = activePeers.get(remotePeerId);
             if (peerObj) peerObj.videoCall = videoCall;
         }
