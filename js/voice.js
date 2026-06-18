@@ -519,14 +519,24 @@ async function enumerateAudioDevices(inputSelect, outputSelect) {
     }
 }
 
-// Aplica el sink de salida (altavoces/auriculares) si la API setSinkId está disponible
+// Aplica el sink de salida (altavoces/auriculares) a todos los elementos de reproducción activos
 function applyOutputDeviceSink() {
+    // 1. Aplicar a reproductor de video local (si existe)
     const video = document.getElementById('local-stream-video');
     if (video && typeof video.setSinkId === 'function') {
         video.setSinkId(selectedOutputDeviceId).then(() => {
             console.log(`[Audio Config] Salida de vídeo acoplada a deviceId: ${selectedOutputDeviceId}`);
-        }).catch(err => console.warn('[Audio Config] Fallo al establecer sink en reproductor:', err));
+        }).catch(err => console.warn('[Audio Config] Fallo al establecer sink en reproductor de vídeo:', err));
     }
+
+    // 2. Aplicar a todos los elementos de audio remoto de los peers activos
+    activePeers.forEach((peer, peerId) => {
+        if (peer.audioEl && typeof peer.audioEl.setSinkId === 'function') {
+            peer.audioEl.setSinkId(selectedOutputDeviceId).then(() => {
+                console.log(`[Audio Config] Salida de audio de peer ${peerId} acoplada a: ${selectedOutputDeviceId}`);
+            }).catch(err => console.warn(`[Audio Config] Fallo al establecer sink para peer ${peerId}:`, err));
+        }
+    });
 }
 
 // Controla el volumen general del Bot de Música y de la reproducción
