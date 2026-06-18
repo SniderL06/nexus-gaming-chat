@@ -518,7 +518,8 @@ async function enumerateAudioDevices(inputSelect, outputSelect) {
                 inputSelect.appendChild(opt);
             } else if (device.kind === 'audiooutput') {
                 outputSelect.appendChild(opt);
-        }
+            }
+        });
 
     } catch (err) {
         console.warn('[Audio Devices] Error enumerando hardware:', err);
