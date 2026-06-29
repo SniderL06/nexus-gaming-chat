@@ -2072,6 +2072,45 @@ body {
     flex-shrink: 0;
 }
 
+/* Estilos de la Screenshot en Landing Page */
+.lp-hero-screenshot {
+    margin-top: 48px;
+    width: 100%;
+    max-width: 900px;
+    padding: 0 16px;
+    animation: fadeInUp 0.8s ease 0.5s both;
+}
+
+.lp-screenshot-wrapper {
+    position: relative;
+    border-radius: 12px;
+    padding: 6px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(168, 85, 247, 0.2));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.15);
+    overflow: hidden;
+}
+
+.lp-screenshot-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.5);
+    transition: transform 0.4s ease;
+}
+
+.lp-screenshot-wrapper:hover .lp-screenshot-img {
+    transform: scale(1.015);
+}
+
+.lp-screenshot-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 30%, rgba(0, 212, 255, 0.1), transparent 70%);
+}
+
 /* ── GENERIC SECTIONS ──────────────────────────────────── */
 .lp-section {
     padding: 100px 48px;

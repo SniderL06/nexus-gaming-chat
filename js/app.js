@@ -1531,7 +1531,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (menuActionProfile) {
         menuActionProfile.addEventListener('click', () => {
-            alert(`Perfil de Gamer: ${currentSelectedMemberName}\nRango: ${isUserOp(currentSelectedMemberName) ? 'Operator (OP)' : 'Gamer'}`);
+            const memberName = currentSelectedMemberName;
+            if (!memberName) return;
+
+            // Intentar buscar el elemento DOM correspondiente para extraer el avatar si lo tiene
+            let avatarSrc = '';
+            let bgClass = 'bg-blue';
+            const members = document.querySelectorAll('.member-item');
+            for (const item of members) {
+                const nameSpan = item.querySelector('.member-name');
+                if (nameSpan && nameSpan.textContent.includes(memberName)) {
+                    const avatarDiv = item.querySelector('.avatar');
+                    if (avatarDiv) {
+                        const styleBg = avatarDiv.style.backgroundImage;
+                        if (styleBg && styleBg.startsWith('url("data:image/')) {
+                            avatarSrc = styleBg.slice(5, -2);
+                        } else if (styleBg && styleBg.startsWith('url(')) {
+                            avatarSrc = styleBg.slice(4, -1).replace(/"/g, '');
+                        }
+                        // Extraer clase de color de fondo si es de tipo texto
+                        const classes = Array.from(avatarDiv.classList);
+                        const foundBg = classes.find(c => c.startsWith('bg-'));
+                        if (foundBg) bgClass = foundBg;
+                    }
+                    break;
+                }
+            }
+
+            if (typeof window.openUserProfile === 'function') {
+                window.openUserProfile(memberName, avatarSrc, bgClass);
+            }
             memberActionMenu.classList.add('hidden');
         });
     }

@@ -330,6 +330,7 @@ export function initChat() {
     });
 
     setupLightbox();
+    setupUserProfileModal();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -609,11 +610,16 @@ function createMessageElement(msg) {
     const savedAvatar = getLocalUserAvatar();
     const savedStyle = getLocalUserAvatarStyle();
     const borderRadiusStyle = savedStyle === 'circle' ? '50%' : '10px';
+    
+    // Obtener la imagen base para enviarla al perfil
+    let rawAvatarSrc = '';
     if (msg.author === myName && savedAvatar) {
+        rawAvatarSrc = savedAvatar;
         avatarHtml = `<div class="avatar" style="background-image: url(${savedAvatar}); background-size: cover; background-position: center; border-radius: ${borderRadiusStyle}; width: 100%; height: 100%;"></div>`;
     } else if (msg.author === 'Nexus Music Bot') {
         avatarHtml = `<div class="avatar" style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%); color:#fff; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; border-radius: 50%;">🎵</div>`;
     } else if (msg.avatar && msg.avatar.startsWith('data:image/')) {
+        rawAvatarSrc = msg.avatar;
         avatarHtml = `<div class="avatar" style="background-image: url(${msg.avatar}); background-size: cover; background-position: center; border-radius: 50%; width: 100%; height: 100%;"></div>`;
     } else {
         avatarHtml = `<div class="avatar ${msg.avatarBg || 'bg-blue'}">${escapeHTML(msg.avatar || msg.author.charAt(0))}</div>`;
@@ -624,15 +630,21 @@ function createMessageElement(msg) {
     const isMusicBot = msg.author === 'Nexus Music Bot';
     const botBadge = isMusicBot ? '<span style="background:#db2777;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 4px;border-radius:4px;margin-left:6px;font-family:\'Orbitron\'">BOT</span>' : '';
 
-    const amIOp = isUserOp(getLocalUserName());
-    // Users can delete their own messages, and OPs can delete any messages (except local music bot messages)
-    const deleteBtnHtml = ((amIOp || msg.author === myName) && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage(${msg.id})" title="Borrar mensaje">🗑️</button>` : '';
+    // Modificación de permisos de eliminación de mensajes: SOLO para sniderquiros5@gmail.com
+    const currentEmail = localStorage.getItem('nexus_user_email') || '';
+    const isGlobalAdmin = currentEmail.toLowerCase() === 'sniderquiros5@gmail.com';
+    const deleteBtnHtml = (isGlobalAdmin && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage('${msg.id}')" title="Borrar mensaje">🗑️</button>` : '';
+
+    // Sanitizar parámetros para la función openUserProfile
+    const safeAuthor = msg.author.replace(/'/g, "\\'");
+    const safeAvatar = rawAvatarSrc.replace(/'/g, "\\'");
+    const safeBg = (msg.avatarBg || 'bg-blue').replace(/'/g, "\\'");
 
     item.innerHTML = `
-        <div class="avatar-container small">${avatarHtml}</div>
+        <div class="avatar-container small" onclick="window.openUserProfile('${safeAuthor}', '${safeAvatar}', '${safeBg}')" style="cursor: pointer;">${avatarHtml}</div>
         <div class="message-content-wrapper">
             <div class="message-meta">
-                <span class="message-author">${escapeHTML(msg.author)}${botBadge}${opCrown}</span>
+                <span class="message-author" onclick="window.openUserProfile('${safeAuthor}', '${safeAvatar}', '${safeBg}')" style="cursor: pointer; hover: underline;">${escapeHTML(msg.author)}${botBadge}${opCrown}</span>
                 <span class="message-time" data-ts="${ts}" title="${new Date(ts).toLocaleString('es-MX')}">${timeLabel}</span>
             </div>
             <div class="message-text">${escapeHTML(msg.text)}</div>
@@ -1017,28 +1029,109 @@ function scrollToBottom() {
     if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// ─────────────────────────────────────────────────────────────
-// LIGHTBOX
-// ─────────────────────────────────────────────────────────────
-function setupLightbox() {
-    const modal    = document.getElementById('lightbox-modal');
-    const modalImg = document.getElementById('lightbox-image');
-    const caption  = document.getElementById('lightbox-caption');
-    const closeBtn = document.getElementById('lightbox-close-btn');
-    const overlay  = document.getElementById('lightbox-overlay');
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+}
 
-    window.openLightbox = (imgSrc, authorName) => {
-        if (!modal || !modalImg || !caption) return;
-        modalImg.src = imgSrc;
-        caption.textContent = `Compartido por ${authorName} en #${state.activeChannel}`;
+// ─────────────────────────────────────────────────────────────
+// PERFIL DE USUARIO DETALLADO
+// ─────────────────────────────────────────────────────────────
+function setupUserProfileModal() {
+    const modal = document.getElementById('user-profile-modal');
+    const closeBtn = document.getElementById('profile-modal-close-btn');
+    const overlay = document.getElementById('user-profile-overlay');
+    const avatarEl = document.getElementById('profile-modal-avatar');
+
+    window.openUserProfile = (authorName, avatarSrc, bgClass) => {
+        if (!modal) return;
+
+        const nameEl = document.getElementById('profile-modal-name');
+        const emailEl = document.getElementById('profile-modal-email');
+        const badgeEl = document.getElementById('profile-modal-badge');
+        const aboutEl = document.getElementById('profile-modal-about');
+
+        // Llenar datos básicos
+        if (nameEl) nameEl.textContent = authorName;
+        
+        // Simular o extraer correo electrónico del usuario
+        let userEmail = '';
+        const myName = getLocalUserName();
+        if (authorName === myName) {
+            userEmail = localStorage.getItem('nexus_user_email') || 'sniderquiros5@gmail.com';
+        } else if (authorName === 'Nexus Music Bot') {
+            userEmail = 'music-bot@nexus.gg';
+        } else {
+            // Generamos un correo simulado basado en el nombre para poblar la vista
+            userEmail = `${authorName.toLowerCase().replace(/\s+/g, '')}@nexus.gg`;
+        }
+        if (emailEl) emailEl.textContent = userEmail;
+
+        // Llenar Rango/Badge
+        if (badgeEl) {
+            const isOp = isUserOp(authorName);
+            if (userEmail.toLowerCase() === 'sniderquiros5@gmail.com') {
+                badgeEl.textContent = 'Global Admin';
+                badgeEl.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
+                badgeEl.style.color = '#fff';
+            } else if (isOp) {
+                badgeEl.textContent = 'Operator (OP)';
+                badgeEl.style.background = 'linear-gradient(135deg, var(--accent-purple), #c084fc)';
+                badgeEl.style.color = '#fff';
+            } else if (authorName === 'Nexus Music Bot') {
+                badgeEl.textContent = 'System Bot';
+                badgeEl.style.background = 'linear-gradient(135deg, #ec4899, #db2777)';
+                badgeEl.style.color = '#fff';
+            } else {
+                badgeEl.textContent = 'Miembro';
+                badgeEl.style.background = 'var(--bg-tertiary)';
+                badgeEl.style.color = 'var(--text-muted)';
+            }
+        }
+
+        // Descripción/Acerca de mí
+        if (aboutEl) {
+            if (authorName === 'Nexus Music Bot') {
+                aboutEl.textContent = 'Bot oficial del servidor de Nexus. Reproduzco música en salas de voz.';
+            } else if (userEmail.toLowerCase() === 'sniderquiros5@gmail.com') {
+                aboutEl.textContent = 'Creador y administrador principal de la red de Nexus Gaming Chat.';
+            } else {
+                aboutEl.textContent = '¡Hola! Estoy usando Nexus para comunicarme con mi equipo de gaming.';
+            }
+        }
+
+        // Renderizar avatar en el modal
+        if (avatarEl) {
+            avatarEl.innerHTML = '';
+            if (avatarSrc) {
+                avatarEl.style.backgroundImage = `url(${avatarSrc})`;
+                avatarEl.style.backgroundSize = 'cover';
+                avatarEl.style.backgroundPosition = 'center';
+                // Al hacer clic en el avatar grande del modal, se abre en Lightbox (zoom completo)
+                avatarEl.onclick = () => window.openLightbox(avatarSrc, authorName);
+            } else if (authorName === 'Nexus Music Bot') {
+                avatarEl.style.backgroundImage = 'none';
+                avatarEl.innerHTML = `<span style="font-size: 2.2rem;">🎵</span>`;
+                avatarEl.style.background = 'linear-gradient(135deg, #db2777 0%, #ec4899 100%)';
+                avatarEl.style.display = 'flex';
+                avatarEl.style.alignItems = 'center';
+                avatarEl.style.justifyContent = 'center';
+                avatarEl.onclick = null;
+            } else {
+                avatarEl.style.backgroundImage = 'none';
+                const initial = authorName.charAt(0).toUpperCase();
+                avatarEl.innerHTML = `<div class="avatar ${bgClass || 'bg-blue'}" style="width:100%; height:100%; font-size:2.5rem; display:flex; align-items:center; justify-content:center; border-radius:50%;">${initial}</div>`;
+                avatarEl.onclick = null;
+            }
+        }
+
         modal.classList.remove('hidden');
     };
 
     const close = () => modal && modal.classList.add('hidden');
     if (closeBtn) closeBtn.addEventListener('click', close);
-    if (overlay)  overlay.addEventListener('click', close);
+    if (overlay) overlay.addEventListener('click', close);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // ESCAPE HTML
@@ -1051,6 +1144,13 @@ function escapeHTML(str) {
 // Global function to delete messages from UI
 // NOTE: id can be a UUID string (Supabase) or a numeric timestamp (local-only)
 window.deleteMessage = async function(id) {
+    // Comprobar correo de administrador estricto
+    const currentEmail = localStorage.getItem('nexus_user_email') || '';
+    if (currentEmail.toLowerCase() !== 'sniderquiros5@gmail.com') {
+        alert('Acceso denegado: solo el administrador sniderquiros5@gmail.com puede eliminar mensajes.');
+        return;
+    }
+
     if (!confirm('¿Estás seguro de que quieres borrar este mensaje?')) return;
     
     // Función auxiliar para borrarlo de la pantalla inmediatamente
@@ -1088,3 +1188,4 @@ window.deleteMessage = async function(id) {
         removeLocally();
     }
 };
+

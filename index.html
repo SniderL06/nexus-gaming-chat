@@ -733,6 +733,14 @@
                 <div class="lp-hstat-sep"></div>
                 <div class="lp-hstat"><span class="lp-hstat-num">0€</span><span class="lp-hstat-lbl">Costo mensual</span></div>
             </div>
+            
+            <!-- Vista previa / Screenshot del Dashboard de la App -->
+            <div class="lp-hero-screenshot">
+                <div class="lp-screenshot-wrapper">
+                    <img src="assets/nexus_screenshot.png" alt="Dashboard de Nexus - Chat, Canales de voz y Rendimiento" class="lp-screenshot-img">
+                    <div class="lp-screenshot-glow"></div>
+                </div>
+            </div>
         </section>
 
         <!-- FEATURES -->
@@ -1004,6 +1012,49 @@
             <li id="menu-action-op">👑 Dar Rango Operator (OP)</li>
             <li id="menu-action-profile">👤 Ver Perfil</li>
         </ul>
+    </div>
+
+    <!-- MODAL: PERFIL DE USUARIO DETALLADO -->
+    <div class="channel-modal hidden" id="user-profile-modal">
+        <div class="channel-modal-overlay" id="user-profile-overlay"></div>
+        <div class="channel-modal-card" style="width: 420px; padding: 0; overflow: hidden; border-radius: 14px; border: var(--border-glow); box-shadow: 0 20px 50px rgba(0,0,0,0.6);">
+            <!-- Encabezado/Banner Cyberpunk del perfil -->
+            <div class="profile-banner" style="height: 100px; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%); position: relative;">
+                <button class="channel-modal-close" id="profile-modal-close-btn" style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.4); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem; border: none; cursor: pointer; transition: background 0.2s;">✕</button>
+            </div>
+            
+            <div style="padding: 24px; position: relative; background: var(--bg-secondary);">
+                <!-- Avatar sobrepuesto al banner con indicador de estado -->
+                <div style="position: absolute; top: -60px; left: 24px; display: inline-block;">
+                    <div id="profile-modal-avatar" class="avatar-container" style="width: 96px; height: 96px; border-radius: 50%; border: 6px solid var(--bg-secondary); background-size: cover; background-position: center; background-color: var(--bg-tertiary); box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" title="Click para hacer zoom" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 8px 24px var(--accent-purple-glow)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.4)'">
+                        <!-- Se llena con JS -->
+                    </div>
+                </div>
+                
+                <div style="margin-top: 48px;">
+                    <h3 id="profile-modal-name" style="font-family: 'Orbitron', sans-serif; font-size: 1.4rem; color: var(--text-normal); font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 8px;">Nombre de Usuario</h3>
+                    <div id="profile-modal-email" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; font-family: monospace;">correo@dominio.com</div>
+                    
+                    <div style="border-top: 1px solid var(--bg-tertiary); padding-top: 16px; display: flex; flex-direction: column; gap: 12px;">
+                        <div>
+                            <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Rango en la Red</span>
+                            <span id="profile-modal-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; font-family: 'Orbitron', sans-serif;">Miembro</span>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Estado de Conexión</span>
+                            <span style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-normal);">
+                                <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); display: inline-block;"></span>
+                                Conectado vía WebRTC (Estable)
+                            </span>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Acerca de mí</span>
+                            <p id="profile-modal-about" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin: 0; background: var(--bg-tertiary); padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02); font-style: italic;">¡Hola! Estoy usando Nexus para comunicarme con mi equipo de gaming.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Carga de módulos ES -->
