@@ -55,4 +55,4 @@ export const EMAILJS_CONFIG = {
  *  directamente en la consola del navegador (F12) para que puedas
  *  probarlo de inmediato. Perfecto para desarrollo local.
  */
-export const DEMO_MODE = true; // Cambia a `false` una vez configures EmailJS
+export const DEMO_MODE = false; // Cambia a `false` una vez configures EmailJS
