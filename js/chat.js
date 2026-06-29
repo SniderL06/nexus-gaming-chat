@@ -1029,6 +1029,26 @@ function scrollToBottom() {
     if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
+// ─────────────────────────────────────────────────────────────
+// LIGHTBOX
+// ─────────────────────────────────────────────────────────────
+function setupLightbox() {
+    const modal    = document.getElementById('lightbox-modal');
+    const modalImg = document.getElementById('lightbox-image');
+    const caption  = document.getElementById('lightbox-caption');
+    const closeBtn = document.getElementById('lightbox-close-btn');
+    const overlay  = document.getElementById('lightbox-overlay');
+
+    window.openLightbox = (imgSrc, authorName) => {
+        if (!modal || !modalImg || !caption) return;
+        modalImg.src = imgSrc;
+        caption.textContent = `Compartido por ${authorName} en #${state.activeChannel}`;
+        modal.classList.remove('hidden');
+    };
+
+    const close = () => modal && modal.classList.add('hidden');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (overlay)  overlay.addEventListener('click', close);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 }
 
