@@ -2081,11 +2081,11 @@ body {
     animation: fadeInUp 0.8s ease 0.5s both;
 }
 
-.lp-screenshot-wrapper {
+.lp-gallery-container {
     position: relative;
     border-radius: 12px;
     padding: 6px;
-    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(168, 85, 247, 0.2));
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(168, 85, 247, 0.15));
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.15);
     overflow: hidden;
@@ -2100,15 +2100,61 @@ body {
     transition: transform 0.4s ease;
 }
 
-.lp-screenshot-wrapper:hover .lp-screenshot-img {
-    transform: scale(1.015);
+.lp-gallery-container:hover .lp-screenshot-img {
+    transform: scale(1.008);
+}
+
+.lp-slide-caption {
+    background: rgba(13, 14, 26, 0.85);
+    backdrop-filter: blur(8px);
+    color: var(--text-normal);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 12px;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0 0 8px 8px;
+    letter-spacing: 0.02em;
+}
+
+.lp-gallery-nav {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 8px 0;
+}
+
+.lp-gallery-btn {
+    background: hsla(230, 14%, 14%, 0.8);
+    border: 1px solid hsla(230, 12%, 18%, 0.8);
+    color: var(--text-muted);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    transition: all 0.25s ease;
+}
+
+.lp-gallery-btn:hover {
+    color: var(--text-normal);
+    border-color: var(--accent-cyan);
+}
+
+.lp-gallery-btn.active {
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.25);
 }
 
 .lp-screenshot-glow {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(circle at 50% 30%, rgba(0, 212, 255, 0.1), transparent 70%);
+    background: radial-gradient(circle at 50% 30%, rgba(0, 212, 255, 0.08), transparent 70%);
 }
 
 /* ── GENERIC SECTIONS ──────────────────────────────────── */

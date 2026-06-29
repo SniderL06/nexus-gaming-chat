@@ -734,13 +734,46 @@
                 <div class="lp-hstat"><span class="lp-hstat-num">0€</span><span class="lp-hstat-lbl">Costo mensual</span></div>
             </div>
             
-            <!-- Vista previa / Screenshot del Dashboard de la App -->
+            <!-- Carrusel / Galería de Screenshots de la App (AdSense Wow Factor) -->
             <div class="lp-hero-screenshot">
-                <div class="lp-screenshot-wrapper">
-                    <img src="assets/Nexus_Screenshot.png" alt="Dashboard de Nexus - Chat, Canales de voz y Rendimiento" class="lp-screenshot-img">
+                <div class="lp-gallery-container">
+                    <div class="lp-gallery-slide active" id="slide-1">
+                        <img src="assets/Nexus_Screenshot.png" alt="Dashboard de Nexus - Chat, Canales de voz y Rendimiento" class="lp-screenshot-img">
+                        <div class="lp-slide-caption">🚀 Interfaz Principal y Chat Multicanal</div>
+                    </div>
+                    <div class="lp-gallery-slide" id="slide-2" style="display: none;">
+                        <img src="assets/users.png" alt="Diagnóstico Ultra-Optimizado y Rendimiento de Nexus" class="lp-screenshot-img" style="max-height: 480px; object-fit: contain; background: #0b0e17; margin: 0 auto;">
+                        <div class="lp-slide-caption">⚡ Diagnóstico Ultra-Optimizado en tiempo real (100 FPS / <10MB RAM)</div>
+                    </div>
+                    <div class="lp-gallery-slide" id="slide-3" style="display: none;">
+                        <img src="assets/settings.png" alt="Ajustes de Dispositivos de Audio y Temas Personalizados" class="lp-screenshot-img" style="max-height: 480px; object-fit: contain; background: #0b0e17; margin: 0 auto;">
+                        <div class="lp-slide-caption">⚙️ Configuración Avanzada de Dispositivos de Audio y Prueba de Micrófono</div>
+                    </div>
+                    <div class="lp-gallery-nav">
+                        <button class="lp-gallery-btn active" onclick="switchSlide(1)">General</button>
+                        <button class="lp-gallery-btn" onclick="switchSlide(2)">Rendimiento</button>
+                        <button class="lp-gallery-btn" onclick="switchSlide(3)">Audio & Ajustes</button>
+                    </div>
                     <div class="lp-screenshot-glow"></div>
                 </div>
             </div>
+            
+            <script>
+                window.switchSlide = function(slideNumber) {
+                    // Ocultar todos los slides
+                    document.querySelectorAll('.lp-gallery-slide').forEach((el, index) => {
+                        el.style.display = (index + 1 === slideNumber) ? 'block' : 'none';
+                    });
+                    // Actualizar botones de navegación
+                    document.querySelectorAll('.lp-gallery-btn').forEach((btn, index) => {
+                        if (index + 1 === slideNumber) {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+                };
+            </script>
         </section>
 
         <!-- FEATURES -->
