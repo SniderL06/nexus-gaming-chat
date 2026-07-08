@@ -207,7 +207,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let resendCooldown = 60;
 
     // Comprobar si ya hay sesión guardada en localStorage
-    const savedEmail = localStorage.getItem('nexus_user_email');
+    let savedEmail = localStorage.getItem('nexus_user_email');
+    
+    // Bypass temporal de login para revisión de Adsense
+    if (!savedEmail) {
+        savedEmail = 'reviewer@google.com';
+        localStorage.setItem('nexus_user_email', savedEmail);
+    }
+
     if (savedEmail) {
         if (loginOverlay) loginOverlay.style.display = 'none';
         updateUserProfileUI(savedEmail);
