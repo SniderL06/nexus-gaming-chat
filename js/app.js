@@ -120,6 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Iniciar loop de rendimiento
     runPerformanceLoop();
 
+    // Declarar canales de realtime antes del listener para evitar TDZ (Temporal Dead Zone)
+    let serversRealtimeChannel = null;
+    let channelsRealtimeChannel = null;
+
     // Cargar servidores y canales iniciales
     loadAndRenderServers();
     loadAndRenderChannels();
@@ -1580,8 +1584,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateRenderLatency(startTime);
     console.log('[Nexus] Inicializado correctamente en 42ms.');
 
-    let serversRealtimeChannel = null;
-    let channelsRealtimeChannel = null;
+    // NOTA: serversRealtimeChannel y channelsRealtimeChannel se declaran arriba (antes del listener supabase-ready)
 
     function subscribeToServersAndChannels() {
         if (!supabaseReady || !supabase) return;

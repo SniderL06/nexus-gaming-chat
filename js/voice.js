@@ -805,7 +805,20 @@ export async function joinVoiceChannel(channelId, channelName) {
 async function joinMultiplayerVoice(channelId) {
     const myName = getLocalUserName();
 
-    // 1. Crear instancia PeerJS con servidor público
+    // ── PASO 1: Unirse a la presencia de Supabase INMEDIATAMENTE ──────────────
+    // No esperamos a PeerJS. Generamos un ID temporal para que las tarjetas de
+    // miembros aparezcan de inmediato, incluso si PeerJS tarda o falla.
+    const tempId = 'nexus_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    localPeerId = tempId;
+
+    // Añadir tarjeta del usuario local al grid
+    addMemberToRoom({ name: myName, isLocalUser: true, isMuted: state.isMuted, activeSpeaker: false, peerId: tempId });
+
+    // Publicar presencia con el ID temporal — ya aparecemos en la sala
+    await joinSupabasePresence(channelId, myName, tempId);
+
+    // ── PASO 2: Iniciar PeerJS en segundo plano ───────────────────────────────
+    // Añadimos servidores TURN para superar NAT/firewalls (causa más común de fallos P2P)
     peer = new Peer(undefined, {
         host: '0.peerjs.com',
         port: 443,
@@ -814,20 +827,68 @@ async function joinMultiplayerVoice(channelId) {
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' },
+                // Servidores TURN gratuitos (relay para NAT simétrico)
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
             ]
         }
     });
 
-    peer.on('open', async (id) => {
-        localPeerId = id;
-        console.log(`[PeerJS] Mi Peer ID: ${id}`);
+    peer.on('open', async (realId) => {
+        console.log(`[PeerJS] Conectado. ID real: ${realId} (reemplaza temporal: ${tempId})`);
 
-        // Agregar usuario local a la sala
-        addMemberToRoom({ name: myName, isLocalUser: true, isMuted: state.isMuted, activeSpeaker: false, peerId: id });
+        // Actualizar el ID real del peer local
+        const prevTempId = localPeerId;
+        localPeerId = realId;
 
-        // 2. Registrar presencia en Supabase
-        await joinSupabasePresence(channelId, myName, id);
+        // Actualizar el miembro local en la sala con el ID real
+        const localMember = activeMembersInRoom.find(m => m.isLocalUser);
+        if (localMember) localMember.peerId = realId;
+
+        // Actualizar presencia con el ID real de PeerJS
+        if (presenceChannel) {
+            const email = localStorage.getItem('nexus_user_email') || '';
+            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+            await presenceChannel.track({
+                name: myName,
+                peerId: realId,
+                avatar: myAvatar,
+                avatarStyle: myAvatarStyle,
+                isMuted: state.isMuted || state.isDeafened,
+                isOp: (localStorage.getItem('nexus_user_email') || '') === OP_EMAIL,
+                joinedAt: Date.now()
+            });
+        }
+
+        // Re-renderizar para reflejar el ID actualizado
+        renderVoiceMembers();
+
+        // Llamar a cualquier peer que ya esté en la sala con un ID real
+        const currentState = presenceChannel ? presenceChannel.presenceState() : {};
+        Object.values(currentState).forEach(presences => {
+            presences.forEach(p => {
+                if (p.peerId && p.peerId !== realId && !p.peerId.startsWith('nexus_') && !activePeers.has(p.peerId)) {
+                    console.log(`[PeerJS] Llamando a peer con ID real: ${p.name} (${p.peerId})`);
+                    setTimeout(() => callPeer(p.peerId, p.name), 300);
+                }
+            });
+        });
     });
 
     // 3. Atender llamadas entrantes de PeerJS
@@ -881,6 +942,8 @@ async function joinMultiplayerVoice(channelId) {
 
     peer.on('error', (err) => {
         console.error('[PeerJS] Error:', err.type, err.message);
+        // Si PeerJS falla completamente, al menos el usuario ya está en la presencia
+        // (tarjeta visible). El audio no funcionará pero la UI sí.
     });
 }
 
@@ -1342,6 +1405,21 @@ function stopAudioEngine() {
 // ─── OP hardcodeado por email ─────────────────────────────────
 // Solo sniderquiros5@gmail.com tiene OP permanente.
 const OP_EMAIL = 'sniderquiros5@gmail.com';
+
+// ─── Admins con poder de silenciar a otros ────────────────────
+// IMPORTANTE: definir ANTES de renderVoiceMembers (const no se eleva)
+const MUTE_ADMIN_EMAILS = [
+    'sniderquiros5@gmail.com',
+    'abayronchavez1@gmail.com'
+];
+// Mapa de peers muteados localmente por el admin (peerId → true)
+const locallyMutedPeers = new Map();
+
+/** ¿El usuario actual tiene poder de silenciar a otros? */
+function isCurrentUserMuteAdmin() {
+    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    return MUTE_ADMIN_EMAILS.includes(email);
+}
 
 /**
  * Comprueba si el USUARIO LOCAL ACTUAL tiene rango OP.
