@@ -9,6 +9,7 @@ import { initMusic } from './music.js';
 import { isUserOp, isCurrentUserOp } from './voice.js';
 import { initSupabaseSetup, supabase, supabaseReady, startGlobalPresence, stopGlobalPresence } from './supabase-client.js';
 import { initCamera, stopCamera } from './camera.js';
+import { initDM } from './dm.js';
 
 // Estado global de la aplicación (Single Source of Truth)
 export const state = {
@@ -108,12 +109,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const avatarUploadInput = document.getElementById('avatar-upload-input');
     const userAvatarLetter = document.getElementById('user-avatar-letter');
 
-    // Inicializar sub-módulos
+    // Inicializar sub-modulos
     initChat();
     initVoice();
     initStream();
     initCamera();
     initThemePanel();
+    initDM();
     
     // Iniciar loop de rendimiento
     runPerformanceLoop();

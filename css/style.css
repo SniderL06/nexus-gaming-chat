@@ -3895,10 +3895,482 @@ body.theme-light .theme-panel {
     .lp-stats-grid {
         grid-template-columns: 1fr;
     }
-    .lp-login-section {
-        padding: 48px 16px;
-    }
     #lp-login-card {
         padding: 24px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MENSAJES DIRECTOS (DM) — SISTEMA COMPLETO
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── BOTÓN DM EN SIDEBAR DE SERVIDORES ── */
+.dm-sidebar-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.dm-sidebar-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    background: var(--bg-tertiary);
+    border: var(--border-dark);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast), border-radius var(--transition-fast),
+                color var(--transition-fast), box-shadow var(--transition-fast);
+    position: relative;
+}
+.dm-sidebar-btn:hover {
+    border-radius: 12px;
+    background: linear-gradient(135deg, hsla(186,100%,48%,0.15), hsla(271,91%,65%,0.15));
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+    box-shadow: 0 0 12px var(--accent-cyan-glow);
+}
+.dm-sidebar-btn svg {
+    pointer-events: none;
+}
+
+/* ── BADGE DE NO LEÍDOS ── */
+.dm-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: hsl(0, 84%, 58%);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    font-family: 'Orbitron', monospace;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg-primary);
+    animation: dm-badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 10;
+}
+.dm-badge.hidden { display: none; }
+@keyframes dm-badge-pop {
+    from { transform: scale(0); }
+    to   { transform: scale(1); }
+}
+
+/* ── BOTÓN DM EN LISTA DE MIEMBROS ── */
+.member-item {
+    position: relative;
+}
+.member-dm-btn {
+    opacity: 0;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: hsla(186,100%,48%,0.12);
+    border: 1px solid hsla(186,100%,48%,0.2);
+    color: var(--accent-cyan);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: opacity var(--transition-fast), background var(--transition-fast),
+                transform var(--transition-fast);
+    z-index: 5;
+}
+.member-item:hover .member-dm-btn {
+    opacity: 1;
+}
+.member-dm-btn:hover {
+    background: var(--accent-cyan);
+    color: #000;
+    transform: translateY(-50%) scale(1.05);
+}
+
+/* ── PANEL PRINCIPAL DE DM ── */
+.dm-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 320px;
+    background: hsla(230, 16%, 11%, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-left: 1px solid hsla(186,100%,48%,0.15);
+    display: flex;
+    flex-direction: column;
+    z-index: 9000;
+    box-shadow: -8px 0 40px hsla(230,16%,5%,0.6);
+}
+.dm-panel.hidden { display: none; }
+
+/* Animación de entrada */
+@keyframes dm-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes dm-slide-out {
+    from { transform: translateX(0);    opacity: 1; }
+    to   { transform: translateX(100%); opacity: 0; }
+}
+.dm-panel-open  { animation: dm-slide-in  0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
+.dm-panel-closing { animation: dm-slide-out 0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
+
+/* ── CABECERA ── */
+.dm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: hsla(230,14%,14%,0.8);
+    border-bottom: 1px solid hsla(186,100%,48%,0.1);
+    flex-shrink: 0;
+    gap: 12px;
+}
+.dm-header-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+.dm-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #fff;
+    flex-shrink: 0;
+    background: var(--accent-cyan);
+    font-family: 'Orbitron', monospace;
+    text-transform: uppercase;
+}
+.dm-header-text { min-width: 0; }
+.dm-target-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Orbitron', monospace;
+    letter-spacing: 0.02em;
+}
+.dm-ephemeral-tag {
+    font-size: 0.68rem;
+    color: var(--accent-cyan);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+    opacity: 0.8;
+}
+.dm-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color var(--transition-fast), background var(--transition-fast);
+    flex-shrink: 0;
+    line-height: 1;
+}
+.dm-close-btn:hover {
+    color: var(--text-normal);
+    background: hsla(0,0%,100%,0.06);
+}
+
+/* ── BARRA DE ESTADO ── */
+.dm-status {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 6px 16px;
+    background: hsla(230,15%,8%,0.5);
+    border-bottom: 1px solid hsla(230,12%,18%,0.5);
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    letter-spacing: 0.03em;
+}
+
+/* ── ÁREA DE MENSAJES ── */
+.dm-messages-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scroll-behavior: smooth;
+}
+.dm-messages-area::-webkit-scrollbar { width: 4px; }
+.dm-messages-area::-webkit-scrollbar-track { background: transparent; }
+.dm-messages-area::-webkit-scrollbar-thumb { background: var(--accent-purple-glow); border-radius: 2px; }
+
+/* Estado vacío */
+.dm-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 20px;
+    gap: 12px;
+    flex: 1;
+}
+.dm-empty-icon {
+    font-size: 2.5rem;
+    opacity: 0.7;
+}
+.dm-empty-state h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    font-family: 'Orbitron', monospace;
+}
+.dm-empty-state p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 240px;
+}
+.dm-empty-note {
+    font-size: 0.7rem;
+    color: var(--accent-cyan);
+    background: hsla(186,100%,48%,0.08);
+    border: 1px solid hsla(186,100%,48%,0.15);
+    padding: 6px 14px;
+    border-radius: 20px;
+    opacity: 0.85;
+}
+
+/* ── BURBUJAS DE MENSAJES ── */
+.dm-message {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: 100%;
+    animation: dm-msg-in 0.2s ease;
+}
+@keyframes dm-msg-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.dm-message-own {
+    flex-direction: row-reverse;
+}
+.dm-message-other {
+    flex-direction: row;
+}
+
+.dm-msg-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    font-family: 'Orbitron', monospace;
+}
+
+.dm-bubble-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: calc(100% - 44px);
+}
+.dm-message-own  .dm-bubble-wrapper { align-items: flex-end; }
+.dm-message-other .dm-bubble-wrapper { align-items: flex-start; }
+
+.dm-msg-name {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    padding: 0 2px;
+}
+.dm-bubble {
+    padding: 8px 12px;
+    border-radius: 16px;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    word-break: break-word;
+    max-width: 240px;
+}
+.dm-bubble-own {
+    background: linear-gradient(135deg, hsl(186,100%,38%) 0%, hsl(186,80%,30%) 100%);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 2px 12px hsla(186,100%,48%,0.25);
+}
+.dm-bubble-other {
+    background: hsl(230,14%,18%);
+    color: var(--text-normal);
+    border-bottom-left-radius: 4px;
+    border: 1px solid hsla(230,12%,25%,0.8);
+}
+.dm-msg-time {
+    font-size: 0.62rem;
+    color: var(--text-dark);
+    margin-top: 3px;
+    padding: 0 2px;
+}
+
+/* Mensaje de sistema (unió/salió) */
+.dm-system-msg {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-dark);
+    padding: 4px 0;
+    letter-spacing: 0.03em;
+    font-style: italic;
+}
+
+/* ── INPUT DE ENVÍO ── */
+.dm-input-area {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px;
+    background: hsla(230,14%,12%,0.9);
+    border-top: 1px solid hsla(230,12%,18%,0.8);
+    flex-shrink: 0;
+}
+.dm-textarea {
+    flex: 1;
+    background: hsl(230,15%,8%);
+    border: 1px solid hsla(230,12%,22%,0.8);
+    border-radius: 10px;
+    color: var(--text-normal);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.84rem;
+    padding: 8px 12px;
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    max-height: 100px;
+}
+.dm-textarea:focus:not(:disabled) {
+    border-color: hsla(186,100%,48%,0.4);
+    box-shadow: 0 0 0 2px hsla(186,100%,48%,0.08);
+}
+.dm-textarea:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.dm-textarea::placeholder { color: var(--text-dark); }
+
+.dm-send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent-cyan), hsl(186,100%,35%));
+    border: none;
+    color: #000;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+                opacity var(--transition-fast);
+    box-shadow: 0 2px 10px hsla(186,100%,48%,0.3);
+}
+.dm-send-btn:hover:not(:disabled) {
+    transform: scale(1.08);
+    box-shadow: 0 4px 16px hsla(186,100%,48%,0.5);
+}
+.dm-send-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ── TOAST DE NOTIFICACIÓN ── */
+.dm-toast {
+    position: fixed;
+    bottom: 80px;
+    right: 24px;
+    z-index: 99999;
+    background: hsl(230,16%,13%);
+    border: 1px solid hsla(186,100%,48%,0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 32px hsla(230,16%,5%,0.6), 0 0 0 1px hsla(186,100%,48%,0.1);
+    max-width: 300px;
+    min-width: 220px;
+    animation: dm-toast-in 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    cursor: pointer;
+}
+@keyframes dm-toast-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.9); }
+    to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.dm-toast.dm-toast-hide {
+    animation: dm-toast-out 0.3s ease forwards;
+}
+@keyframes dm-toast-out {
+    to { opacity: 0; transform: translateY(10px); }
+}
+.dm-toast-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.dm-toast-icon { font-size: 0.9rem; }
+.dm-toast-from {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    font-family: 'Orbitron', monospace;
+}
+.dm-toast-tag {
+    font-size: 0.62rem;
+    background: hsla(186,100%,48%,0.12);
+    color: var(--accent-cyan);
+    border: 1px solid hsla(186,100%,48%,0.2);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+    font-weight: 600;
+}
+.dm-toast-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+/* ── RESPONSIVE (MÓVIL) ── */
+@media (max-width: 768px) {
+    .dm-panel {
+        width: 100%;
+        left: 0;
+    }
+    .dm-toast {
+        right: 12px;
+        left: 12px;
+        max-width: none;
     }
 }

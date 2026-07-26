@@ -60,6 +60,15 @@
                 </div>
             </div>
             <button class="add-server-btn" id="add-server-btn" title="Crear un Servidor">+</button>
+            <!-- Botón DM con badge de no leídos -->
+            <div class="dm-sidebar-wrapper">
+                <button class="dm-sidebar-btn" id="dm-sidebar-btn" title="Mensajes Directos">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </button>
+                <span id="dm-unread-badge" class="dm-badge hidden">0</span>
+            </div>
         </aside>
 
         <!-- ══════════════════════════════════════════ -->
@@ -1094,6 +1103,51 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- PANEL DE MENSAJES DIRECTOS -->
+    <div id="dm-panel" class="dm-panel hidden" role="dialog" aria-label="Mensajes directos" aria-modal="true">
+        <!-- Cabecera -->
+        <div class="dm-header">
+            <div class="dm-header-info">
+                <div class="dm-avatar" id="dm-avatar">?</div>
+                <div class="dm-header-text">
+                    <div id="dm-target-name" class="dm-target-name">Usuario</div>
+                    <div class="dm-ephemeral-tag">⚡ Chat efímero · Sin historial</div>
+                </div>
+            </div>
+            <button id="dm-close-btn" class="dm-close-btn" aria-label="Cerrar mensajes directos">✕</button>
+        </div>
+
+        <!-- Estado del canal -->
+        <div id="dm-status" class="dm-status"></div>
+
+        <!-- Área de mensajes -->
+        <div id="dm-messages" class="dm-messages-area">
+            <div class="dm-empty-state">
+                <div class="dm-empty-icon">💬</div>
+                <h3>Mensajes Directos</h3>
+                <p>Haz clic en el icono <strong>💬</strong> junto a un usuario en la lista de miembros para iniciar una conversación privada.</p>
+                <div class="dm-empty-note">⚡ Los mensajes son efímeros — no se guardan</div>
+            </div>
+        </div>
+
+        <!-- Input de envío -->
+        <div class="dm-input-area">
+            <textarea
+                id="dm-textarea"
+                class="dm-textarea"
+                placeholder="Selecciona un usuario..."
+                rows="1"
+                disabled
+            ></textarea>
+            <button id="dm-send-btn" class="dm-send-btn" disabled aria-label="Enviar mensaje">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
         </div>
     </div>
 

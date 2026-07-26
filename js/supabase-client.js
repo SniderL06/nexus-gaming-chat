@@ -73,6 +73,7 @@ export function startGlobalPresence(userName) {
             if (status === 'SUBSCRIBED') {
                 await globalPresenceChannel.track({
                     name: userName,
+                    email: email,          // identificador seguro para DMs
                     avatar: userAvatar || '',
                     avatarStyle: userAvatarStyle,
                     online_at: new Date().toISOString()
@@ -104,6 +105,7 @@ function updateOnlineMembersSidebar(presenceState) {
             if (p.name && !onlineUsers.find(u => u.name === p.name)) {
                 onlineUsers.push({
                     name: p.name,
+                    email: p.email || '',   // email para DM seguro
                     online_at: p.online_at,
                     avatar: p.avatar || '',
                     avatarStyle: p.avatarStyle || 'circle'
@@ -148,6 +150,14 @@ function updateOnlineMembersSidebar(presenceState) {
         li.className = 'member-item';
         if (isMe) li.id = 'local-user-sidebar-item';
 
+        // Botón DM — solo para otros usuarios, y solo si tienen email disponible
+        const dmBtnHtml = (!isMe)
+            ? `<button class="member-dm-btn" title="Mensaje directo a ${escapeHTMLPresence(user.name)}" onclick="(function(e){
+                e.stopPropagation();
+                if(window.openDMWith) window.openDMWith('${user.email.replace(/'/g, "\\'") || ''}', '${escapeHTMLPresence(user.name).replace(/'/g, "\\'") || ''}');
+              })(event)">💬</button>`
+            : '';
+
         li.innerHTML = `
             <div class="avatar-container small">
                 ${avatarInnerHtml}
@@ -157,6 +167,7 @@ function updateOnlineMembersSidebar(presenceState) {
                 <span class="member-name">${escapeHTMLPresence(user.name)}</span>
                 <span class="member-game">${isMe ? 'Tú · En línea' : 'En línea'}</span>
             </div>
+            ${dmBtnHtml}
         `;
         membersList.appendChild(li);
     });
