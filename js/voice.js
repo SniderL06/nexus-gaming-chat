@@ -58,53 +58,115 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // Cadena de supresión de ruido de 5 nodos:
-            // 1. High-pass 85Hz: elimina zumbido eléctrico (60Hz América / 50Hz Europa)
+            // ─── CADENA DE SUPRESIÓN DE RUIDO MEJORADA (v2) ───────────────
+            // 1. High-pass 100Hz: elimina zumbido eléctrico (60Hz/50Hz)
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 85;
-            hp.Q.value = 0.7;
+            hp.frequency.value = 100;
+            hp.Q.value = 0.9;
 
-            // 2. Notch 50Hz y 60Hz: eliminar zumbido de línea eléctrica
+            // 2. Notch 50Hz — zumbido de red eléctrica (Europa/Latinoamérica)
             const notch50 = audioCtx.createBiquadFilter();
             notch50.type = 'notch';
             notch50.frequency.value = 50;
-            notch50.Q.value = 30;
+            notch50.Q.value = 35;
 
+            // 3. Notch 60Hz — red eléctrica norteamericana
             const notch60 = audioCtx.createBiquadFilter();
             notch60.type = 'notch';
             notch60.frequency.value = 60;
-            notch60.Q.value = 30;
+            notch60.Q.value = 35;
 
-            // 3. Low-pass 7500Hz: corta siseo de ventiladores de PC
+            // 4. Notch 120Hz — segundo armónico de la red (muy común en PCs con PSU baratas)
+            const notch120 = audioCtx.createBiquadFilter();
+            notch120.type = 'notch';
+            notch120.frequency.value = 120;
+            notch120.Q.value = 25;
+
+            // 5. Boost de presencia vocal (300Hz–3500Hz) — mantiene claridad de voz
+            const voiceBoost = audioCtx.createBiquadFilter();
+            voiceBoost.type = 'peaking';
+            voiceBoost.frequency.value = 1800;
+            voiceBoost.Q.value = 0.6;
+            voiceBoost.gain.value = 3; // +3dB en zona de inteligibilidad
+
+            // 6. Low-pass 8000Hz: corta siseo de ventiladores y ruido de alta frecuencia
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 7500;
-            lp.Q.value = 0.5;
+            lp.frequency.value = 8000;
+            lp.Q.value = 0.7;
 
-            // 4. Compresor dinámico: reduce picos de ruido, preserva voz
+            // 7. Compresor dinámico agresivo: aplasta ruido de fondo, preserva voz
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -40;  // dB — por debajo de esto se comprime
-            comp.knee.value = 10;
-            comp.ratio.value = 8;        // 8:1 ratio de compresión
-            comp.attack.value = 0.003;   // 3ms para capturar transitorios rápidos
-            comp.release.value = 0.15;
+            comp.threshold.value = -55;  // dB — umbral más bajo: captura más ruido
+            comp.knee.value = 8;         // rodilla suave
+            comp.ratio.value = 14;       // 14:1 — compresión fuerte
+            comp.attack.value = 0.001;   // 1ms — reacción casi instantánea
+            comp.release.value = 0.08;   // 80ms — suelta rápido para no cortar consonantes
 
-            // 5. Gain de compensación (makeup gain)
+            // 8. Noise Gate via GainNode con ScriptProcessor (umbral de energía)
+            // Silencia completamente cuando el nivel cae por debajo del floor de ruido
+            const gateGain = audioCtx.createGain();
+            gateGain.gain.value = 1.0;
+
+            const gateAnalyser = audioCtx.createAnalyser();
+            gateAnalyser.fftSize = 256;
+            const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
+            const GATE_THRESHOLD = 20; // RMS umbral (0-255) — por debajo = silencio
+            const GATE_HOLD_MS = 120;  // ms de hold después de bajar del umbral
+            let gateOpen = false;
+            let lastAboveThresholdTime = 0;
+
+            const gateInterval = setInterval(() => {
+                if (!audioCtx || audioCtx.state === 'closed') {
+                    clearInterval(gateInterval);
+                    return;
+                }
+                gateAnalyser.getByteTimeDomainData(gateBuffer);
+                let sum = 0;
+                for (let i = 0; i < gateBuffer.length; i++) {
+                    const v = (gateBuffer[i] - 128) / 128;
+                    sum += v * v;
+                }
+                const rms = Math.sqrt(sum / gateBuffer.length) * 255;
+                const now = Date.now();
+                if (rms > GATE_THRESHOLD) {
+                    lastAboveThresholdTime = now;
+                    if (!gateOpen) {
+                        gateOpen = true;
+                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.005); } catch(e){}
+                    }
+                } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
+                    gateOpen = false;
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
+                }
+            }, 20); // 50 Hz de polling
+
+            // 9. Makeup gain de compensación
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.4;     // +3dB aproximados para compensar pérdida del compresor
+            makeup.gain.value = 1.6; // +4dB aprox para compensar gate + compresor
 
-            // Encadenar: input → hp → notch50 → notch60 → lp → comp → makeup
+            // Encadenar: input → hp → notch50 → notch60 → notch120 → voiceBoost → lp
+            //            → comp → gateAnalyser → gateGain → makeup
             inputNode.connect(hp);
             hp.connect(notch50);
             notch50.connect(notch60);
-            notch60.connect(lp);
+            notch60.connect(notch120);
+            notch120.connect(voiceBoost);
+            voiceBoost.connect(lp);
             lp.connect(comp);
-            comp.connect(makeup);
+            comp.connect(gateAnalyser);
+            gateAnalyser.connect(gateGain);
+            gateGain.connect(makeup);
 
             filterCleanupFns.push(() => {
-                try { hp.disconnect(); notch50.disconnect(); notch60.disconnect();
-                      lp.disconnect(); comp.disconnect(); makeup.disconnect(); } catch(e){}
+                clearInterval(gateInterval);
+                try {
+                    hp.disconnect(); notch50.disconnect(); notch60.disconnect();
+                    notch120.disconnect(); voiceBoost.disconnect(); lp.disconnect();
+                    comp.disconnect(); gateAnalyser.disconnect(); gateGain.disconnect();
+                    makeup.disconnect();
+                } catch(e){}
             });
             return makeup;
         }
@@ -1415,6 +1477,18 @@ function renderVoiceMembers() {
         const isOp = isUserOp(member.name);
         const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">&#128081;</span>' : '';
 
+        // Botón de mute individual (solo para admin, solo para remotos con peerId)
+        const isMuteAdmin = isCurrentUserMuteAdmin();
+        const locallyMuted = locallyMutedPeers.get(member.peerId) || false;
+        const muteBtnHtml = (isMuteAdmin && !isUser && !member.isMusicBot && member.peerId)
+            ? `<button class="admin-mute-btn ${locallyMuted ? 'admin-muted' : ''}" 
+                title="${locallyMuted ? 'Desmutear' : 'Silenciar'} a ${member.name}"
+                onclick="(function(){
+                    import('./voice.js').then(m => m.toggleRemoteMute('${member.peerId}', '${member.name.replace(/'/g, "\\'")}')).catch(()=>{});
+                })()"
+              >${locallyMuted ? '🔊' : '🔇'}</button>`
+            : '';
+
         const volumeSliderHtml = (!isUser && !member.isMusicBot && member.peerId)
             ? `<div class="user-volume-row">
                 <span class="user-vol-icon">🔊</span>
@@ -1427,7 +1501,7 @@ function renderVoiceMembers() {
             ${speakingWave}
             ${avatarHtml}
             <span class="voice-member-name">${member.name}${opCrown}</span>
-            <div class="voice-member-icons">${statusIcons}</div>
+            <div class="voice-member-icons">${statusIcons}${muteBtnHtml}</div>
             ${volumeSliderHtml}
         `;
 
@@ -1446,13 +1520,29 @@ function renderVoiceMembers() {
                     perUserVolume.set(member.peerId, newVol);
                     const peerData = activePeers.get(member.peerId);
                     if (peerData && peerData.audioEl) {
-                        peerData.audioEl.volume = state.isDeafened ? 0 : newVol * audioOutputVolume;
+                        // Respetar mute local del admin
+                        const muted = locallyMutedPeers.get(member.peerId) || false;
+                        peerData.audioEl.volume = (state.isDeafened || muted) ? 0 : newVol * audioOutputVolume;
                     }
                 });
             }
         }
     });
-}
+
+    // Botón "Silenciar todos" — solo visible para admins con peers remotos
+    if (isCurrentUserMuteAdmin() && activePeers.size > 0) {
+        const allMuted = [...activePeers.keys()].every(pid => locallyMutedPeers.get(pid));
+        const muteAllBtn = document.createElement('button');
+        muteAllBtn.id = 'voice-mute-all-btn';
+        muteAllBtn.className = `voice-mute-all-btn ${allMuted ? 'muted' : ''}`;
+        muteAllBtn.textContent = allMuted ? '🔊 Restaurar todos' : '🔇 Silenciar todos';
+        muteAllBtn.title = allMuted ? 'Restaurar audio de todos' : 'Silenciar a todos los participantes';
+        muteAllBtn.addEventListener('click', () => {
+            import('./voice.js').then(m => m.muteAllRemote()).catch(() => {});
+        });
+        grid.appendChild(muteAllBtn);
+    }
+} // fin de renderVoiceMembers
 
 // Activar/desactivar pistas del micrófono físico
 function toggleMicStreamTracks(enabled) {
