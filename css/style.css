@@ -4447,3 +4447,32 @@ body.theme-light .theme-panel {
     border-color: var(--accent-green);
     box-shadow: 0 4px 14px hsla(142, 76%, 45%, 0.2);
 }
+
+/* ── TOAST DE DM CON BOTÓN ABRIR ── */
+.dm-toast-ping {
+    border-color: hsla(271, 91%, 65%, 0.35);
+    box-shadow: 0 8px 32px hsla(230,16%,5%,0.6),
+                0 0 0 1px hsla(271,91%,65%,0.12);
+}
+.dm-toast-open-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, hsla(271,91%,65%,0.2), hsla(186,100%,48%,0.15));
+    border: 1px solid hsla(271,91%,65%,0.3);
+    color: hsl(271, 91%, 75%);
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    text-align: center;
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+                transform var(--transition-fast);
+}
+.dm-toast-open-btn:hover {
+    background: linear-gradient(135deg, hsla(271,91%,65%,0.35), hsla(186,100%,48%,0.25));
+    border-color: hsl(271,91%,65%);
+    transform: translateY(-1px);
+}

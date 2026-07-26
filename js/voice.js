@@ -902,6 +902,24 @@ async function joinSupabasePresence(channelId, myName, peerId) {
     presenceChannel.on('presence', { event: 'sync' }, () => {
         const presenceState = presenceChannel.presenceState();
         syncVoiceRoomFromPresence(presenceState, myName);
+
+        // ── FIX: llamar a peers que YA estaban en la sala al momento del sync ──
+        // El evento 'join' solo dispara para nuevos ingresos DESPUÉS de suscribirse.
+        // Los peers que ya estaban presentes cuando llegamos solo aparecen en 'sync'.
+        // Sin esta lógica, si ambos usuarios se unen casi al mismo tiempo, ninguno llama al otro.
+        Object.values(presenceState).forEach(presences => {
+            presences.forEach(presence => {
+                if (
+                    presence.peerId &&
+                    presence.peerId !== localPeerId &&
+                    !activePeers.has(presence.peerId)
+                ) {
+                    console.log(`[Presence Sync] Peer existente detectado: ${presence.name} — iniciando llamada...`);
+                    // Pequeño delay para evitar race condition cuando ambos publican al mismo tiempo
+                    setTimeout(() => callPeer(presence.peerId, presence.name), 500);
+                }
+            });
+        });
     });
 
     presenceChannel.on('presence', { event: 'join' }, ({ key, newPresences }) => {

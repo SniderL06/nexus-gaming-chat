@@ -1,4 +1,4 @@
-﻿/* NEXUS DIRECT MESSAGES MODULE — EFIMERO VIA SUPABASE BROADCAST */
+/* NEXUS DIRECT MESSAGES MODULE — EFIMERO VIA SUPABASE BROADCAST */
 
 import { supabase, supabaseReady } from './supabase-client.js';
 
@@ -14,11 +14,12 @@ let dmUnreadBadge   = null;
 let dmSidebarBtn    = null;
 let dmStatusEl      = null;
 
-let activeDMConvId  = null;
-let activeDMChannel = null;
-let activeDMTarget  = { email: null, name: null };
-let unreadDMCount   = 0;
-let isPanelOpen     = false;
+let activeDMConvId    = null;
+let activeDMChannel   = null;
+let activeDMTarget    = { email: null, name: null };
+let unreadDMCount     = 0;
+let isPanelOpen       = false;
+let notifyChannel     = null;  // Canal personal de notificaciones entrantes
 
 // --- UTILIDADES ---
 
@@ -100,6 +101,49 @@ export function initDM() {
 
     window.openDMWith    = openDMWith;
     window.closeDMPanel  = closeDMPanel;
+
+    // Suscribir al canal personal de notificaciones de DM
+    // Esto permite recibir avisos aunque el panel DM no esté abierto
+    const myEmail = getMyEmail();
+    if (myEmail && supabase) {
+        subscribeToNotifyChannel(myEmail);
+    }
+}
+
+// --- CANAL DE NOTIFICACION PERSONAL ---
+function subscribeToNotifyChannel(myEmail) {
+    if (!supabase) return;
+    // Limpiar canal previo si existe
+    if (notifyChannel) {
+        try { supabase.removeChannel(notifyChannel); } catch(e){}
+        notifyChannel = null;
+    }
+
+    notifyChannel = supabase.channel(`dm-notify:${myEmail.toLowerCase()}`, {
+        config: { broadcast: { self: false } }
+    });
+
+    notifyChannel
+        .on('broadcast', { event: 'dm-ping' }, ({ payload }) => {
+            // Alguien nos envió un DM y nosotros no estábamos en ese canal
+            const { senderEmail, senderName, convId, text, ts } = payload;
+
+            // Si ya tenemos ese conv activo y el panel abierto, ignorar (ya llegara por el canal DM)
+            if (convId === activeDMConvId && isPanelOpen) return;
+
+            // Si el panel está abierto en ESA conversación, ignorar
+            if (convId === activeDMConvId) return;
+
+            // Mostrar toast de notificación con botón para abrir
+            showDMPingToast(senderEmail, senderName, text, ts);
+
+            // Incrementar badge de no leídos
+            unreadDMCount++;
+            updateDMBadge();
+        })
+        .subscribe();
+
+    console.log('[DM Notify] Suscrito al canal de notificaciones:', `dm-notify:${myEmail.toLowerCase()}`);
 }
 
 // --- ABRIR CONVERSACION ---
@@ -226,6 +270,34 @@ function sendDM() {
 
     renderDMMessage(payload, true);
     activeDMChannel.send({ type: 'broadcast', event: 'dm', payload });
+
+    // Enviar ping al canal de notificación del destinatario
+    // Esto le avisa aunque no tenga el panel DM abierto con nosotros
+    if (supabase && activeDMTarget.email) {
+        const pingChannel = supabase.channel(`dm-notify:${activeDMTarget.email.toLowerCase()}`, {
+            config: { broadcast: { self: false } }
+        });
+        pingChannel.subscribe(status => {
+            if (status === 'SUBSCRIBED') {
+                pingChannel.send({
+                    type: 'broadcast',
+                    event: 'dm-ping',
+                    payload: {
+                        convId: activeDMConvId,
+                        senderEmail: getMyEmail(),
+                        senderName: getMyName(),
+                        text: payload.text,
+                        ts: payload.ts
+                    }
+                });
+                // Desuscribir después de enviar (canal de un solo uso)
+                setTimeout(() => {
+                    try { supabase.removeChannel(pingChannel); } catch(e){}
+                }, 2000);
+            }
+        });
+    }
+
     dmTextarea.value = '';
     dmTextarea.style.height = 'auto';
     dmTextarea.focus();
@@ -348,4 +420,47 @@ function showDMNotificationToast(senderName, text) {
         toast.classList.add('dm-toast-hide');
         setTimeout(() => toast.remove(), 400);
     }, 5000);
+}
+
+// Toast especial con boton "Abrir" para DMs recibidos via canal de notificacion
+function showDMPingToast(senderEmail, senderName, text, ts) {
+    // Evitar toasts duplicados del mismo remitente
+    const existing = document.querySelector(`.dm-toast[data-sender="${senderEmail}"]`);
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'dm-toast dm-toast-ping';
+    toast.dataset.sender = senderEmail;
+    toast.innerHTML = `
+        <div class="dm-toast-header">
+            <span class="dm-toast-icon">&#128172;</span>
+            <span class="dm-toast-from">${esc(senderName)}</span>
+            <span class="dm-toast-tag">Mensaje privado</span>
+        </div>
+        <div class="dm-toast-text">${esc((text || '').length > 55 ? (text || '').slice(0, 55) + '\u2026' : (text || ''))}</div>
+        <button class="dm-toast-open-btn">Abrir chat &#8594;</button>
+    `;
+
+    // Clic en el boton "Abrir" — abre directamente la conversacion
+    const openBtn = toast.querySelector('.dm-toast-open-btn');
+    if (openBtn) {
+        openBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toast.remove();
+            openDMWith(senderEmail, senderName);
+        });
+    }
+
+    // Clic en el toast (fuera del boton) lo descarta
+    toast.addEventListener('click', (e) => {
+        if (!e.target.closest('.dm-toast-open-btn')) toast.remove();
+    });
+
+    document.body.appendChild(toast);
+
+    // Auto-dismiss en 8 segundos (mas tiempo porque tiene boton de accion)
+    setTimeout(() => {
+        toast.classList.add('dm-toast-hide');
+        setTimeout(() => toast.remove(), 400);
+    }, 8000);
 }
