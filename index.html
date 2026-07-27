@@ -535,7 +535,13 @@
                 </ul>
             </div>
 
-
+            <!-- CONTENEDOR DE ANUNCIOS ADSTERRA DENTRO DEL CHAT -->
+            <div class="adsterra-sidebar-slot" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                <span style="font-size: 0.65rem; color: #8e9297; display: block; margin-bottom: 6px; letter-spacing: 0.5px;">ANUNCIO PATROCINADO</span>
+                <div id="adsterra-chat-container">
+                    <div id="container-c9a8a020d51acf922166ae36bc735892"></div>
+                </div>
+            </div>
 
         </aside>
 
@@ -1158,6 +1164,31 @@
             </button>
         </div>
     </div>
+
+    <!-- ══ SISTEMA DE ANUNCIOS ADSTERRA DENTRO DEL CHAT & AUTO-RELOAD (60s) ══ -->
+    <script async="async" data-cfasync="false" src="https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
+    <script>
+        (function() {
+            var AD_REFRESH_MS = 60000; // Recarga de anuncios cada 60 segundos (1 minuto)
+            
+            function refreshAdsterraChatBanner() {
+                var container = document.getElementById('adsterra-chat-container');
+                if (!container) return;
+                
+                // Re-inyectar iframe/script de Adsterra para registrar una nueva impresión
+                container.innerHTML = '<div id="container-c9a8a020d51acf922166ae36bc735892"></div>';
+                
+                var script = document.createElement('script');
+                script.async = true;
+                script.dataset.cfasync = 'false';
+                script.src = 'https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js?t=' + Date.now();
+                container.appendChild(script);
+            }
+
+            // Iniciar temporizador de recarga de impresiones
+            setInterval(refreshAdsterraChatBanner, AD_REFRESH_MS);
+        })();
+    </script>
 
     <!-- Carga de módulos ES -->
     <script type="module" src="js/app.js"></script>
