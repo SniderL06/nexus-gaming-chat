@@ -158,16 +158,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const ADSTERRA_SMARTLINK_URL = 'https://www.effectivecpmnetwork.com/bwkq78ksa?key=ed92c2748e0d83b724a9cfe9bf05b482';
 
     if (supportAdBtn && videoAdModal) {
-        // Al hacer clic en '🎁 Apoyar Servidor', abre el modal para elegir entre PayPal o Anuncio
+        // Al hacer clic en '🎁 Apoyar Servidor', abre el modal y muestra mensaje de agradecimiento inmediato
         supportAdBtn.addEventListener('click', () => {
             videoAdModal.classList.remove('hidden');
+            if (typeof window.showNexusToast === 'function') {
+                window.showNexusToast('❤️ ¡Muchas gracias por tu interés en apoyar la plataforma Nexus!');
+            }
         });
+
+        // Evento para el botón PayPal dentro del modal
+        const paypalLinkBtn = videoAdModal.querySelector('.paypal-btn');
+        if (paypalLinkBtn) {
+            paypalLinkBtn.addEventListener('click', () => {
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('💙 ¡Mil gracias por considerar una donación a Nexus!');
+                }
+            });
+        }
 
         // Evento para el botón dentro del modal "Ver Anuncio Patrocinado (Gratis)"
         const openSmartlinkBtn = document.getElementById('open-smartlink-btn');
         if (openSmartlinkBtn) {
             openSmartlinkBtn.addEventListener('click', () => {
                 window.open(ADSTERRA_SMARTLINK_URL, '_blank', 'noopener,noreferrer');
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('🎬 ¡Gracias por ver el anuncio patrocinado y apoyar el servidor!');
+                }
             });
         }
 
