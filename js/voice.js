@@ -174,61 +174,97 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'extreme': {
-            // ─── FILTRO ANTI-RUIDO EXTREMO (Multibanda Anti-Impulsos / Teclado) ───
-            // 1. High-pass 120Hz: Corta la vibración sorda de teclas retumbando en la mesa
+            // ─── FILTRO ANTI-RUIDO EXTREMO v3 (AI-Style Adaptive Spectral Gate) ───
+            // 1. High-Pass 140Hz: Corta los retumbos graves de escapes de carros, motos y martillazos
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 120;
+            hp.frequency.value = 140;
             hp.Q.value = 1.0;
 
-            // 2. Multiband Notch Filters: Atenúa las frecuencias resonantes del chasquido del teclado (2kHz - 4.5kHz)
-            const notch1 = audioCtx.createBiquadFilter();
-            notch1.type = 'notch';
-            notch1.frequency.value = 2800;
-            notch1.Q.value = 2.5;
+            // 2. Peaking Filter en banda vocal (300Hz - 2400Hz): Resalta la voz sobre cualquier ruido exterior
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'peaking';
+            bp.frequency.value = 1400;
+            bp.Q.value = 0.5;
+            bp.gain.value = 5.0;
 
-            const notch2 = audioCtx.createBiquadFilter();
-            notch2.type = 'notch';
-            notch2.frequency.value = 4200;
-            notch2.Q.value = 3.0;
-
-            // 3. Peak Preserving (Formantes de Voz 300Hz - 2200Hz)
-            const voiceFormant = audioCtx.createBiquadFilter();
-            voiceFormant.type = 'peaking';
-            voiceFormant.frequency.value = 1200;
-            voiceFormant.Q.value = 0.5;
-            voiceFormant.gain.value = 4.0;
-
-            // 4. Low-pass 7500Hz: Elimina siseo agudo
+            // 3. Low-Pass 6000Hz: Corta el siseo y pitos agudos de vehículos o herramientas
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 7500;
-            lp.Q.value = 0.7;
+            lp.frequency.value = 6000;
+            lp.Q.value = 0.8;
 
-            // 5. Compresor Multibanda / Limitador Rápido: Atrapa picos repentinos (golpes de tecla)
+            // 4. Limitador de Impactos (Martillazos / Golpes secos)
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -35;
-            comp.knee.value = 6;
-            comp.ratio.value = 12;
-            comp.attack.value = 0.002;
-            comp.release.value = 0.06;
+            comp.threshold.value = -28;
+            comp.knee.value = 2;
+            comp.ratio.value = 20; // Aplasta el impacto del golpe al instante
+            comp.attack.value = 0.001; // 1ms
+            comp.release.value = 0.04;
 
-            // 6. Output Makeup Gain
+            // 5. Ganancia controlada por Puerta de Ruido Espectral
+            const gateGain = audioCtx.createGain();
+            gateGain.gain.value = 0.0; // Inicia silenciado
+
+            // 6. Analizador de frecuencia de banda estrecha de voz
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.15;
+            const freqData = new Float32Array(analyser.frequencyBinCount);
+
+            let lastVoiceTime = 0;
+            const HOLD_MS = 140; // Mantiene el canal abierto fluidamente mientras hablas
+
+            const gateInterval = setInterval(() => {
+                if (!audioCtx || audioCtx.state === 'closed') {
+                    clearInterval(gateInterval);
+                    return;
+                }
+
+                analyser.getFloatFrequencyData(freqData);
+
+                // Medir la energía ÚNICAMENTE en los formantes de voz humana (300Hz a 2400Hz)
+                const sampleRate = audioCtx.sampleRate || 48000;
+                const binStart = Math.floor((300 * 512) / sampleRate);
+                const binEnd   = Math.floor((2400 * 512) / sampleRate);
+
+                let voiceEnergy = 0;
+                let count = 0;
+                for (let i = binStart; i <= binEnd; i++) {
+                    if (freqData[i] > -100) {
+                        voiceEnergy += freqData[i];
+                        count++;
+                    }
+                }
+                const avgDb = count > 0 ? (voiceEnergy / count) : -100;
+
+                const now = Date.now();
+                // Si detecta la resonancia específica de voz (-55dB), abre el paso de audio
+                if (avgDb > -55) {
+                    lastVoiceTime = now;
+                    try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.004); } catch(e){}
+                } else if ((now - lastVoiceTime) > HOLD_MS) {
+                    // Cierra el paso de audio por completo frente a ruidos continuos (motos, carros)
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
+                }
+            }, 15);
+
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.5;
+            makeup.gain.value = 1.3;
 
             inputNode.connect(hp);
-            hp.connect(notch1);
-            notch1.connect(notch2);
-            notch2.connect(voiceFormant);
-            voiceFormant.connect(lp);
+            hp.connect(bp);
+            bp.connect(lp);
             lp.connect(comp);
-            comp.connect(makeup);
+            comp.connect(analyser);
+            analyser.connect(gateGain);
+            gateGain.connect(makeup);
 
             filterCleanupFns.push(() => {
+                clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); notch1.disconnect(); notch2.disconnect();
-                    voiceFormant.disconnect(); lp.disconnect(); comp.disconnect();
+                    hp.disconnect(); bp.disconnect(); lp.disconnect();
+                    comp.disconnect(); analyser.disconnect(); gateGain.disconnect();
                     makeup.disconnect();
                 } catch(e){}
             });
