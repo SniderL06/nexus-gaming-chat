@@ -1111,16 +1111,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (ch.type === 'text') {
                 li.innerHTML = `
-                    <span class="channel-icon">#</span>
-                    <span class="channel-name">${escapeHTMLForApp(ch.name.toLowerCase())}</span>
-                    <button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>
+                    <div class="channel-main-row">
+                        <span class="channel-icon">#</span>
+                        <span class="channel-name">${escapeHTMLForApp(ch.name.toLowerCase())}</span>
+                        <button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>
+                    </div>
                 `;
             } else if (ch.type === 'voice') {
                 li.innerHTML = `
-                    <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                    <span class="channel-name">${escapeHTMLForApp(ch.name)}</span>
-                    <span class="active-count" id="voice-count-${ch.id}">0</span>
-                    <button class="delete-channel-btn" title="Eliminar Sala">🗑️</button>
+                    <div class="channel-main-row">
+                        <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                        <span class="channel-name">${escapeHTMLForApp(ch.name)}</span>
+                        <span class="active-count" id="voice-count-${ch.id}">0</span>
+                        <button class="delete-channel-btn" title="Eliminar Sala">🗑️</button>
+                    </div>
+                    <div class="channel-users-list" id="voice-users-${ch.id}"></div>
                 `;
             }
 

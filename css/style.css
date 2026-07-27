@@ -183,8 +183,8 @@ body {
 
 .channel-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
     padding: 8px 12px;
     border-radius: 6px;
     margin-bottom: 3px;
@@ -241,6 +241,54 @@ body {
     margin-left: auto;
     border: 1px solid var(--accent-cyan-glow);
     font-weight: 600;
+}
+
+.channel-main-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.channel-users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 24px;
+    margin-top: 4px;
+    width: 100%;
+}
+
+.channel-users-list:empty {
+    display: none;
+}
+
+.sidebar-voice-user {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background var(--transition-fast);
+}
+
+.sidebar-voice-user:hover {
+    background-color: hsla(0, 0%, 100%, 0.05);
+    color: var(--text-normal);
+}
+
+.sidebar-user-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #fff;
 }
 
 /* PANEL DE VOZ ACTIVA (CONEXIÓN EN LA BARRA LATERAL) */
@@ -360,6 +408,34 @@ body {
 .voice-btn.disconnect-btn:hover {
     background-color: rgba(245, 60, 60, 0.25);
     color: #ff4d4d;
+}
+
+/* Botón OP — Silenciar Todos (barra de voz) */
+.voice-btn.voice-btn-mute-all {
+    background-color: hsla(38, 100%, 50%, 0.1);
+    border-color: hsla(38, 100%, 50%, 0.25);
+    color: hsl(38, 100%, 60%);
+    font-size: 1rem;
+    min-width: 32px;
+    padding: 0 6px;
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+                color var(--transition-fast), transform var(--transition-fast);
+}
+.voice-btn.voice-btn-mute-all:hover {
+    background-color: hsla(38, 100%, 50%, 0.22);
+    border-color: hsl(38, 100%, 50%);
+    transform: translateY(-1px);
+}
+.voice-btn.voice-btn-mute-all.muted {
+    background-color: hsla(142, 76%, 45%, 0.12);
+    border-color: hsla(142, 76%, 45%, 0.3);
+    color: var(--accent-green);
+    font-size: 0.75rem;
+    padding: 0 6px;
+}
+.voice-btn.voice-btn-mute-all.muted:hover {
+    background-color: hsla(142, 76%, 45%, 0.22);
+    border-color: var(--accent-green);
 }
 
 /* PANEL DE USUARIO ABAJO */

@@ -34,7 +34,7 @@ let processedStream   = null;  // Stream filtrado que se envía por WebRTC
 let audioDestNode     = null;  // MediaStreamDestination que captura el audio filtrado
 let filterOutputNode  = null;  // Nodo final de la cadena de filtros (antes de dest)
 let filterCleanupFns  = [];    // Funciones de cleanup del filtro activo
-export let currentFilter = 'none';
+export let currentFilter = 'noise'; // Por defecto: supresión activa
 
 // Curva de distorsión para WaveShaperNode
 function makeDistortionCurve(amount) {
@@ -112,8 +112,10 @@ function buildFilterChain(filterName, inputNode) {
             const gateAnalyser = audioCtx.createAnalyser();
             gateAnalyser.fftSize = 256;
             const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
-            const GATE_THRESHOLD = 20; // RMS umbral (0-255) — por debajo = silencio
-            const GATE_HOLD_MS = 120;  // ms de hold después de bajar del umbral
+            // Threshold 32: más alto para cortar clicks de teclado (eran 20)
+            // Los clicks de teclado suelen tener RMS ~18-28 en este rango
+            const GATE_THRESHOLD = 32; // RMS umbral (0-255) — por debajo = silencio
+            const GATE_HOLD_MS = 80;   // ms de hold más corto = corte más rápido post-click
             let gateOpen = false;
             let lastAboveThresholdTime = 0;
 
@@ -444,6 +446,50 @@ export function initVoice() {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', disconnectVoiceChannel);
     }
+
+    // Botón OP "Silenciar Todos" — solo visible cuando el usuario es OP
+    const muteAllOpBtn = document.getElementById('voice-mute-all-op-btn');
+    if (muteAllOpBtn) {
+        // Mostrar el botón solo si el usuario es OP
+        if (isCurrentUserOp()) {
+            muteAllOpBtn.classList.remove('hidden');
+        }
+        muteAllOpBtn.addEventListener('click', () => {
+            if (!isCurrentUserOp()) return; // doble verificación
+            const allMuted = [...activePeers.keys()].every(pid => locallyMutedPeers.get(pid));
+            if (allMuted) {
+                // Restaurar todos
+                activePeers.forEach((_, pid) => {
+                    locallyMutedPeers.set(pid, false);
+                    const pd = activePeers.get(pid);
+                    if (pd && pd.audioEl) {
+                        pd.audioEl.volume = audioOutputVolume;
+                        pd.audioEl.muted = false;
+                    }
+                });
+                muteAllOpBtn.textContent = '🔇';
+                muteAllOpBtn.title = 'Silenciar a todos los participantes';
+                muteAllOpBtn.classList.remove('muted');
+            } else {
+                // Silenciar todos
+                activePeers.forEach((pd, pid) => {
+                    locallyMutedPeers.set(pid, true);
+                    if (pd && pd.audioEl) {
+                        pd.audioEl.volume = 0;
+                        pd.audioEl.muted = true;
+                    }
+                });
+                muteAllOpBtn.textContent = '🔊 Restaurar';
+                muteAllOpBtn.title = 'Restaurar audio de todos los participantes';
+                muteAllOpBtn.classList.add('muted');
+            }
+            renderVoiceMembers();
+        });
+    }
+
+    // Aplicar filtro por defecto (noise) para que Sin Filtro arranque con supresión activa
+    // (se aplica al conectar el micrófono en startAudioEngine, no aquí)
+    // El data-filter="noise" en index.html ya marca el botón como activo visualmente.
 
     // Vincular botones del panel de filtros de micrófono
     document.querySelectorAll('.mic-filter-btn').forEach(btn => {
@@ -867,6 +913,7 @@ async function joinMultiplayerVoice(channelId) {
             const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             await presenceChannel.track({
                 name: myName,
+                email: (localStorage.getItem('nexus_user_email') || '').toLowerCase(),
                 peerId: realId,
                 avatar: myAvatar,
                 avatarStyle: myAvatarStyle,
@@ -1009,6 +1056,7 @@ async function joinSupabasePresence(channelId, myName, peerId) {
             const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             await presenceChannel.track({
                 name: myName,
+                email: email.toLowerCase(),
                 peerId: localPeerId,
                 avatar: myAvatar,
                 avatarStyle: myAvatarStyle,
@@ -1023,24 +1071,44 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
 function syncVoiceRoomFromPresence(presenceState, myName) {
     const realMembers = [];
-    const seenPeers = new Set();
-    Object.values(presenceState).forEach(presenceList => {
-        presenceList.forEach(presence => {
-            if (!seenPeers.has(presence.peerId)) {
-                seenPeers.add(presence.peerId);
-                realMembers.push({
-                    name: presence.name,
-                    avatar: presence.avatar || presence.name.charAt(0).toUpperCase(),
-                    avatarStyle: presence.avatarStyle || 'circle',
-                    avatarBg: 'bg-blue',
-                    isMuted: presence.isMuted || false,
-                    activeSpeaker: false,
-                    isLocalUser: presence.peerId === localPeerId,
-                    peerId: presence.peerId,
-                    isOp: presence.isOp || false
-                });
-            }
-        });
+    const seenUsers = new Set(); // deduplicar por email o nombre
+    const localEmail = (localStorage.getItem('nexus_user_email') || '').toLowerCase();
+
+    // Recopilar presencias y aplanar
+    const rawList = [];
+    Object.values(presenceState).forEach(list => {
+        list.forEach(p => rawList.push(p));
+    });
+
+    // Ordenar para que el localUser actual o peers con realId tengan prioridad sobre entradas obsoletas
+    rawList.sort((a, b) => {
+        if (a.peerId === localPeerId) return -1;
+        if (b.peerId === localPeerId) return 1;
+        const aTemp = a.peerId && a.peerId.startsWith('nexus_');
+        const bTemp = b.peerId && b.peerId.startsWith('nexus_');
+        if (!aTemp && bTemp) return -1;
+        if (aTemp && !bTemp) return 1;
+        return (b.joinedAt || 0) - (a.joinedAt || 0);
+    });
+
+    rawList.forEach(presence => {
+        const userKey = (presence.email || presence.name || '').toLowerCase();
+        if (userKey && !seenUsers.has(userKey)) {
+            seenUsers.add(userKey);
+            const isLocal = presence.peerId === localPeerId || (localEmail && presence.email === localEmail) || presence.name === myName;
+            realMembers.push({
+                name: presence.name,
+                email: presence.email,
+                avatar: presence.avatar || presence.name.charAt(0).toUpperCase(),
+                avatarStyle: presence.avatarStyle || 'circle',
+                avatarBg: 'bg-blue',
+                isMuted: presence.isMuted || false,
+                activeSpeaker: false,
+                isLocalUser: isLocal,
+                peerId: presence.peerId,
+                isOp: presence.isOp || false
+            });
+        }
     });
 
     activeMembersInRoom = realMembers;
@@ -1048,6 +1116,16 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
 
     const countBadge = document.getElementById(`voice-count-${state.activeVoiceChannel}`);
     if (countBadge) countBadge.textContent = activeMembersInRoom.length;
+
+    const usersContainer = document.getElementById(`voice-users-${state.activeVoiceChannel}`);
+    if (usersContainer) {
+        usersContainer.innerHTML = activeMembersInRoom.map(m => `
+            <div class="sidebar-voice-user" title="${m.name}">
+                <div class="sidebar-user-avatar ${m.avatarBg || 'bg-blue'}">${m.name ? m.name.charAt(0).toUpperCase() : '?'}</div>
+                <span class="sidebar-user-name">${m.name}</span>
+            </div>
+        `).join('');
+    }
 }
 
 function callPeer(remotePeerId, remoteName) {
@@ -1639,6 +1717,54 @@ function renderVoiceMembers() {
         grid.appendChild(muteAllBtn);
     }
 } // fin de renderVoiceMembers
+
+// ─── FUNCIONES EXPORTADAS DE ADMIN MUTE ──────────────────────────────────────
+// Llamadas desde los botones inline de las tarjetas de voz via dynamic import
+
+/** Alterna el mute local de un peer específico (admin) */
+export function toggleRemoteMute(peerId, peerName) {
+    const wasMuted = locallyMutedPeers.get(peerId) || false;
+    locallyMutedPeers.set(peerId, !wasMuted);
+    const pd = activePeers.get(peerId);
+    if (pd && pd.audioEl) {
+        pd.audioEl.volume = !wasMuted ? 0 : (perUserVolume.get(peerId) ?? 1.0) * audioOutputVolume;
+        pd.audioEl.muted  = !wasMuted;
+    }
+    // Sincronizar estado del botón OP mute-all
+    syncMuteAllOpBtn();
+    renderVoiceMembers();
+}
+
+/** Silencia o restaura a TODOS los peers (solo OP) */
+export function muteAllRemote() {
+    if (!isCurrentUserOp()) return;
+    const allMuted = [...activePeers.keys()].every(pid => locallyMutedPeers.get(pid));
+    activePeers.forEach((pd, pid) => {
+        locallyMutedPeers.set(pid, !allMuted);
+        if (pd && pd.audioEl) {
+            pd.audioEl.volume = allMuted ? (perUserVolume.get(pid) ?? 1.0) * audioOutputVolume : 0;
+            pd.audioEl.muted  = !allMuted;
+        }
+    });
+    syncMuteAllOpBtn();
+    renderVoiceMembers();
+}
+
+/** Actualiza el texto y clase del botón OP mute-all según estado actual */
+function syncMuteAllOpBtn() {
+    const btn = document.getElementById('voice-mute-all-op-btn');
+    if (!btn) return;
+    const allMuted = activePeers.size > 0 && [...activePeers.keys()].every(pid => locallyMutedPeers.get(pid));
+    if (allMuted) {
+        btn.textContent = '🔊 Restaurar';
+        btn.title = 'Restaurar audio de todos';
+        btn.classList.add('muted');
+    } else {
+        btn.textContent = '🔇';
+        btn.title = 'Silenciar a todos los participantes';
+        btn.classList.remove('muted');
+    }
+}
 
 // Activar/desactivar pistas del micrófono físico
 function toggleMicStreamTracks(enabled) {
