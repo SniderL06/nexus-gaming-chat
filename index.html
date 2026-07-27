@@ -1166,6 +1166,15 @@
     </div>
 
     <!-- ══ SISTEMA DE ANUNCIOS ADSTERRA DENTRO DEL CHAT & AUTO-RELOAD (60s) ══ -->
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'c9a8a020d51acf922166ae36bc735892',
+            'format' : 'iframe',
+            'height' : 250,
+            'width' : 300,
+            'params' : {}
+        };
+    </script>
     <script async="async" data-cfasync="false" src="https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
     <script>
         (function() {
@@ -1174,6 +1183,14 @@
             function refreshAdsterraChatBanner() {
                 var container = document.getElementById('adsterra-chat-container');
                 if (!container) return;
+                
+                window.atOptions = {
+                    'key' : 'c9a8a020d51acf922166ae36bc735892',
+                    'format' : 'iframe',
+                    'height' : 250,
+                    'width' : 300,
+                    'params' : {}
+                };
                 
                 // Re-inyectar iframe/script de Adsterra para registrar una nueva impresión
                 container.innerHTML = '<div id="container-c9a8a020d51acf922166ae36bc735892"></div>';
