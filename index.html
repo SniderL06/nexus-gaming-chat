@@ -1178,32 +1178,26 @@
     <script async="async" data-cfasync="false" src="https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
     <script>
         (function() {
-            var AD_REFRESH_MS = 60000; // Recarga de anuncios cada 60 segundos (1 minuto)
+            var AD_REFRESH_MS = 60000; // Recarga cada 60 segundos
             
-            function refreshAdsterraChatBanner() {
+            function refreshAdFrame() {
                 var container = document.getElementById('adsterra-chat-container');
                 if (!container) return;
-                
-                window.atOptions = {
-                    'key' : 'c9a8a020d51acf922166ae36bc735892',
-                    'format' : 'iframe',
-                    'height' : 250,
-                    'width' : 300,
-                    'params' : {}
-                };
-                
-                // Re-inyectar iframe/script de Adsterra para registrar una nueva impresión
-                container.innerHTML = '<div id="container-c9a8a020d51acf922166ae36bc735892"></div>';
-                
-                var script = document.createElement('script');
-                script.async = true;
-                script.dataset.cfasync = 'false';
-                script.src = 'https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js?t=' + Date.now();
-                container.appendChild(script);
+
+                // Buscar iframe generado por Adsterra dentro del contenedor
+                var iframe = container.querySelector('iframe');
+                if (iframe) {
+                    // Recargar el iframe cambiando la URL con timestamp para forzar nueva impresión
+                    try {
+                        var src = iframe.src;
+                        if (src && src !== 'about:blank') {
+                            iframe.src = src.split('&_t=')[0] + '&_t=' + Date.now();
+                        }
+                    } catch(e) {}
+                }
             }
 
-            // Iniciar temporizador de recarga de impresiones
-            setInterval(refreshAdsterraChatBanner, AD_REFRESH_MS);
+            setInterval(refreshAdFrame, AD_REFRESH_MS);
         })();
     </script>
 
