@@ -174,87 +174,61 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'extreme': {
-            // ─── FILTRO ANTI-RUIDO EXTREMO (Anti-Teclado / Zero-Click Gate) ───
-            // Diseñado para eliminar totalmente clicks de teclado mecánico, ventiladores fuertes y ladridos
-            // 1. High-pass 150Hz: Elimina el thud / retumbo mecánico grave de cada tecla al chocar la mesa
+            // ─── FILTRO ANTI-RUIDO EXTREMO (Multibanda Anti-Impulsos / Teclado) ───
+            // 1. High-pass 120Hz: Corta la vibración sorda de teclas retumbando en la mesa
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 150;
-            hp.Q.value = 1.2;
+            hp.frequency.value = 120;
+            hp.Q.value = 1.0;
 
-            // 2. Notch 2.5kHz - 3.5kHz: zona de ataque del click plástico del teclado
-            const notchClick = audioCtx.createBiquadFilter();
-            notchClick.type = 'notch';
-            notchClick.frequency.value = 3200;
-            notchClick.Q.value = 4.0;
+            // 2. Multiband Notch Filters: Atenúa las frecuencias resonantes del chasquido del teclado (2kHz - 4.5kHz)
+            const notch1 = audioCtx.createBiquadFilter();
+            notch1.type = 'notch';
+            notch1.frequency.value = 2800;
+            notch1.Q.value = 2.5;
 
-            // 3. Low-pass 6500Hz: Elimina chasquidos metálicos agudos de switches mecánicos
+            const notch2 = audioCtx.createBiquadFilter();
+            notch2.type = 'notch';
+            notch2.frequency.value = 4200;
+            notch2.Q.value = 3.0;
+
+            // 3. Peak Preserving (Formantes de Voz 300Hz - 2200Hz)
+            const voiceFormant = audioCtx.createBiquadFilter();
+            voiceFormant.type = 'peaking';
+            voiceFormant.frequency.value = 1200;
+            voiceFormant.Q.value = 0.5;
+            voiceFormant.gain.value = 4.0;
+
+            // 4. Low-pass 7500Hz: Elimina siseo agudo
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 6500;
-            lp.Q.value = 0.8;
+            lp.frequency.value = 7500;
+            lp.Q.value = 0.7;
 
-            // 4. Compresor Expander / Downward Compresor: Aplasta ruidos impulsivos
+            // 5. Compresor Multibanda / Limitador Rápido: Atrapa picos repentinos (golpes de tecla)
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -45;
-            comp.knee.value = 4;
-            comp.ratio.value = 20;
-            comp.attack.value = 0.0005; // 0.5ms: atrapa el transitorio inicial de la tecla
-            comp.release.value = 0.05;
+            comp.threshold.value = -35;
+            comp.knee.value = 6;
+            comp.ratio.value = 12;
+            comp.attack.value = 0.002;
+            comp.release.value = 0.06;
 
-            // 5. Hard Noise Gate (RMS High Threshold)
-            const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 0.0;
-
-            const gateAnalyser = audioCtx.createAnalyser();
-            gateAnalyser.fftSize = 256;
-            const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
-            const GATE_THRESHOLD = 45; // RMS 45: Solo se abre cuando hablas directo al micro
-            const GATE_HOLD_MS = 50;   // Cierra instantáneamente tras dejar de hablar
-            let gateOpen = false;
-            let lastAboveThresholdTime = 0;
-
-            const gateInterval = setInterval(() => {
-                if (!audioCtx || audioCtx.state === 'closed') {
-                    clearInterval(gateInterval);
-                    return;
-                }
-                gateAnalyser.getByteTimeDomainData(gateBuffer);
-                let sum = 0;
-                for (let i = 0; i < gateBuffer.length; i++) {
-                    const v = (gateBuffer[i] - 128) / 128;
-                    sum += v * v;
-                }
-                const rms = Math.sqrt(sum / gateBuffer.length) * 255;
-                const now = Date.now();
-                if (rms > GATE_THRESHOLD) {
-                    lastAboveThresholdTime = now;
-                    if (!gateOpen) {
-                        gateOpen = true;
-                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.002); } catch(e){}
-                    }
-                } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
-                    gateOpen = false;
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.008); } catch(e){}
-                }
-            }, 10);
-
+            // 6. Output Makeup Gain
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.4;
+            makeup.gain.value = 1.5;
 
             inputNode.connect(hp);
-            hp.connect(notchClick);
-            notchClick.connect(lp);
+            hp.connect(notch1);
+            notch1.connect(notch2);
+            notch2.connect(voiceFormant);
+            voiceFormant.connect(lp);
             lp.connect(comp);
-            comp.connect(gateAnalyser);
-            gateAnalyser.connect(gateGain);
-            gateGain.connect(makeup);
+            comp.connect(makeup);
 
             filterCleanupFns.push(() => {
-                clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); notchClick.disconnect(); lp.disconnect();
-                    comp.disconnect(); gateAnalyser.disconnect(); gateGain.disconnect();
+                    hp.disconnect(); notch1.disconnect(); notch2.disconnect();
+                    voiceFormant.disconnect(); lp.disconnect(); comp.disconnect();
                     makeup.disconnect();
                 } catch(e){}
             });
@@ -1086,7 +1060,8 @@ async function joinSupabasePresence(channelId, myName, peerId) {
     if (!supabase) return;
 
     const roomChannel = `voice:${channelId}`;
-    const userKey = `user_${peerId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const userEmail = (localStorage.getItem('nexus_user_email') || myName).toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+    const userKey = `user_${userEmail}`;
 
     if (presenceChannel) {
         await supabase.removeChannel(presenceChannel);

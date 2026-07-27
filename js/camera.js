@@ -270,10 +270,20 @@ function broadcastCameraState(on) {
         const base = myEmail.split('@')[0];
         myName = base.charAt(0).toUpperCase() + base.slice(1);
     }
+    const myAvatar = myEmail ? (localStorage.getItem('nexus_user_avatar_' + myEmail) || '') : '';
+    const myAvatarStyle = myEmail ? (localStorage.getItem('nexus_user_avatar_style_' + myEmail) || 'circle') : 'circle';
+    const isOp = (localStorage.getItem('nexus_user_email') || '') === 'sniderquiros5@gmail.com';
+
     presenceChannel.track({
         name: myName,
+        email: myEmail.toLowerCase(),
         peerId: peer.id,
-        isCameraOn: on
+        avatar: myAvatar,
+        avatarStyle: myAvatarStyle,
+        isMuted: false,
+        isOp: isOp,
+        isCameraOn: on,
+        joinedAt: Date.now()
     }).catch(() => {});
 }
 
