@@ -150,40 +150,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- MODAL Y ENLACE SMARTLINK DE ANUNCIO VOLUNTARIO ("Apoyar Servidor") ---
+    // --- MODAL Y OPCIONES DE APOYO ("Apoyar Servidor": PayPal o Anuncio) ---
     const supportAdBtn = document.getElementById('support-ad-btn');
     const videoAdModal = document.getElementById('video-ad-modal');
     const videoAdCloseBtn = document.getElementById('video-ad-close-btn');
     const videoAdFinishBtn = document.getElementById('video-ad-finish-btn');
-    const videoAdContainer = document.getElementById('video-ad-frame-container');
     const ADSTERRA_SMARTLINK_URL = 'https://www.effectivecpmnetwork.com/bwkq78ksa?key=ed92c2748e0d83b724a9cfe9bf05b482';
 
     if (supportAdBtn && videoAdModal) {
+        // Al hacer clic en '🎁 Apoyar Servidor', abre el modal para elegir entre PayPal o Anuncio
         supportAdBtn.addEventListener('click', () => {
-            // Abrir Smartlink en una nueva pestaña (máximo CPM voluntario)
-            window.open(ADSTERRA_SMARTLINK_URL, '_blank', 'noopener,noreferrer');
-
-            // Mostrar modal de agradecimiento e iframe embebido en paralelo
             videoAdModal.classList.remove('hidden');
-            if (videoAdContainer) {
-                videoAdContainer.innerHTML = `
-                    <div style="padding: 20px; text-align: center;">
-                        <div style="font-size: 3rem; margin-bottom: 10px;">🎉</div>
-                        <h4 style="color: #ffffff; margin: 0 0 8px 0; font-size: 1.1rem;">¡Anuncio abierto en una nueva pestaña!</h4>
-                        <p style="color: #8e9297; font-size: 0.85rem; line-height: 1.4; max-width: 360px; margin: 0 auto 15px auto;">
-                            Se ha abierto la oferta del patrocinador. Gracias por dedicar unos segundos a apoyar el mantenimiento de los servidores de Nexus.
-                        </p>
-                        <a href="${ADSTERRA_SMARTLINK_URL}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display: inline-block; padding: 8px 16px; font-size: 0.85rem; text-decoration: none; border-radius: 6px;">
-                            🔗 Abrir anuncio de nuevo
-                        </a>
-                    </div>
-                `;
-            }
         });
+
+        // Evento para el botón dentro del modal "Ver Anuncio Patrocinado (Gratis)"
+        const openSmartlinkBtn = document.getElementById('open-smartlink-btn');
+        if (openSmartlinkBtn) {
+            openSmartlinkBtn.addEventListener('click', () => {
+                window.open(ADSTERRA_SMARTLINK_URL, '_blank', 'noopener,noreferrer');
+            });
+        }
 
         const closeVideoAdModal = () => {
             videoAdModal.classList.add('hidden');
-            if (videoAdContainer) videoAdContainer.innerHTML = '';
         };
 
         if (videoAdCloseBtn) videoAdCloseBtn.addEventListener('click', closeVideoAdModal);

@@ -1169,17 +1169,40 @@
         </div>
     </div>
 
-    <!-- ══ MODAL DE ANUNCIO DE VIDEO VOLUNTARIO (APOYAR SERVIDOR) ══ -->
+    <!-- ══ MODAL DE APOYO AL SERVIDOR (PAYPAL VOLUNTARIO O ANUNCIO) ══ -->
     <div class="video-ad-modal-overlay hidden" id="video-ad-modal">
         <div class="video-ad-modal-content">
             <div class="video-ad-header">
-                <h3>🎁 Apoyar a Nexus (Anuncio Voluntario)</h3>
+                <h3>🎁 Apoyar a Nexus (100% Voluntario)</h3>
                 <button class="video-ad-close" id="video-ad-close-btn" title="Cerrar modal">✕</button>
             </div>
             <div class="video-ad-body">
-                <p class="video-ad-desc">Ver un anuncio apoya directamente a mantener los servidores de voz de Nexus 100% gratuitos y sin suscripciones.</p>
-                <div class="video-ad-frame-container" id="video-ad-frame-container">
-                    <!-- Iframe de Video / VAST / Smartlink de Adsterra -->
+                <p class="video-ad-desc">Mantener los servidores de voz WebRTC y streaming de Nexus es 100% gratuito. Puedes elegir la forma en que deseas apoyar la plataforma:</p>
+                
+                <div class="support-options-container" style="display: flex; flex-direction: column; gap: 12px; width: 100%; margin-top: 10px;">
+                    <!-- Opción 1: Donación por PayPal -->
+                    <a href="https://paypal.me/SniderL006" target="_blank" rel="noopener noreferrer" class="support-card-btn paypal-btn" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: linear-gradient(135deg, rgba(0, 112, 186, 0.2), rgba(0, 69, 124, 0.25)); border: 1px solid rgba(0, 112, 186, 0.5); border-radius: 10px; text-decoration: none; color: #ffffff; transition: transform 0.2s, border-color 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+                            <span style="font-size: 1.8rem;">💙</span>
+                            <div>
+                                <strong style="display: block; font-size: 0.95rem; color: #009cde;">Donar por PayPal</strong>
+                                <span style="font-size: 0.75rem; color: #8e9297;">Donovan Quirós (@SniderL006)</span>
+                            </div>
+                        </div>
+                        <span style="font-size: 0.8rem; background: #0070ba; padding: 4px 10px; border-radius: 6px; font-weight: 600;">Donar ↗</span>
+                    </a>
+
+                    <!-- Opción 2: Ver Anuncio Patrocinado gratis -->
+                    <button id="open-smartlink-btn" class="support-card-btn ad-btn" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: linear-gradient(135deg, rgba(255, 184, 0, 0.15), rgba(255, 107, 0, 0.18)); border: 1px solid rgba(255, 184, 0, 0.4); border-radius: 10px; color: #ffffff; cursor: pointer; text-align: left; transition: transform 0.2s, border-color 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 1.8rem;">🎬</span>
+                            <div>
+                                <strong style="display: block; font-size: 0.95rem; color: #ffc107;">Ver Anuncio Patrocinado (Gratis)</strong>
+                                <span style="font-size: 0.75rem; color: #8e9297;">Apoya abriendo una oferta corta de 5 segundos</span>
+                            </div>
+                        </div>
+                        <span style="font-size: 0.8rem; background: #ff9800; padding: 4px 10px; border-radius: 6px; font-weight: 600; color: #000;">Ver Anuncio ↗</span>
+                    </button>
                 </div>
             </div>
             <div class="video-ad-footer">
