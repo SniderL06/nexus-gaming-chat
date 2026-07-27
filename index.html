@@ -235,6 +235,10 @@
                     <span class="channel-description" id="active-channel-desc">Canal general de chat y discusiones.</span>
                 </div>
                 <div class="header-right">
+                    <!-- Botón opcional de Apoyar Servidor / Ver Anuncio de Video -->
+                    <button class="support-ad-btn" id="support-ad-btn" title="Apoyar a Nexus viendo un anuncio corto voluntario">
+                        <span>🎁 Apoyar Servidor</span>
+                    </button>
                     <div class="performance-badge" title="Rendimiento del renderizado">
                         <span class="badge-dot"></span>
                         <span class="badge-text" id="render-latency">Render: 0.1ms</span>
@@ -1165,39 +1169,80 @@
         </div>
     </div>
 
-    <!-- ══ SISTEMA DE ANUNCIOS ADSTERRA DENTRO DEL CHAT & AUTO-RELOAD (60s) ══ -->
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'c9a8a020d51acf922166ae36bc735892',
-            'format' : 'iframe',
-            'height' : 250,
-            'width' : 300,
-            'params' : {}
-        };
-    </script>
-    <script async="async" data-cfasync="false" src="https://pl29682057.effectivecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
+    <!-- ══ MODAL DE ANUNCIO DE VIDEO VOLUNTARIO (APOYAR SERVIDOR) ══ -->
+    <div class="video-ad-modal-overlay hidden" id="video-ad-modal">
+        <div class="video-ad-modal-content">
+            <div class="video-ad-header">
+                <h3>🎁 Apoyar a Nexus (Anuncio Voluntario)</h3>
+                <button class="video-ad-close" id="video-ad-close-btn" title="Cerrar modal">✕</button>
+            </div>
+            <div class="video-ad-body">
+                <p class="video-ad-desc">Ver un anuncio apoya directamente a mantener los servidores de voz de Nexus 100% gratuitos y sin suscripciones.</p>
+                <div class="video-ad-frame-container" id="video-ad-frame-container">
+                    <!-- Iframe de Video / VAST / Smartlink de Adsterra -->
+                </div>
+            </div>
+            <div class="video-ad-footer">
+                <span class="video-ad-note">❤️ ¡Gracias por apoyar la plataforma!</span>
+                <button class="btn btn-secondary" id="video-ad-finish-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ SISTEMA DE ANUNCIOS ADSTERRA AUTO-ROTATIVO (CADA 60s) ══ -->
     <script>
         (function() {
-            var AD_REFRESH_MS = 60000; // Recarga cada 60 segundos
-            
-            function refreshAdFrame() {
+            var AD_REFRESH_MS = 60000; // 60 segundos
+            var adKey = 'c9a8a020d51acf922166ae36bc735892';
+
+            function loadFreshAdsterraIframe() {
                 var container = document.getElementById('adsterra-chat-container');
                 if (!container) return;
 
-                // Buscar iframe generado por Adsterra dentro del contenedor
-                var iframe = container.querySelector('iframe');
-                if (iframe) {
-                    // Recargar el iframe cambiando la URL con timestamp para forzar nueva impresión
-                    try {
-                        var src = iframe.src;
-                        if (src && src !== 'about:blank') {
-                            iframe.src = src.split('&_t=')[0] + '&_t=' + Date.now();
-                        }
-                    } catch(e) {}
+                // Crear o reutilizar un iframe aislado que carga el script nativo de Adsterra
+                var adFrame = document.getElementById('adsterra-live-iframe');
+                if (!adFrame) {
+                    adFrame = document.createElement('iframe');
+                    adFrame.id = 'adsterra-live-iframe';
+                    adFrame.style.width = '300px';
+                    adFrame.style.height = '250px';
+                    adFrame.style.border = 'none';
+                    adFrame.style.overflow = 'hidden';
+                    adFrame.scrolling = 'no';
+                    container.appendChild(adFrame);
+                }
+
+                // Generar documento HTML dentro del iframe para ejecutar una nueva impresión limpia
+                var frameDoc = adFrame.contentDocument || (adFrame.contentWindow ? adFrame.contentWindow.document : null);
+                if (frameDoc) {
+                    frameDoc.open();
+                    frameDoc.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <style>body { margin: 0; padding: 0; background: transparent; overflow: hidden; text-align: center; }</style>
+                        </head>
+                        <body>
+                            <script type="text/javascript">
+                                atOptions = {
+                                    'key' : '${adKey}',
+                                    'format' : 'iframe',
+                                    'height' : 250,
+                                    'width' : 300,
+                                    'params' : {}
+                                };
+                            <\/script>
+                            <script type="text/javascript" src="https://pl29682057.effectivecpmnetwork.com/${adKey}/invoke.js"><\/script>
+                        </body>
+                        </html>
+                    `);
+                    frameDoc.close();
                 }
             }
 
-            setInterval(refreshAdFrame, AD_REFRESH_MS);
+            // Cargar inmediatamente y luego refrescar cada 60 segundos
+            setTimeout(loadFreshAdsterraIframe, 500);
+            setInterval(loadFreshAdsterraIframe, AD_REFRESH_MS);
         })();
     </script>
 
