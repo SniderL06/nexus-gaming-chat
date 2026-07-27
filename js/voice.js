@@ -173,6 +173,94 @@ function buildFilterChain(filterName, inputNode) {
             return makeup;
         }
 
+        case 'extreme': {
+            // ─── FILTRO ANTI-RUIDO EXTREMO (Anti-Teclado / Zero-Click Gate) ───
+            // Diseñado para eliminar totalmente clicks de teclado mecánico, ventiladores fuertes y ladridos
+            // 1. High-pass 150Hz: Elimina el thud / retumbo mecánico grave de cada tecla al chocar la mesa
+            const hp = audioCtx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 150;
+            hp.Q.value = 1.2;
+
+            // 2. Notch 2.5kHz - 3.5kHz: zona de ataque del click plástico del teclado
+            const notchClick = audioCtx.createBiquadFilter();
+            notchClick.type = 'notch';
+            notchClick.frequency.value = 3200;
+            notchClick.Q.value = 4.0;
+
+            // 3. Low-pass 6500Hz: Elimina chasquidos metálicos agudos de switches mecánicos
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 6500;
+            lp.Q.value = 0.8;
+
+            // 4. Compresor Expander / Downward Compresor: Aplasta ruidos impulsivos
+            const comp = audioCtx.createDynamicsCompressor();
+            comp.threshold.value = -45;
+            comp.knee.value = 4;
+            comp.ratio.value = 20;
+            comp.attack.value = 0.0005; // 0.5ms: atrapa el transitorio inicial de la tecla
+            comp.release.value = 0.05;
+
+            // 5. Hard Noise Gate (RMS High Threshold)
+            const gateGain = audioCtx.createGain();
+            gateGain.gain.value = 0.0;
+
+            const gateAnalyser = audioCtx.createAnalyser();
+            gateAnalyser.fftSize = 256;
+            const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
+            const GATE_THRESHOLD = 45; // RMS 45: Solo se abre cuando hablas directo al micro
+            const GATE_HOLD_MS = 50;   // Cierra instantáneamente tras dejar de hablar
+            let gateOpen = false;
+            let lastAboveThresholdTime = 0;
+
+            const gateInterval = setInterval(() => {
+                if (!audioCtx || audioCtx.state === 'closed') {
+                    clearInterval(gateInterval);
+                    return;
+                }
+                gateAnalyser.getByteTimeDomainData(gateBuffer);
+                let sum = 0;
+                for (let i = 0; i < gateBuffer.length; i++) {
+                    const v = (gateBuffer[i] - 128) / 128;
+                    sum += v * v;
+                }
+                const rms = Math.sqrt(sum / gateBuffer.length) * 255;
+                const now = Date.now();
+                if (rms > GATE_THRESHOLD) {
+                    lastAboveThresholdTime = now;
+                    if (!gateOpen) {
+                        gateOpen = true;
+                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.002); } catch(e){}
+                    }
+                } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
+                    gateOpen = false;
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.008); } catch(e){}
+                }
+            }, 10);
+
+            const makeup = audioCtx.createGain();
+            makeup.gain.value = 1.4;
+
+            inputNode.connect(hp);
+            hp.connect(notchClick);
+            notchClick.connect(lp);
+            lp.connect(comp);
+            comp.connect(gateAnalyser);
+            gateAnalyser.connect(gateGain);
+            gateGain.connect(makeup);
+
+            filterCleanupFns.push(() => {
+                clearInterval(gateInterval);
+                try {
+                    hp.disconnect(); notchClick.disconnect(); lp.disconnect();
+                    comp.disconnect(); gateAnalyser.disconnect(); gateGain.disconnect();
+                    makeup.disconnect();
+                } catch(e){}
+            });
+            return makeup;
+        }
+
         case 'robot': {
             // Robot: ring modulation (multiplicar señal por oscilaación)
             const osc = audioCtx.createOscillator();
