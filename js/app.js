@@ -856,15 +856,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Si está en sala de voz, actualizar la presencia en la sala de voz también
             if (state.activeVoiceChannel) {
-                import('./voice.js').then(({ presenceChannel, peer }) => {
+                import('./voice.js').then(({ presenceChannel, peer, OP_EMAIL }) => {
                     if (presenceChannel && peer) {
                         const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
                         const savedStyle = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
-                        
+                        const isOp = email.toLowerCase() === 'sniderquiros5@gmail.com';
+
                         presenceChannel.track({
                             name: newName,
+                            email: email.toLowerCase(),
                             peerId: peer.id,
                             isMuted: state.isMuted,
+                            isOp: isOp,
                             avatar: savedAvatar,
                             avatarStyle: savedStyle,
                             joinedAt: Date.now()

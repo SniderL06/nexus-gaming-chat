@@ -174,46 +174,56 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'extreme': {
-            // ─── FILTRO ANTI-RUIDO EXTREMO v3 (AI-Style Adaptive Spectral Gate) ───
-            // 1. High-Pass 140Hz: Corta los retumbos graves de escapes de carros, motos y martillazos
+            // ─── FILTRO ANTI-RUIDO EXTREMO v4 (Dual-Harmonic VAD & Mechanical Notch) ───
+            // 1. High-Pass 160Hz: Corta por completo vibraciones de barrido, fricción en el piso y bajos de motores
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 140;
-            hp.Q.value = 1.0;
+            hp.frequency.value = 160;
+            hp.Q.value = 1.2;
 
-            // 2. Peaking Filter en banda vocal (300Hz - 2400Hz): Resalta la voz sobre cualquier ruido exterior
-            const bp = audioCtx.createBiquadFilter();
-            bp.type = 'peaking';
-            bp.frequency.value = 1400;
-            bp.Q.value = 0.5;
-            bp.gain.value = 5.0;
+            // 2. Filtro Notch para Fricción de Escoba / Barrido (450Hz - 850Hz)
+            const sweepNotch = audioCtx.createBiquadFilter();
+            sweepNotch.type = 'notch';
+            sweepNotch.frequency.value = 650;
+            sweepNotch.Q.value = 2.0;
 
-            // 3. Low-Pass 6000Hz: Corta el siseo y pitos agudos de vehículos o herramientas
+            // 3. Filtro Notch Doble para Switches de Teclado Mecánico (Clack 2.7kHz & Click 3.8kHz)
+            const keyNotch1 = audioCtx.createBiquadFilter();
+            keyNotch1.type = 'notch';
+            keyNotch1.frequency.value = 2700;
+            keyNotch1.Q.value = 3.5;
+
+            const keyNotch2 = audioCtx.createBiquadFilter();
+            keyNotch2.type = 'notch';
+            keyNotch2.frequency.value = 3800;
+            keyNotch2.Q.value = 3.5;
+
+            // 4. Low-pass 5500Hz: Elimina el chasquido plástico superior y siseos de fondo
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 6000;
-            lp.Q.value = 0.8;
+            lp.frequency.value = 5500;
+            lp.Q.value = 0.9;
 
-            // 4. Limitador de Impactos (Martillazos / Golpes secos)
+            // 5. Compresor de Transitorios Fuertes (Impactos)
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -28;
-            comp.knee.value = 2;
-            comp.ratio.value = 20; // Aplasta el impacto del golpe al instante
-            comp.attack.value = 0.001; // 1ms
-            comp.release.value = 0.04;
+            comp.threshold.value = -25;
+            comp.knee.value = 1;
+            comp.ratio.value = 20;
+            comp.attack.value = 0.0005; // 0.5ms: frena secamente picos de teclado o golpes
+            comp.release.value = 0.03;
 
-            // 5. Ganancia controlada por Puerta de Ruido Espectral
+            // 6. Gate Node
             const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 0.0; // Inicia silenciado
+            gateGain.gain.value = 0.0; // Totalmente silenciado cuando no se habla
 
-            // 6. Analizador de frecuencia de banda estrecha de voz
+            // 7. VAD de Armónicos Vocales (Diferencia banda de voz humana vs ruido blanco/impulsivo)
             const analyser = audioCtx.createAnalyser();
             analyser.fftSize = 512;
-            analyser.smoothingTimeConstant = 0.15;
+            analyser.smoothingTimeConstant = 0.1;
             const freqData = new Float32Array(analyser.frequencyBinCount);
 
             let lastVoiceTime = 0;
-            const HOLD_MS = 140; // Mantiene el canal abierto fluidamente mientras hablas
+            const HOLD_MS = 120; // Tiempo para mantener el paso de audio fluido
 
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
@@ -222,39 +232,49 @@ function buildFilterChain(filterName, inputNode) {
                 }
 
                 analyser.getFloatFrequencyData(freqData);
-
-                // Medir la energía ÚNICAMENTE en los formantes de voz humana (300Hz a 2400Hz)
                 const sampleRate = audioCtx.sampleRate || 48000;
-                const binStart = Math.floor((300 * 512) / sampleRate);
-                const binEnd   = Math.floor((2400 * 512) / sampleRate);
 
-                let voiceEnergy = 0;
-                let count = 0;
-                for (let i = binStart; i <= binEnd; i++) {
-                    if (freqData[i] > -100) {
-                        voiceEnergy += freqData[i];
-                        count++;
-                    }
+                // Banda 1: Fundamental de la voz humana (120Hz a 600Hz)
+                const b1Start = Math.floor((120 * 512) / sampleRate);
+                const b1End   = Math.floor((600 * 512) / sampleRate);
+                let e1 = -100;
+                let c1 = 0;
+                for (let i = b1Start; i <= b1End; i++) {
+                    if (freqData[i] > -100) { e1 += freqData[i]; c1++; }
                 }
-                const avgDb = count > 0 ? (voiceEnergy / count) : -100;
+                const avgVoiceBand = c1 > 0 ? (e1 / c1) : -100;
+
+                // Banda 2: Frecuencia de chasquidos/barrido alta (2.5kHz a 5kHz)
+                const b2Start = Math.floor((2500 * 512) / sampleRate);
+                const b2End   = Math.floor((5000 * 512) / sampleRate);
+                let e2 = -100;
+                let c2 = 0;
+                for (let i = b2Start; i <= b2End; i++) {
+                    if (freqData[i] > -100) { e2 += freqData[i]; c2++; }
+                }
+                const avgNoiseBand = c2 > 0 ? (e2 / c2) : -100;
 
                 const now = Date.now();
-                // Si detecta la resonancia específica de voz (-55dB), abre el paso de audio
-                if (avgDb > -55) {
+                // La voz humana se caracteriza por tener MUCHO más peso en la banda vocal que en la banda alta de chasquidos/barrido
+                const isHumanVoice = (avgVoiceBand > -48) && ((avgVoiceBand - avgNoiseBand) > 6);
+
+                if (isHumanVoice) {
                     lastVoiceTime = now;
-                    try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.004); } catch(e){}
+                    try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.003); } catch(e){}
                 } else if ((now - lastVoiceTime) > HOLD_MS) {
-                    // Cierra el paso de audio por completo frente a ruidos continuos (motos, carros)
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
+                    // Silencio absoluto para ruidos de barrido o tecleo cuando no estás hablando
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.01); } catch(e){}
                 }
-            }, 15);
+            }, 12);
 
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.3;
+            makeup.gain.value = 1.4;
 
             inputNode.connect(hp);
-            hp.connect(bp);
-            bp.connect(lp);
+            hp.connect(sweepNotch);
+            sweepNotch.connect(keyNotch1);
+            keyNotch1.connect(keyNotch2);
+            keyNotch2.connect(lp);
             lp.connect(comp);
             comp.connect(analyser);
             analyser.connect(gateGain);
@@ -263,9 +283,9 @@ function buildFilterChain(filterName, inputNode) {
             filterCleanupFns.push(() => {
                 clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); bp.disconnect(); lp.disconnect();
-                    comp.disconnect(); analyser.disconnect(); gateGain.disconnect();
-                    makeup.disconnect();
+                    hp.disconnect(); sweepNotch.disconnect(); keyNotch1.disconnect();
+                    keyNotch2.disconnect(); lp.disconnect(); comp.disconnect();
+                    analyser.disconnect(); gateGain.disconnect(); makeup.disconnect();
                 } catch(e){}
             });
             return makeup;
@@ -1191,9 +1211,16 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
     });
 
     rawList.forEach(presence => {
-        const userKey = (presence.email || presence.name || '').toLowerCase();
-        if (userKey && !seenUsers.has(userKey)) {
+        const emailKey = presence.email ? presence.email.toLowerCase() : '';
+        const nameKey  = presence.name ? presence.name.toLowerCase() : '';
+        const userKey  = emailKey || nameKey;
+
+        // Si ya procesamos esta cuenta (por email o por nombre), la ignoramos
+        if (userKey && !seenUsers.has(userKey) && (!emailKey || !seenUsers.has(emailKey))) {
+            if (emailKey) seenUsers.add(emailKey);
+            if (nameKey)  seenUsers.add(nameKey);
             seenUsers.add(userKey);
+
             const isLocal = presence.peerId === localPeerId || (localEmail && presence.email === localEmail) || presence.name === myName;
             realMembers.push({
                 name: presence.name,
