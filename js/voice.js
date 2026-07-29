@@ -174,56 +174,45 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'extreme': {
-            // ─── FILTRO ANTI-RUIDO EXTREMO v4 (Dual-Harmonic VAD & Mechanical Notch) ───
-            // 1. High-Pass 160Hz: Corta por completo vibraciones de barrido, fricción en el piso y bajos de motores
+            // ─── FILTRO ANTI-RUIDO EXTREMO v5: AISLAMIENTO VOCAL DE TRÁFICO Y CALLE ───
+            // 1. High-Pass 220Hz: Elimina el retumbe de motores diésel, rodamiento de neumáticos y viento
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 160;
-            hp.Q.value = 1.2;
+            hp.frequency.value = 220;
+            hp.Q.value = 1.4;
 
-            // 2. Filtro Notch para Fricción de Escoba / Barrido (450Hz - 850Hz)
-            const sweepNotch = audioCtx.createBiquadFilter();
-            sweepNotch.type = 'notch';
-            sweepNotch.frequency.value = 650;
-            sweepNotch.Q.value = 2.0;
-
-            // 3. Filtro Notch Doble para Switches de Teclado Mecánico (Clack 2.7kHz & Click 3.8kHz)
-            const keyNotch1 = audioCtx.createBiquadFilter();
-            keyNotch1.type = 'notch';
-            keyNotch1.frequency.value = 2700;
-            keyNotch1.Q.value = 3.5;
-
-            const keyNotch2 = audioCtx.createBiquadFilter();
-            keyNotch2.type = 'notch';
-            keyNotch2.frequency.value = 3800;
-            keyNotch2.Q.value = 3.5;
-
-            // 4. Low-pass 5500Hz: Elimina el chasquido plástico superior y siseos de fondo
+            // 2. Low-Pass 3400Hz (Banda Telefónica Estándar): Corta los cláxones lejanos, viento agudo y siseos de asfalto mojado
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 5500;
-            lp.Q.value = 0.9;
+            lp.frequency.value = 3400;
+            lp.Q.value = 1.0;
 
-            // 5. Compresor de Transitorios Fuertes (Impactos)
+            // 3. Notch Filter en 500Hz: Frecuencia de resonancia metálica de carrocerías y tubos de escape
+            const exhaustNotch = audioCtx.createBiquadFilter();
+            exhaustNotch.type = 'notch';
+            exhaustNotch.frequency.value = 500;
+            exhaustNotch.Q.value = 2.5;
+
+            // 4. Compresor Expansor Múltiple: Aumenta el contraste de la voz sobre el ruido continuo
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -25;
-            comp.knee.value = 1;
-            comp.ratio.value = 20;
-            comp.attack.value = 0.0005; // 0.5ms: frena secamente picos de teclado o golpes
-            comp.release.value = 0.03;
+            comp.threshold.value = -28;
+            comp.knee.value = 2;
+            comp.ratio.value = 16;
+            comp.attack.value = 0.001; // 1ms: suprime inmediatamente cláxones y ladridos
+            comp.release.value = 0.04;
 
-            // 6. Gate Node
+            // 5. Gate Gain (Silencio dinámico de fondo)
             const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 0.0; // Totalmente silenciado cuando no se habla
+            gateGain.gain.value = 0.0; // Silencio total en pausas
 
-            // 7. VAD de Armónicos Vocales (Diferencia banda de voz humana vs ruido blanco/impulsivo)
+            // 6. Analizador de Formantes Vocales
             const analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 512;
-            analyser.smoothingTimeConstant = 0.1;
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.05;
             const freqData = new Float32Array(analyser.frequencyBinCount);
 
             let lastVoiceTime = 0;
-            const HOLD_MS = 120; // Tiempo para mantener el paso de audio fluido
+            const HOLD_MS = 140;
 
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
@@ -234,48 +223,35 @@ function buildFilterChain(filterName, inputNode) {
                 analyser.getFloatFrequencyData(freqData);
                 const sampleRate = audioCtx.sampleRate || 48000;
 
-                // Banda 1: Fundamental de la voz humana (120Hz a 600Hz)
-                const b1Start = Math.floor((120 * 512) / sampleRate);
-                const b1End   = Math.floor((600 * 512) / sampleRate);
-                let e1 = -100;
-                let c1 = 0;
-                for (let i = b1Start; i <= b1End; i++) {
-                    if (freqData[i] > -100) { e1 += freqData[i]; c1++; }
+                // Banda Formante Vocal Humana (300Hz a 2400Hz)
+                const bStart = Math.floor((300 * 256) / sampleRate);
+                const bEnd   = Math.floor((2400 * 256) / sampleRate);
+                let sum = -100;
+                let count = 0;
+                for (let i = bStart; i <= bEnd; i++) {
+                    if (freqData[i] > -100) { sum += freqData[i]; count++; }
                 }
-                const avgVoiceBand = c1 > 0 ? (e1 / c1) : -100;
-
-                // Banda 2: Frecuencia de chasquidos/barrido alta (2.5kHz a 5kHz)
-                const b2Start = Math.floor((2500 * 512) / sampleRate);
-                const b2End   = Math.floor((5000 * 512) / sampleRate);
-                let e2 = -100;
-                let c2 = 0;
-                for (let i = b2Start; i <= b2End; i++) {
-                    if (freqData[i] > -100) { e2 += freqData[i]; c2++; }
-                }
-                const avgNoiseBand = c2 > 0 ? (e2 / c2) : -100;
+                const avgVocalPower = count > 0 ? (sum / count) : -100;
 
                 const now = Date.now();
-                // La voz humana se caracteriza por tener MUCHO más peso en la banda vocal que en la banda alta de chasquidos/barrido
-                const isHumanVoice = (avgVoiceBand > -48) && ((avgVoiceBand - avgNoiseBand) > 6);
+                // Sensibilidad optimizada para captar voz clara incluso caminando por la calle (-52 dBFS)
+                const isSpeaking = avgVocalPower > -52;
 
-                if (isHumanVoice) {
+                if (isSpeaking) {
                     lastVoiceTime = now;
-                    try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.003); } catch(e){}
+                    try { gateGain.gain.setTargetAtTime(1.2, audioCtx.currentTime, 0.005); } catch(e){}
                 } else if ((now - lastVoiceTime) > HOLD_MS) {
-                    // Silencio absoluto para ruidos de barrido o tecleo cuando no estás hablando
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.01); } catch(e){}
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
                 }
-            }, 12);
+            }, 10);
 
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.4;
+            makeup.gain.value = 1.3;
 
             inputNode.connect(hp);
-            hp.connect(sweepNotch);
-            sweepNotch.connect(keyNotch1);
-            keyNotch1.connect(keyNotch2);
-            keyNotch2.connect(lp);
-            lp.connect(comp);
+            hp.connect(lp);
+            lp.connect(exhaustNotch);
+            exhaustNotch.connect(comp);
             comp.connect(analyser);
             analyser.connect(gateGain);
             gateGain.connect(makeup);
@@ -283,9 +259,8 @@ function buildFilterChain(filterName, inputNode) {
             filterCleanupFns.push(() => {
                 clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); sweepNotch.disconnect(); keyNotch1.disconnect();
-                    keyNotch2.disconnect(); lp.disconnect(); comp.disconnect();
-                    analyser.disconnect(); gateGain.disconnect(); makeup.disconnect();
+                    hp.disconnect(); lp.disconnect(); exhaustNotch.disconnect();
+                    comp.disconnect(); analyser.disconnect(); gateGain.disconnect(); makeup.disconnect();
                 } catch(e){}
             });
             return makeup;
@@ -636,9 +611,10 @@ export function initVoice() {
     // Botón de acceso rápido a Ajustes de Micrófono / Audio
     const quickAudioSettingsBtn = document.getElementById('voice-settings-quick-btn');
     if (quickAudioSettingsBtn) {
-        quickAudioSettingsBtn.addEventListener('click', () => {
+        quickAudioSettingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             const themePanel = document.getElementById('theme-panel');
-            if (themePanel) themePanel.classList.add('active');
+            if (themePanel) themePanel.classList.add('open');
         });
     }
 
