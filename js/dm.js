@@ -267,10 +267,6 @@ function unsubscribeDMChannel() {
     activeDMConvId = null;
 }
 
-// --- ENVIAR ---
-function sendDM() {
-    if (!dmTextarea || !activeDMChannel || !activeDMConvId) return;
-    const text = dmTextarea.value.trim();
 let activeDMReplyTarget = null; // { author: string, text: string }
 
 function setDMReplyTarget(author, text) {
