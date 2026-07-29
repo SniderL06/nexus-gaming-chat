@@ -120,6 +120,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Iniciar loop de rendimiento
     runPerformanceLoop();
 
+    // Control del Menú Móvil Deslizable (Drawer Sidebar)
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const appContainer = document.querySelector('.app-container');
+    if (mobileMenuToggle && appContainer) {
+        mobileMenuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            appContainer.classList.toggle('mobile-menu-open');
+        });
+
+        // Cerrar al hacer clic en el chat o seleccionar canal
+        document.addEventListener('click', (e) => {
+            if (appContainer.classList.contains('mobile-menu-open')) {
+                if (!e.target.closest('.sidebar-servers') && !e.target.closest('.sidebar-left') && !e.target.closest('#mobile-menu-toggle')) {
+                    appContainer.classList.remove('mobile-menu-open');
+                }
+            }
+        });
+    }
+
     // Declarar canales de realtime antes del listener para evitar TDZ (Temporal Dead Zone)
     let serversRealtimeChannel = null;
     let channelsRealtimeChannel = null;
@@ -1353,6 +1372,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const delBtn = item.querySelector('.delete-channel-btn');
         if (delBtn) {
+            // Auto-cerrar el menú en teléfonos móviles al seleccionar un canal
+            const appContainer = document.querySelector('.app-container');
+            if (appContainer) appContainer.classList.remove('mobile-menu-open');
+
             bindDeleteChannelClick(delBtn, item);
         }
     }

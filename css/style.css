@@ -4768,3 +4768,128 @@ body.theme-light .theme-panel {
     color: #f472b6;
     border-color: #ec4899;
 }
+
+/* ── DISEÑO ULTRA-OPTIMIZADO PARA DISPOSITIVOS MÓVILES (< 768px) ── */
+.mobile-menu-toggle-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-normal);
+    cursor: pointer;
+    padding: 4px;
+    margin-right: 6px;
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        grid-template-columns: 1fr !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Ocultar sidebars de escritorio y convertirlos en drawer deslizable */
+    .sidebar-servers {
+        position: fixed;
+        left: -80px;
+        top: 0;
+        bottom: 0;
+        width: 72px;
+        z-index: 9999;
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar-left {
+        position: fixed;
+        left: -320px;
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        z-index: 9998;
+        box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+        transition: transform 0.3s ease;
+    }
+
+    /* Cuando el menú móvil está activo */
+    .app-container.mobile-menu-open .sidebar-servers {
+        transform: translateX(80px);
+    }
+    .app-container.mobile-menu-open .sidebar-left {
+        transform: translateX(392px);
+    }
+
+    /* Mostrar botón hamburguesa en header */
+    .mobile-menu-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Header del canal responsivo */
+    .channel-header {
+        padding: 0 10px;
+    }
+    .channel-description {
+        display: none; /* Ocultar descripción larga en móvil */
+    }
+    .performance-badge {
+        display: none; /* Ocultar badge de latencia en móvil */
+    }
+    .support-ad-btn span {
+        font-size: 0.7rem;
+    }
+
+    /* Adaptación del chat en móvil */
+    .chat-area {
+        padding: 12px 10px;
+    }
+    .message-item {
+        padding: 6px 4px;
+    }
+    .message-text {
+        font-size: 0.9rem;
+    }
+    
+    /* Mostrar botón responder permanentemente en táctil */
+    .reply-msg-btn {
+        opacity: 0.85 !important;
+        padding: 4px 8px;
+    }
+
+    /* Barra de entrada táctil */
+    .chat-footer {
+        padding: 8px 10px;
+    }
+    .chat-input-wrapper {
+        gap: 4px;
+    }
+    .chat-input {
+        font-size: 0.95rem; /* Evita zoom automático en iOS Safari */
+    }
+
+    /* Cuadrícula de Miembros de Voz */
+    .voice-members-grid {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
+        gap: 8px !important;
+    }
+    .voice-member-card {
+        padding: 10px !important;
+    }
+    .member-avatar-wrapper {
+        width: 54px !important;
+        height: 54px !important;
+    }
+
+    /* Ajuste de Modales en Móvil */
+    .video-ad-modal-content,
+    .user-profile-modal-content {
+        width: 95% !important;
+        max-width: 360px !important;
+        margin: 10px;
+    }
+
+    .dm-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        right: 0 !important;
+    }
+}
