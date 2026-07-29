@@ -405,7 +405,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     EMAILJS_CONFIG.templateId,
                     {
                         to_email: email,
-                        otp_code: generatedOtp
+                        user_email: email,
+                        email: email,
+                        otp_code: generatedOtp,
+                        code: generatedOtp,
+                        otp: generatedOtp,
+                        token: generatedOtp
                     }
                 );
                 console.log(`[Nexus Auth] Código OTP enviado vía EmailJS a ${email}.`);
@@ -431,7 +436,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error('[Nexus Auth] Error al enviar verificación:', err);
-            alert('Error al enviar el código de verificación. Por favor verifica tu conexión o las credenciales de EmailJS en js/emailjs.config.js.');
+            const errMsg = err?.text || err?.message || 'Error de conexión con EmailJS';
+            if (loginErrorEmail) {
+                loginErrorEmail.textContent = `❌ ${errMsg}. Si persiste, revisa tu Template o Service ID de EmailJS.`;
+                loginErrorEmail.classList.remove('hidden');
+            }
         } finally {
             // Restaurar botones
             if (loginSendBtn) {
