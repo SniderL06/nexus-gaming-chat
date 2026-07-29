@@ -212,7 +212,7 @@ function buildFilterChain(filterName, inputNode) {
             const freqData = new Float32Array(analyser.frequencyBinCount);
 
             let lastVoiceTime = 0;
-            const HOLD_MS = 140;
+            const HOLD_MS = 350; // Aumentado a 350ms para evitar cortes entre sílabas y pausas cortas al hablar
 
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
@@ -223,9 +223,9 @@ function buildFilterChain(filterName, inputNode) {
                 analyser.getFloatFrequencyData(freqData);
                 const sampleRate = audioCtx.sampleRate || 48000;
 
-                // Banda Formante Vocal Humana (300Hz a 2400Hz)
-                const bStart = Math.floor((300 * 256) / sampleRate);
-                const bEnd   = Math.floor((2400 * 256) / sampleRate);
+                // Banda Formante Vocal Humana (200Hz a 2800Hz)
+                const bStart = Math.floor((200 * 256) / sampleRate);
+                const bEnd   = Math.floor((2800 * 256) / sampleRate);
                 let sum = -100;
                 let count = 0;
                 for (let i = bStart; i <= bEnd; i++) {
@@ -234,16 +234,17 @@ function buildFilterChain(filterName, inputNode) {
                 const avgVocalPower = count > 0 ? (sum / count) : -100;
 
                 const now = Date.now();
-                // Sensibilidad optimizada para captar voz clara incluso caminando por la calle (-52 dBFS)
-                const isSpeaking = avgVocalPower > -52;
+                // Umbral más permisivo (-64 dBFS) para capturar voz suave o susurrada sin cortar la frase
+                const isSpeaking = avgVocalPower > -64;
 
                 if (isSpeaking) {
                     lastVoiceTime = now;
-                    try { gateGain.gain.setTargetAtTime(1.2, audioCtx.currentTime, 0.005); } catch(e){}
+                    try { gateGain.gain.setTargetAtTime(1.1, audioCtx.currentTime, 0.008); } catch(e){}
                 } else if ((now - lastVoiceTime) > HOLD_MS) {
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
+                    // Desvanecimiento suave (fade out) de 40ms en lugar de corte seco
+                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.04); } catch(e){}
                 }
-            }, 10);
+            }, 12);
 
             const makeup = audioCtx.createGain();
             makeup.gain.value = 1.3;
