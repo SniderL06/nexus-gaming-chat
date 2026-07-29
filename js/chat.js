@@ -203,6 +203,7 @@ export function initChat() {
         chatTextarea.addEventListener('input', () => {
             chatTextarea.style.height = 'auto';
             chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 120) + 'px';
+            handleMentionAutocomplete();
         });
     }
 
@@ -338,11 +339,100 @@ export function initChat() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// AUTO-LIMPIEZA DE MENSAJES > 24 HORAS (AUTOPRUNING)
+// ─────────────────────────────────────────────────────────────
+async function pruneOldMessages() {
+    const cutOff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    // Purga en memoria local
+    const now = Date.now();
+    for (const chId in currentMessages) {
+        if (Array.isArray(currentMessages[chId])) {
+            currentMessages[chId] = currentMessages[chId].filter(m => (now - (m.ts || 0)) < 24 * 60 * 60 * 1000);
+        }
+    }
+
+    // Purga en Supabase si la base de datos está conectada
+    if (supabaseReady && supabase) {
+        try {
+            await supabase.from('messages').delete().lt('created_at', cutOff);
+            console.log('[Auto-Cleanup] Mensajes mayores a 24 horas eliminados automáticamente.');
+        } catch (e) {
+            console.warn('[Auto-Cleanup] Error limpiando mensajes antiguos:', e.message);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTOCOMPLETADO DE MENCIONES @USUARIO
+// ─────────────────────────────────────────────────────────────
+function getConnectedUsersList() {
+    const users = new Set();
+    
+    // Extraer usuarios de la lista de miembros visibles en el DOM
+    const memberNodes = document.querySelectorAll('.member-name, .voice-user-name');
+    memberNodes.forEach(el => {
+        const txt = el.textContent.trim();
+        if (txt) users.add(txt);
+    });
+
+    // Agregar usuario local
+    users.add(getLocalUserName());
+
+    return Array.from(users);
+}
+
+function handleMentionAutocomplete() {
+    const popover = document.getElementById('mention-popover');
+    if (!chatTextarea || !popover) return;
+
+    const text = chatTextarea.value;
+    const cursorPos = chatTextarea.selectionStart;
+    const lastAt = text.lastIndexOf('@', cursorPos - 1);
+
+    if (lastAt !== -1) {
+        const query = text.slice(lastAt + 1, cursorPos).toLowerCase();
+        // Verificar si no hay espacios después del @
+        if (!/\s/.test(query)) {
+            const allUsers = getConnectedUsersList();
+            const filtered = allUsers.filter(u => u.toLowerCase().startsWith(query));
+
+            if (filtered.length > 0) {
+                popover.innerHTML = '';
+                filtered.forEach(username => {
+                    const item = document.createElement('div');
+                    item.className = 'mention-user-option';
+                    item.innerHTML = `
+                        <div class="mention-user-avatar">${username.charAt(0).toUpperCase()}</div>
+                        <span class="mention-user-name">${escapeHTML(username)}</span>
+                    `;
+                    item.addEventListener('click', () => {
+                        const before = text.slice(0, lastAt);
+                        const after = text.slice(cursorPos);
+                        chatTextarea.value = `${before}@${username} ${after}`;
+                        popover.classList.add('hidden');
+                        chatTextarea.focus();
+                    });
+                    popover.appendChild(item);
+                });
+                popover.classList.remove('hidden');
+                return;
+            }
+        }
+    }
+
+    popover.classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────
 // SUPABASE REALTIME
 // ─────────────────────────────────────────────────────────────
 async function loadMessagesFromSupabase(channelId) {
     if (!supabase) return;
     try {
+        // Ejecutar primero la limpieza de mensajes de más de 24 horas
+        await pruneOldMessages();
+
         const { data, error } = await supabase
             .from('messages')
             .select('*')

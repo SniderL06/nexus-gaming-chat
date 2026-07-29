@@ -4769,6 +4769,62 @@ body.theme-light .theme-panel {
     border-color: #ec4899;
 }
 
+/* ── MENÚ FLOTANTE DE AUTOCOMPLETADO DE MENCIONES @USUARIO ── */
+.mention-autocomplete-popover {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 16px;
+    width: 260px;
+    max-height: 200px;
+    background: var(--bg-tertiary);
+    border: var(--border-glow);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+    overflow-y: auto;
+    z-index: 1000;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mention-user-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+
+.mention-user-option:hover,
+.mention-user-option.selected {
+    background: rgba(168, 85, 247, 0.2);
+}
+
+.mention-user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-purple);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center;
+}
+
+.mention-user-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
 /* ── DISEÑO ULTRA-OPTIMIZADO PARA DISPOSITIVOS MÓVILES (< 768px) ── */
 .mobile-menu-toggle-btn {
     display: none;

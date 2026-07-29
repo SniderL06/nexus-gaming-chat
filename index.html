@@ -413,7 +413,10 @@
             </div>
 
             <!-- ENTRADA DE CHAT -->
-            <footer class="chat-footer">
+            <footer class="chat-footer" style="position: relative;">
+                <!-- AUTOCOMPLETADO DE MENCIONES @USUARIO -->
+                <div class="mention-autocomplete-popover hidden" id="mention-popover"></div>
+
                 <div class="chat-input-wrapper">
                     <input type="file" id="file-input" accept="*/*" class="hidden">
                     <button class="input-action-btn" id="attachment-btn" title="Subir Archivo, Imagen o Meme">
