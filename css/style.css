@@ -4667,3 +4667,104 @@ body.theme-light .theme-panel {
     color: var(--accent-green);
     font-weight: 500;
 }
+
+/* ── BARRA DE RESPUESTA A MENSAJES & CITAS ── */
+.reply-preview-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: rgba(168, 85, 247, 0.12);
+    border-top: 1px solid rgba(168, 85, 247, 0.3);
+    border-left: 3px solid var(--accent-purple);
+    font-size: 0.8rem;
+    color: var(--text-normal);
+}
+.reply-preview-bar.hidden {
+    display: none;
+}
+.reply-preview-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.reply-preview-label {
+    color: var(--accent-purple);
+    font-weight: 500;
+}
+.reply-preview-text {
+    color: var(--text-muted);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.reply-preview-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.reply-preview-close:hover {
+    color: var(--text-normal);
+}
+
+/* Botón Responder en hover de mensaje */
+.reply-msg-btn {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s, background 0.2s;
+}
+.message-item:hover .reply-msg-btn,
+.dm-message:hover .reply-msg-btn {
+    opacity: 1;
+}
+.reply-msg-btn:hover {
+    color: var(--accent-cyan);
+    background: rgba(0, 212, 255, 0.15);
+    border-color: var(--accent-cyan);
+}
+
+/* Cita (Quote) dentro de la burbuja de mensaje */
+.message-reply-quote {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    border-left: 2px solid var(--accent-cyan);
+    border-radius: 4px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+.message-reply-quote .reply-quote-author {
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+/* Destacado de Mención @usuario */
+.mention-tag {
+    background: rgba(0, 212, 255, 0.18);
+    color: var(--accent-cyan);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+.mention-tag.mention-me {
+    background: rgba(236, 72, 153, 0.22);
+    color: #f472b6;
+    border-color: #ec4899;
+}

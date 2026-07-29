@@ -99,8 +99,12 @@ export function initDM() {
     }
     if (dmSendBtn) dmSendBtn.addEventListener('click', sendDM);
 
-    window.openDMWith    = openDMWith;
-    window.closeDMPanel  = closeDMPanel;
+    window.openDMWith        = openDMWith;
+    window.closeDMPanel      = closeDMPanel;
+    window.replyToDMMessage  = setDMReplyTarget;
+
+    const dmReplyCloseBtn = document.getElementById('dm-reply-preview-close-btn');
+    if (dmReplyCloseBtn) dmReplyCloseBtn.addEventListener('click', clearDMReplyTarget);
 
     // Suscribir al canal personal de notificaciones de DM
     // Esto permite recibir avisos aunque el panel DM no esté abierto
@@ -163,7 +167,15 @@ export function openDMWith(targetEmail, targetName) {
     if (dmMessages) dmMessages.innerHTML = '';
     updateDMHeader(activeDMTarget.name);
     openPanel();
-    showDMStatus('\u26a1 Chat efimero \u00b7 Los mensajes no se guardan');
+    showDMStatus('\u26a1 Chat efimero rotativo \u00b7 Ultimos mensajes guardados');
+
+    // Cargar buffer rotativo local guardado (máximo 8 mensajes)
+    const savedMessages = loadDMMessagesFromStorage(convId);
+    savedMessages.forEach(msg => {
+        const isOwn = (msg.senderEmail || '').toLowerCase() === myEmail.toLowerCase();
+        renderDMMessage(msg, isOwn);
+    });
+
     subscribeToDMChannel(convId);
 
     unreadDMCount = 0;
@@ -184,7 +196,7 @@ function showDMEmptyState() {
                 <div class="dm-empty-icon">\ud83d\udcac</div>
                 <h3>Mensajes Directos</h3>
                 <p>Haz clic en el icono <strong>\ud83d\udcac</strong> junto a un usuario en la lista de miembros para iniciar una conversacion privada.</p>
-                <div class="dm-empty-note">\u26a1 Los mensajes son efimeros \u2014 no se guardan</div>
+                <div class="dm-empty-note">\u26a1 Los mensajes son efimeros rotativos \u2014 Auto-limpieza activa</div>
             </div>
         `;
     }
@@ -205,6 +217,7 @@ function subscribeToDMChannel(convId) {
     activeDMChannel
         .on('broadcast', { event: 'dm' }, ({ payload }) => {
             if (payload.convId !== activeDMConvId) return;
+            saveDMMessageToStorage(payload.convId, payload);
             renderDMMessage({ text: payload.text, senderName: payload.senderName, ts: payload.ts }, false);
             if (!isPanelOpen) {
                 unreadDMCount++;
@@ -258,6 +271,31 @@ function unsubscribeDMChannel() {
 function sendDM() {
     if (!dmTextarea || !activeDMChannel || !activeDMConvId) return;
     const text = dmTextarea.value.trim();
+let activeDMReplyTarget = null; // { author: string, text: string }
+
+function setDMReplyTarget(author, text) {
+    activeDMReplyTarget = { author, text };
+    const bar = document.getElementById('dm-reply-preview-bar');
+    const authorEl = document.getElementById('dm-reply-target-author');
+    const textEl = document.getElementById('dm-reply-target-text');
+    if (bar && authorEl && textEl) {
+        authorEl.textContent = author;
+        textEl.textContent = text.length > 50 ? text.slice(0, 50) + '…' : text;
+        bar.classList.remove('hidden');
+    }
+    if (dmTextarea) dmTextarea.focus();
+}
+
+function clearDMReplyTarget() {
+    activeDMReplyTarget = null;
+    const bar = document.getElementById('dm-reply-preview-bar');
+    if (bar) bar.classList.add('hidden');
+}
+
+// --- ENVIAR ---
+function sendDM() {
+    if (!dmTextarea || !activeDMChannel || !activeDMConvId) return;
+    const text = dmTextarea.value.trim();
     if (!text) return;
 
     const payload = {
@@ -265,9 +303,13 @@ function sendDM() {
         senderEmail: getMyEmail(),
         senderName: getMyName(),
         text,
-        ts: Date.now()
+        ts: Date.now(),
+        replyTo: activeDMReplyTarget ? { author: activeDMReplyTarget.author, text: activeDMReplyTarget.text } : null
     };
 
+    clearDMReplyTarget();
+
+    saveDMMessageToStorage(activeDMConvId, payload);
     renderDMMessage(payload, true);
     activeDMChannel.send({ type: 'broadcast', event: 'dm', payload });
 
@@ -303,6 +345,36 @@ function sendDM() {
     dmTextarea.focus();
 }
 
+// --- GESTION DE ALMACENAMIENTO EFIMERO ROTATIVO (MAX 4 POR USUARIO / 8 TOTALES) ---
+const MAX_MESSAGES_PER_CONV = 8; // Max 4 de cada persona
+
+function loadDMMessagesFromStorage(convId) {
+    try {
+        const raw = localStorage.getItem(`nexus_dm_buffer_${convId}`);
+        if (!raw) return [];
+        return JSON.parse(raw) || [];
+    } catch(e) {
+        return [];
+    }
+}
+
+function saveDMMessageToStorage(convId, msg) {
+    try {
+        let list = loadDMMessagesFromStorage(convId);
+        list.push(msg);
+        
+        // Si excede el máximo rotativo (8 mensajes), eliminar los más antiguos
+        if (list.length > MAX_MESSAGES_PER_CONV) {
+            list = list.slice(list.length - MAX_MESSAGES_PER_CONV);
+        }
+        
+        localStorage.setItem(`nexus_dm_buffer_${convId}`, JSON.stringify(list));
+        return list;
+    } catch(e) {
+        return [];
+    }
+}
+
 // --- RENDER ---
 function renderDMMessage(msg, isOwn) {
     if (!dmMessages) return;
@@ -313,18 +385,48 @@ function renderDMMessage(msg, isOwn) {
     const myData = getAvatarData(getMyName());
     const timeStr = relTime(msg.ts || Date.now());
 
+    const safeAuthor = (msg.senderName || '').replace(/'/g, "\\'");
+    const safeText = (msg.text || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+
+    let replyQuoteHtml = '';
+    if (msg.replyTo) {
+        replyQuoteHtml = `
+            <div class="message-reply-quote" style="margin-bottom: 4px;">
+                <span>↩️</span>
+                <span class="reply-quote-author">${esc(msg.replyTo.author)}:</span>
+                <span class="reply-quote-text">${esc(msg.replyTo.text.length > 40 ? msg.replyTo.text.slice(0, 40) + '…' : msg.replyTo.text)}</span>
+            </div>
+        `;
+    }
+
+    const replyBtnHtml = `<button class="reply-msg-btn" onclick="window.replyToDMMessage('${safeAuthor}', '${safeText}')" title="Responder">↩️</button>`;
+
     const bubble = document.createElement('div');
     bubble.className = `dm-message ${isOwn ? 'dm-message-own' : 'dm-message-other'}`;
     bubble.innerHTML = `
         ${!isOwn ? `<div class="dm-msg-avatar" style="background:${color}" title="${esc(msg.senderName)}">${initial}</div>` : ''}
         <div class="dm-bubble-wrapper">
-            ${!isOwn ? `<div class="dm-msg-name">${esc(msg.senderName)}</div>` : ''}
-            <div class="dm-bubble ${isOwn ? 'dm-bubble-own' : 'dm-bubble-other'}">${esc(msg.text)}</div>
+            ${replyQuoteHtml}
+            ${!isOwn ? `<div class="dm-msg-name" style="display:flex;align-items:center;justify-content:space-between;"><span>${esc(msg.senderName)}</span> ${replyBtnHtml}</div>` : ''}
+            <div class="dm-bubble ${isOwn ? 'dm-bubble-own' : 'dm-bubble-other'}">
+                ${esc(msg.text)}
+                ${isOwn ? `<span style="float:right;margin-left:8px;">${replyBtnHtml}</span>` : ''}
+            </div>
             <div class="dm-msg-time">${timeStr}</div>
         </div>
         ${isOwn ? `<div class="dm-msg-avatar dm-msg-avatar-own" style="background:${myData.color}" title="Tu">${myData.initial}</div>` : ''}
     `;
     dmMessages.appendChild(bubble);
+
+    // Auto-limpieza en memoria del DOM: Mantener solo los últimos MAX_MESSAGES_PER_CONV mensajes visuales
+    const currentMsgElements = dmMessages.querySelectorAll('.dm-message');
+    if (currentMsgElements.length > MAX_MESSAGES_PER_CONV) {
+        const toRemoveCount = currentMsgElements.length - MAX_MESSAGES_PER_CONV;
+        for (let i = 0; i < toRemoveCount; i++) {
+            currentMsgElements[i].remove();
+        }
+    }
+
     dmMessages.scrollTop = dmMessages.scrollHeight;
 }
 

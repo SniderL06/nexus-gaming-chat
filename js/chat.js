@@ -171,6 +171,10 @@ export function initChat() {
     stickerUploadInput  = document.getElementById('sticker-upload-input');
     uploadStickerBtn    = document.getElementById('upload-sticker-btn');
 
+    window.replyToMessage = setReplyTarget;
+    const replyPreviewCloseBtn = document.getElementById('reply-preview-close-btn');
+    if (replyPreviewCloseBtn) replyPreviewCloseBtn.addEventListener('click', clearReplyTarget);
+
     renderMessages();
     startTimestampRefreshLoop();
 
@@ -627,10 +631,117 @@ function createMessageElement(msg) {
 
     const isOp = isUserOp(msg.author);
     const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">👑</span>' : '';
+// --- ESTADO Y FUNCIONES DE RESPUESTA A MENSAJES ---
+let activeReplyTarget = null; // { author: string, text: string }
+
+function setReplyTarget(author, text) {
+    activeReplyTarget = { author, text };
+    const bar = document.getElementById('reply-preview-bar');
+    const authorEl = document.getElementById('reply-target-author');
+    const textEl = document.getElementById('reply-target-text');
+    if (bar && authorEl && textEl) {
+        authorEl.textContent = author;
+        textEl.textContent = text.length > 60 ? text.slice(0, 60) + '…' : text;
+        bar.classList.remove('hidden');
+    }
+    if (chatTextarea) chatTextarea.focus();
+}
+
+function clearReplyTarget() {
+    activeReplyTarget = null;
+    const bar = document.getElementById('reply-preview-bar');
+    if (bar) bar.classList.add('hidden');
+}
+
+// Formateador de texto con menciones @usuario
+function formatMessageTextWithMentions(text) {
+    if (!text) return '';
+    const myName = getLocalUserName().toLowerCase();
+    const escaped = escapeHTML(text);
+    // Reemplazar patrones @nombre por etiquetas destacadas
+    return escaped.replace(/@([a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]+)/g, (match, username) => {
+        const isMe = username.toLowerCase() === myName;
+        return `<span class="mention-tag ${isMe ? 'mention-me' : ''}">@${username}</span>`;
+    });
+}
+
+function createMessageElement(msg) {
+    const item = document.createElement('div');
+    const isSticker = msg.text && msg.text.startsWith('[Sticker]');
+    item.className = `message-item ${isSticker ? 'sticker-msg' : ''}`;
+    item.setAttribute('data-id', msg.id);
+
+    const ts = msg.ts || Date.now();
+    const timeLabel = relativeTime(ts);
+
+    let imageHtml = '';
+    if (msg.image) {
+        if (isSticker) {
+            imageHtml = `
+                <img class="sticker-display" src="${msg.image}" alt="Sticker">
+            `;
+        } else {
+            const safeImg    = msg.image.replace(/'/g, "\\'");
+            const safeAuthor = msg.author.replace(/'/g, "\\'");
+            imageHtml = `
+                <div class="shared-image-container" onclick="window.openLightbox('${safeImg}', '${safeAuthor}')">
+                    <img src="${msg.image}" alt="Imagen compartida por ${escapeHTML(msg.author)}">
+                    <div class="shared-image-overlay">🔍 AMPLIAR</div>
+                </div>
+            `;
+        }
+    }
+
+    let fileHtml = '';
+    if (msg.file) {
+        const ext = msg.file.name.split('.').pop().toLowerCase();
+        let fileClass = 'file-generic', fileEmoji = '📄';
+        if (ext === 'pdf') { fileClass = 'file-pdf'; fileEmoji = '📕'; }
+        else if (['zip','rar','7z','tar','gz'].includes(ext)) { fileClass = 'file-zip'; fileEmoji = '📦'; }
+        else if (['doc','docx'].includes(ext)) { fileClass = 'file-doc'; fileEmoji = '📘'; }
+        else if (['xls','xlsx'].includes(ext)) { fileClass = 'file-xls'; fileEmoji = '📗'; }
+        else if (['mp3','wav','ogg','flac'].includes(ext)) { fileClass = 'file-audio'; fileEmoji = '🎵'; }
+        fileHtml = `
+            <div class="file-attachment-card ${fileClass}">
+                <div class="file-icon">${fileEmoji}</div>
+                <div class="file-info">
+                    <span class="file-name" title="${escapeHTML(msg.file.name)}">${escapeHTML(msg.file.name)}</span>
+                    <span class="file-size">${escapeHTML(msg.file.size)}</span>
+                </div>
+                <a href="${msg.file.dataUrl}" download="${escapeHTML(msg.file.name)}" class="file-download-btn">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    <span>Descargar</span>
+                </a>
+            </div>
+        `;
+    }
+
+    let avatarHtml = '';
+    const myName = getLocalUserName();
+    const savedAvatar = getLocalUserAvatar();
+    const savedStyle = getLocalUserAvatarStyle();
+    const borderRadiusStyle = savedStyle === 'circle' ? '50%' : '10px';
+    
+    // Obtener la imagen base para enviarla al perfil
+    let rawAvatarSrc = '';
+    if (msg.author === myName && savedAvatar) {
+        rawAvatarSrc = savedAvatar;
+        avatarHtml = `<div class="avatar" style="background-image: url(${savedAvatar}); background-size: cover; background-position: center; border-radius: ${borderRadiusStyle}; width: 100%; height: 100%;"></div>`;
+    } else if (msg.author === 'Nexus Music Bot') {
+        avatarHtml = `<div class="avatar" style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%); color:#fff; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; border-radius: 50%;">🎵</div>`;
+    } else if (msg.avatar && msg.avatar.startsWith('data:image/')) {
+        rawAvatarSrc = msg.avatar;
+        avatarHtml = `<div class="avatar" style="background-image: url(${msg.avatar}); background-size: cover; background-position: center; border-radius: 50%; width: 100%; height: 100%;"></div>`;
+    } else {
+        avatarHtml = `<div class="avatar ${msg.avatarBg || 'bg-blue'}">${escapeHTML(msg.avatar || msg.author.charAt(0))}</div>`;
+    }
+
+    const isOp = isUserOp(msg.author);
+    const opCrown = isOp ? '<span class="badge-op" title="Operator (OP)">👑</span>' : '';
     const isMusicBot = msg.author === 'Nexus Music Bot';
     const botBadge = isMusicBot ? '<span style="background:#db2777;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 4px;border-radius:4px;margin-left:6px;font-family:\'Orbitron\'">BOT</span>' : '';
 
-    // Modificación de permisos de eliminación de mensajes: SOLO para sniderquiros5@gmail.com
+    // Permisos de eliminación
     const currentEmail = localStorage.getItem('nexus_user_email') || '';
     const isGlobalAdmin = currentEmail.toLowerCase() === 'sniderquiros5@gmail.com';
     const deleteBtnHtml = (isGlobalAdmin && !isMusicBot) ? `<button class="delete-msg-btn" onclick="deleteMessage('${msg.id}')" title="Borrar mensaje">🗑️</button>` : '';
@@ -639,15 +750,33 @@ function createMessageElement(msg) {
     const safeAuthor = msg.author.replace(/'/g, "\\'");
     const safeAvatar = rawAvatarSrc.replace(/'/g, "\\'");
     const safeBg = (msg.avatarBg || 'bg-blue').replace(/'/g, "\\'");
+    const safeMsgText = (msg.text || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+
+    // Cita si el mensaje es una respuesta
+    let replyQuoteHtml = '';
+    if (msg.replyTo) {
+        replyQuoteHtml = `
+            <div class="message-reply-quote">
+                <span>↩️</span>
+                <span class="reply-quote-author">${escapeHTML(msg.replyTo.author)}:</span>
+                <span class="reply-quote-text">${escapeHTML(msg.replyTo.text.length > 50 ? msg.replyTo.text.slice(0, 50) + '…' : msg.replyTo.text)}</span>
+            </div>
+        `;
+    }
+
+    // Botón responder
+    const replyBtnHtml = `<button class="reply-msg-btn" onclick="window.replyToMessage('${safeAuthor}', '${safeMsgText}')" title="Responder">↩️ Responder</button>`;
 
     item.innerHTML = `
         <div class="avatar-container small" onclick="window.openUserProfile('${safeAuthor}', '${safeAvatar}', '${safeBg}')" style="cursor: pointer;">${avatarHtml}</div>
         <div class="message-content-wrapper">
+            ${replyQuoteHtml}
             <div class="message-meta">
                 <span class="message-author" onclick="window.openUserProfile('${safeAuthor}', '${safeAvatar}', '${safeBg}')" style="cursor: pointer; hover: underline;">${escapeHTML(msg.author)}${botBadge}${opCrown}</span>
                 <span class="message-time" data-ts="${ts}" title="${new Date(ts).toLocaleString('es-MX')}">${timeLabel}</span>
+                ${replyBtnHtml}
             </div>
-            <div class="message-text">${escapeHTML(msg.text)}</div>
+            <div class="message-text">${formatMessageTextWithMentions(msg.text)}</div>
             ${imageHtml}
             ${fileHtml}
         </div>
@@ -905,8 +1034,12 @@ async function sendMessage() {
         avatar: avatarPayload,
         avatarBg: savedAvatarBg,
         ts,
-        text
+        text,
+        replyTo: activeReplyTarget ? { author: activeReplyTarget.author, text: activeReplyTarget.text } : null
     };
+
+    // Limpiar barra de respuesta
+    clearReplyTarget();
 
     if (activeAttachment) {
         if (activeAttachment.isImage) newMsg.image = activeAttachment.dataUrl;

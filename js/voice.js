@@ -633,6 +633,15 @@ export function initVoice() {
         });
     }
 
+    // Botón de acceso rápido a Ajustes de Micrófono / Audio
+    const quickAudioSettingsBtn = document.getElementById('voice-settings-quick-btn');
+    if (quickAudioSettingsBtn) {
+        quickAudioSettingsBtn.addEventListener('click', () => {
+            const themePanel = document.getElementById('theme-panel');
+            if (themePanel) themePanel.classList.add('active');
+        });
+    }
+
     // --- ENLACE A AJUSTES DE AUDIO (ENTRADA Y SALIDA) ---
     initAudioDevicesConfig();
 }
@@ -662,6 +671,21 @@ async function initAudioDevicesConfig() {
             // Si estamos en un canal de voz activo, reconectar el micrófono en caliente
             if (state.activeVoiceChannel) {
                 await startAudioEngine();
+                // Actualizar el track enviando a los peers en caliente
+                const newAudioTrack = microphoneStream ? microphoneStream.getAudioTracks()[0] : null;
+                if (newAudioTrack && activePeers.size > 0) {
+                    activePeers.forEach(({ call }) => {
+                        if (call && call.peerConnection) {
+                            const senders = call.peerConnection.getSenders();
+                            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+                            if (audioSender) {
+                                audioSender.replaceTrack(newAudioTrack).catch(err => {
+                                    console.warn('[Audio Config] Error reemplazando track en llamada PeerJS:', err);
+                                });
+                            }
+                        }
+                    });
+                }
             }
         });
     }
@@ -1442,15 +1466,17 @@ export function disconnectVoiceChannel(triggerUI = true) {
 // Iniciar Captura de Audio Real (WebRTC Simulator)
 async function startAudioEngine() {
     try {
-        // Solo detener el stream anterior si NO hay peers activos.
-        // Si hay peers conectados, reutilizamos el stream existente para no
-        // romper las llamadas WebRTC activas (evita el bug de "micrófono mudo al activar cámara/stream").
+        // Forzar captura si el usuario cambió el ID del micrófono
         const hasPeers = activePeers.size > 0;
-        if (microphoneStream && !hasPeers) {
+        const currentTrack = microphoneStream ? microphoneStream.getAudioTracks()[0] : null;
+        const currentSettings = currentTrack ? currentTrack.getSettings() : {};
+        const deviceChanged = selectedInputDeviceId !== 'default' && currentSettings.deviceId !== selectedInputDeviceId;
+
+        if (microphoneStream && (!hasPeers || deviceChanged)) {
             microphoneStream.getTracks().forEach(track => track.stop());
             microphoneStream = null;
-        } else if (microphoneStream && hasPeers) {
-            // Ya tenemos un stream de mic activo con peers — solo reiniciar el analizador y salir
+        } else if (microphoneStream && hasPeers && !deviceChanged) {
+            // Ya tenemos un stream de mic activo con peers y el id no ha cambiado — solo reiniciar analizador
             console.log('[Audio] Reutilizando microphoneStream existente (hay peers activos).');
             resizeCanvas();
             drawVisualizer();
