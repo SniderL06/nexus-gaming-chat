@@ -1397,20 +1397,27 @@ export function disconnectVoiceChannel(triggerUI = true) {
             if (audioEl) { audioEl.srcObject = null; audioEl.remove(); }
         });
         activePeers.clear();
-        localPeerId = null;
-
-        // Desregistrar presencia
+        // Desregistrar presencia y desuscribirse limpiamente
         if (presenceChannel && supabase) {
-            supabase.removeChannel(presenceChannel);
+            try {
+                presenceChannel.untrack();
+                supabase.removeChannel(presenceChannel);
+            } catch(e){}
             presenceChannel = null;
         }
 
         // Destruir instancia PeerJS
         if (peer) {
-            peer.destroy();
+            try { peer.destroy(); } catch(e){}
             peer = null;
         }
         isMultiplayerMode = false;
+    }
+
+    // Limpiar árbol de miembros en la barra lateral
+    if (prevChannel) {
+        const usersContainer = document.getElementById(`voice-users-${prevChannel}`);
+        if (usersContainer) usersContainer.innerHTML = '';
     }
 
     // Detener analizador y streams reales

@@ -126,17 +126,22 @@ async function startLocalStream() {
                 }
             });
 
-            // Actualizar presencia para marcar isStreaming: true
+            // Actualizar presencia para marcar isStreaming: true manteniendo avatar y email
             if (presenceChannel) {
-                const myEmail = localStorage.getItem('nexus_user_email') || '';
+                const email = localStorage.getItem('nexus_user_email') || '';
+                const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+                const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
                 let myName = 'Usuario Nexus';
-                if (myEmail) {
-                    const base = myEmail.split('@')[0];
-                    myName = base.charAt(0).toUpperCase() + base.slice(1);
+                if (email) {
+                    const customName = localStorage.getItem('nexus_username_' + email);
+                    myName = customName || (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1));
                 }
                 presenceChannel.track({
                     name: myName,
-                    peerId: peer.id,
+                    email: email.toLowerCase(),
+                    peerId: peer ? peer.id : null,
+                    avatar: myAvatar,
+                    avatarStyle: myAvatarStyle,
                     isMuted: state.isMuted,
                     isStreaming: true,
                     joinedAt: Date.now()

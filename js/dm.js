@@ -130,13 +130,18 @@ function subscribeToNotifyChannel(myEmail) {
     notifyChannel
         .on('broadcast', { event: 'dm-ping' }, ({ payload }) => {
             // Alguien nos envió un DM y nosotros no estábamos en ese canal
-            const { senderEmail, senderName, convId, text, ts } = payload;
+            const { senderEmail, senderName, convId, text, ts, replyTo } = payload;
 
-            // Si ya tenemos ese conv activo y el panel abierto, ignorar (ya llegara por el canal DM)
-            if (convId === activeDMConvId && isPanelOpen) return;
+            // Guardar en el almacenamiento rotativo local para que no se pierda el mensaje
+            saveDMMessageToStorage(convId, { convId, senderEmail, senderName, text, ts, replyTo });
 
-            // Si el panel está abierto en ESA conversación, ignorar
-            if (convId === activeDMConvId) return;
+            // Si el panel está abierto en esa conversación, renderizar el mensaje recibido
+            if (convId === activeDMConvId) {
+                if (isPanelOpen) {
+                    renderDMMessage({ text, senderName, ts, replyTo }, false);
+                }
+                return;
+            }
 
             // Mostrar toast de notificación con botón para abrir
             showDMPingToast(senderEmail, senderName, text, ts);
@@ -208,17 +213,22 @@ function showDMEmptyState() {
 
 // --- SUSCRIPCION BROADCAST ---
 function subscribeToDMChannel(convId) {
-    if (!supabase) { showDMStatus('\u26a0\ufe0f Sin conexion a Supabase'); return; }
+    if (!supabase) { showDMStatus('⚠️ Sin conexión a Supabase'); return; }
+
+    const myKey = getMyEmail().toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
 
     activeDMChannel = supabase.channel(`dm-broadcast:${convId}`, {
-        config: { broadcast: { self: false } }
+        config: {
+            broadcast: { self: false },
+            presence: { key: myKey }
+        }
     });
 
     activeDMChannel
         .on('broadcast', { event: 'dm' }, ({ payload }) => {
             if (payload.convId !== activeDMConvId) return;
             saveDMMessageToStorage(payload.convId, payload);
-            renderDMMessage({ text: payload.text, senderName: payload.senderName, ts: payload.ts }, false);
+            renderDMMessage({ text: payload.text, senderName: payload.senderName, ts: payload.ts, replyTo: payload.replyTo }, false);
             if (!isPanelOpen) {
                 unreadDMCount++;
                 updateDMBadge();
@@ -227,25 +237,25 @@ function subscribeToDMChannel(convId) {
         })
         .on('presence', { event: 'sync' }, () => {
             const st = activeDMChannel.presenceState();
-            const otherOnline = Object.keys(st).some(k => k !== getMyEmail().toLowerCase());
-            if (otherOnline) showDMStatus(`\u2705 ${activeDMTarget.name} esta en la conversacion`);
-            else showDMStatus(`\u23f3 Esperando a que ${activeDMTarget.name} abra el chat...`);
+            const otherOnline = Object.keys(st).some(k => k !== myKey);
+            if (otherOnline) showDMStatus(`✅ ${activeDMTarget.name} está en la conversación`);
+            else showDMStatus(`⏳ Esperando a que ${activeDMTarget.name} abra el chat...`);
         })
         .on('presence', { event: 'join' }, ({ key }) => {
-            if (key !== getMyEmail().toLowerCase()) {
-                showDMStatus(`\u2705 ${activeDMTarget.name} esta en la conversacion`);
-                appendSystemMessage(`${activeDMTarget.name} se unio al chat`);
+            if (key !== myKey) {
+                showDMStatus(`✅ ${activeDMTarget.name} está en la conversación`);
+                appendSystemMessage(`${activeDMTarget.name} se unió al chat`);
             }
         })
         .on('presence', { event: 'leave' }, ({ key }) => {
-            if (key !== getMyEmail().toLowerCase()) {
-                showDMStatus(`\u23f3 ${activeDMTarget.name} salio del chat`);
-                appendSystemMessage(`${activeDMTarget.name} salio del chat`);
+            if (key !== myKey) {
+                showDMStatus(`⏳ ${activeDMTarget.name} salió del chat`);
+                appendSystemMessage(`${activeDMTarget.name} salió del chat`);
             }
         })
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                await activeDMChannel.track({ email: getMyEmail() });
+                await activeDMChannel.track({ email: getMyEmail(), name: getMyName() });
                 if (dmTextarea) {
                     dmTextarea.disabled = false;
                     dmTextarea.placeholder = `Mensaje privado a ${activeDMTarget.name}... (Enter para enviar)`;
@@ -253,7 +263,7 @@ function subscribeToDMChannel(convId) {
                 }
                 if (dmSendBtn) dmSendBtn.disabled = false;
             } else if (status === 'CHANNEL_ERROR') {
-                showDMStatus('\u26a0\ufe0f Error en canal \u2014 reintentando...');
+                showDMStatus('⚠️ Error en canal — reintentando...');
                 setTimeout(() => subscribeToDMChannel(convId), 3000);
             }
         });
@@ -325,7 +335,8 @@ function sendDM() {
                         senderEmail: getMyEmail(),
                         senderName: getMyName(),
                         text: payload.text,
-                        ts: payload.ts
+                        ts: payload.ts,
+                        replyTo: payload.replyTo
                     }
                 });
                 // Desuscribir después de enviar (canal de un solo uso)
