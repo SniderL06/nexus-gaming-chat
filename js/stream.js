@@ -51,20 +51,32 @@ export async function toggleLocalStream() {
     }
 }
 
-// Iniciar Captura de Pantalla Real (getDisplayMedia API)
 async function startLocalStream() {
     const startTime = performance.now();
     
-    console.log('[Stream] Solicitando captura de pantalla / Juego al navegador...');
+    // Obtener configuración de calidad elegida por el usuario
+    const qualitySelect = document.getElementById('stream-quality-select');
+    const fpsSelect = document.getElementById('stream-fps-select');
+    const targetFps = fpsSelect ? parseInt(fpsSelect.value, 10) : 60;
+    const targetQuality = qualitySelect ? qualitySelect.value : '1080p';
+
+    let width = 1920, height = 1080;
+    if (targetQuality === '480p') { width = 854; height = 480; }
+    else if (targetQuality === '720p') { width = 1280; height = 720; }
+    else if (targetQuality === '1080p') { width = 1920; height = 1080; }
+    else if (targetQuality === '1440p') { width = 2560; height = 1440; }
+    else if (targetQuality === '4k') { width = 3840; height = 2160; }
+
+    console.log(`[Stream] Capturando a ${width}x${height} @ ${targetFps} FPS (${targetQuality})...`);
     
     try {
-        // Invoca el diálogo nativo del navegador para elegir pantalla, ventana o pestaña
+        // Invoca el diálogo nativo del navegador con la resolución y tasa de refresco seleccionada
         activeStream = await navigator.mediaDevices.getDisplayMedia({
             video: {
                 cursor: 'always',
-                frameRate: { ideal: 60, max: 60 },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                frameRate: { ideal: targetFps, max: targetFps },
+                width: { ideal: width, max: width },
+                height: { ideal: height, max: height }
             },
             audio: {
                 echoCancellation: true,
@@ -87,6 +99,13 @@ async function startLocalStream() {
         // Mostrar contenedor en UI
         if (streamContainer) streamContainer.classList.remove('hidden');
         if (streamPlaceholder) streamPlaceholder.classList.add('hidden');
+
+        // Actualizar indicador de calidad en pantalla
+        const qualityIndicator = document.getElementById('stream-quality-indicator');
+        if (qualityIndicator) {
+            const qualityLabels = { '480p': '480p', '720p': '720p HD', '1080p': '1080p Full HD', '1440p': '2K QHD', '4k': '4K Ultra HD' };
+            qualityIndicator.textContent = `Calidad: ${qualityLabels[targetQuality] || targetQuality} @ ${targetFps} FPS (Seleccionado)`;
+        }
 
         // Actualizar botón de la barra de usuario
         if (goLiveBtn) {
@@ -199,17 +218,22 @@ export function stopLocalStream() {
             }
         });
 
-        // Actualizar presencia para marcar isStreaming: false
-        if (presenceChannel && peer) {
-            const myEmail = localStorage.getItem('nexus_user_email') || '';
+        // Actualizar presencia para marcar isStreaming: false manteniendo avatar y email
+        if (presenceChannel) {
+            const email = localStorage.getItem('nexus_user_email') || '';
+            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             let myName = 'Usuario Nexus';
-            if (myEmail) {
-                const base = myEmail.split('@')[0];
-                myName = base.charAt(0).toUpperCase() + base.slice(1);
+            if (email) {
+                const customName = localStorage.getItem('nexus_username_' + email);
+                myName = customName || (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1));
             }
             presenceChannel.track({
                 name: myName,
-                peerId: peer.id,
+                email: email.toLowerCase(),
+                peerId: peer ? peer.id : null,
+                avatar: myAvatar,
+                avatarStyle: myAvatarStyle,
                 isMuted: state.isMuted,
                 isStreaming: false,
                 joinedAt: Date.now()

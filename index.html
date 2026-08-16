@@ -285,7 +285,7 @@
                     </div>
                     <div class="stream-controls">
                         <div class="control-group">
-                            <span class="quality-label">Calidad: 1080p @ 60 FPS (Auto)</span>
+                            <span class="quality-label" id="stream-quality-indicator">Calidad: 1080p @ 60 FPS (Auto)</span>
                         </div>
                         <div class="control-group">
                             <button class="control-btn" id="stream-mic-toggle">Mic Off</button>
@@ -633,6 +633,28 @@
                     <div class="mic-level-meter" style="width: 100%; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden; position: relative;">
                         <div id="mic-level-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-green) 0%, var(--accent-idle) 70%, var(--accent-orange) 100%); transition: width 0.05s ease;"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN: TRANSMISIÓN DE PANTALLA Y JUEGOS -->
+            <div class="theme-section-label">📺 CALIDAD DE TRANSMISIÓN (DIRECTO)</div>
+            <div class="stream-settings-area" style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; border-bottom: var(--border-dark); padding-bottom: 24px;">
+                <div class="color-picker-group">
+                    <label for="stream-quality-select">Resolución de Pantalla / Juego</label>
+                    <select id="stream-quality-select" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 8px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.8rem; font-family: inherit;">
+                        <option value="480p">480p (Fluido / Bajo consumo)</option>
+                        <option value="720p">720p HD (Equilibrado)</option>
+                        <option value="1080p" selected>1080p Full HD (Recomendado)</option>
+                        <option value="1440p">2K QHD (Alta definición)</option>
+                        <option value="4k">4K Ultra HD (Máxima calidad)</option>
+                    </select>
+                </div>
+                <div class="color-picker-group">
+                    <label for="stream-fps-select">Tasa de Frames (FPS)</label>
+                    <select id="stream-fps-select" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 8px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.8rem; font-family: inherit;">
+                        <option value="30">30 FPS (Ahorro de batería)</option>
+                        <option value="60" selected>60 FPS (Ultra Suave / Gaming)</option>
+                    </select>
                 </div>
             </div>
 

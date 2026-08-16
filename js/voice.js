@@ -1089,6 +1089,7 @@ async function joinMultiplayerVoice(channelId) {
                 const { attachRemoteCameraToCard } = await import('./camera.js');
                 attachRemoteCameraToCard(call.peer, remoteStream, remoteName);
             } else {
+                // Si es 'screen' o si la pista incluye vídeo, reproducirlo en el reproductor de directo
                 playRemoteStream(call.peer, remoteStream);
             }
         });
@@ -1270,6 +1271,23 @@ function callPeer(remotePeerId, remoteName) {
         playRemoteStream(remotePeerId, remoteStream);
     });
 
+    // Monitor de salud de la conexión WebRTC P2P (auto-recuperación si cae el audio)
+    if (call.peerConnection) {
+        call.peerConnection.oniceconnectionstatechange = () => {
+            const iceState = call.peerConnection.iceConnectionState;
+            console.log(`[WebRTC P2P] Estado de conexión ICE con ${remoteName}: ${iceState}`);
+            if (iceState === 'disconnected' || iceState === 'failed') {
+                console.warn(`[WebRTC P2P] Conexión caída con ${remoteName}. Reintentando reconexión...`);
+                removeRemoteAudio(remotePeerId);
+                setTimeout(() => {
+                    if (state.activeVoiceChannel && isMultiplayerMode && !activePeers.has(remotePeerId)) {
+                        callPeer(remotePeerId, remoteName);
+                    }
+                }, 1500);
+            }
+        };
+    }
+
     call.on('close', () => removeRemoteAudio(remotePeerId));
     call.on('error', (err) => console.error(`[PeerJS] Error en llamada a ${remoteName}:`, err));
 
@@ -1320,8 +1338,17 @@ function playRemoteStream(peerId, remoteStream) {
         if (placeholder) placeholder.classList.add('hidden');
         
         if (titleEl) {
-            const peerInfo = activeMembersInRoom.find(m => m.peerId === peerId);
-            titleEl.textContent = `Directo de ${peerInfo ? peerInfo.name : 'Usuario Remoto'}`;
+            let peerInfo = activeMembersInRoom.find(m => m.peerId === peerId);
+            let broadcasterName = peerInfo ? peerInfo.name : null;
+            if (!broadcasterName && presenceChannel) {
+                const state = presenceChannel.presenceState();
+                Object.values(state).forEach(list => {
+                    list.forEach(p => {
+                        if (p.peerId === peerId && p.name) broadcasterName = p.name;
+                    });
+                });
+            }
+            titleEl.textContent = `Directo de ${broadcasterName || 'Usuario Remoto'}`;
         }
 
         // Registrar la llamada de video en activePeers
@@ -1342,8 +1369,21 @@ function playRemoteStream(peerId, remoteStream) {
         audioEl.style.display = 'none';
         document.body.appendChild(audioEl);
     }
+    
     audioEl.srcObject = remoteStream;
     audioEl.volume = state.isDeafened ? 0 : audioOutputVolume;
+
+    // Asegurar reproducción fluida si el navegador pausa el audio por inactividad
+    audioEl.play().catch(err => {
+        console.warn(`[Audio WebRTC] Autoplay bloqueado para peer ${peerId}, reintentando en interacción:`, err);
+        const resumeOnUserAction = () => {
+            audioEl.play().catch(() => {});
+            document.removeEventListener('click', resumeOnUserAction);
+            document.removeEventListener('keydown', resumeOnUserAction);
+        };
+        document.addEventListener('click', resumeOnUserAction);
+        document.addEventListener('keydown', resumeOnUserAction);
+    });
 
     if (selectedOutputDeviceId !== 'default' && typeof audioEl.setSinkId === 'function') {
         audioEl.setSinkId(selectedOutputDeviceId).catch(() => {});
