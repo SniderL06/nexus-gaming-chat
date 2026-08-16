@@ -100,18 +100,26 @@ async function startLocalStream() {
     
     try {
         // Invoca el diálogo nativo del navegador con la resolución y tasa de refresco seleccionada
-        activeStream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-                cursor: 'always',
-                frameRate: { ideal: targetFps, max: targetFps },
-                width: { ideal: width, max: width },
-                height: { ideal: height, max: height }
-            },
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true
-            }
-        });
+        try {
+            activeStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: 'always',
+                    frameRate: { ideal: targetFps, max: targetFps },
+                    width: { ideal: width, max: width },
+                    height: { ideal: height, max: height }
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }
+            });
+        } catch (strictErr) {
+            console.warn('[Stream] Fallo al capturar con restricciones estrictas de resolución. Reintentando con configuración básica...', strictErr);
+            activeStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { cursor: 'always', frameRate: { ideal: targetFps } },
+                audio: true
+            });
+        }
 
         console.log('[Stream] Captura autorizada correctamente.');
         state.isStreaming = true;
