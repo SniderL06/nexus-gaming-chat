@@ -632,19 +632,54 @@ async function initAudioDevicesConfig() {
     const outputVolLabel = document.getElementById('audio-output-vol-label');
     const micTestBtn = document.getElementById('mic-test-btn');
 
+    // Restaurar dispositivos y volúmenes guardados previamente en localStorage
+    const savedInputId = localStorage.getItem('nexus_selected_mic_id');
+    const savedOutputId = localStorage.getItem('nexus_selected_speaker_id');
+    const savedInputVol = localStorage.getItem('nexus_audio_input_vol');
+    const savedOutputVol = localStorage.getItem('nexus_audio_output_vol');
+
+    if (savedInputId) selectedInputDeviceId = savedInputId;
+    if (savedOutputId) selectedOutputDeviceId = savedOutputId;
+
+    if (savedInputVol !== null && inputVolumeRange) {
+        inputVolumeRange.value = savedInputVol;
+        audioInputVolume = parseFloat(savedInputVol) / 100;
+        if (inputVolLabel) inputVolLabel.textContent = `${savedInputVol}%`;
+    }
+
+    if (savedOutputVol !== null && outputVolumeRange) {
+        outputVolumeRange.value = savedOutputVol;
+        audioOutputVolume = parseFloat(savedOutputVol) / 100;
+        if (outputVolLabel) outputVolLabel.textContent = `${savedOutputVol}%`;
+    }
+
     // Enumerar dispositivos reales
     await enumerateAudioDevices(inputSelect, outputSelect);
+
+    // Seleccionar opciones previamente guardadas en los selectores
+    if (inputSelect && savedInputId) {
+        const hasInputOpt = Array.from(inputSelect.options).some(opt => opt.value === savedInputId);
+        if (hasInputOpt) inputSelect.value = savedInputId;
+    }
+    if (outputSelect && savedOutputId) {
+        const hasOutputOpt = Array.from(outputSelect.options).some(opt => opt.value === savedOutputId);
+        if (hasOutputOpt) outputSelect.value = savedOutputId;
+    }
     
     // Escuchar adición/sustracción de hardware en vivo
-    navigator.mediaDevices.addEventListener('devicechange', () => {
-        enumerateAudioDevices(inputSelect, outputSelect);
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+        await enumerateAudioDevices(inputSelect, outputSelect);
+        if (inputSelect && selectedInputDeviceId) inputSelect.value = selectedInputDeviceId;
+        if (outputSelect && selectedOutputDeviceId) outputSelect.value = selectedOutputDeviceId;
     });
 
     // Eventos de dispositivo
     if (inputSelect) {
         inputSelect.addEventListener('change', async (e) => {
             selectedInputDeviceId = e.target.value;
-            console.log(`[Audio Config] Micrófono cambiado a deviceId: ${selectedInputDeviceId}`);
+            localStorage.setItem('nexus_selected_mic_id', selectedInputDeviceId);
+            console.log(`[Audio Config] Micrófono cambiado y guardado: ${selectedInputDeviceId}`);
+            
             // Si estamos en un canal de voz activo, reconectar el micrófono en caliente
             if (state.activeVoiceChannel) {
                 await startAudioEngine();
@@ -670,7 +705,8 @@ async function initAudioDevicesConfig() {
     if (outputSelect) {
         outputSelect.addEventListener('change', (e) => {
             selectedOutputDeviceId = e.target.value;
-            console.log(`[Audio Config] Altavoz/Auricular cambiado a deviceId: ${selectedOutputDeviceId}`);
+            localStorage.setItem('nexus_selected_speaker_id', selectedOutputDeviceId);
+            console.log(`[Audio Config] Altavoz/Auricular cambiado y guardado: ${selectedOutputDeviceId}`);
             applyOutputDeviceSink();
         });
     }
@@ -680,6 +716,7 @@ async function initAudioDevicesConfig() {
         inputVolumeRange.addEventListener('input', (e) => {
             const val = e.target.value;
             audioInputVolume = val / 100;
+            localStorage.setItem('nexus_audio_input_vol', val);
             if (inputVolLabel) inputVolLabel.textContent = `${val}%`;
             
             // Aplicar ganancia en caliente
@@ -693,6 +730,7 @@ async function initAudioDevicesConfig() {
         outputVolumeRange.addEventListener('input', (e) => {
             const val = e.target.value;
             audioOutputVolume = val / 100;
+            localStorage.setItem('nexus_audio_output_vol', val);
             if (outputVolLabel) outputVolLabel.textContent = `${val}%`;
             
             // Aplicar volumen general a los elementos de audio del navegador (audio tags de salida, bot de música)
@@ -1371,7 +1409,9 @@ function playRemoteStream(peerId, remoteStream) {
     }
     
     audioEl.srcObject = remoteStream;
-    audioEl.volume = state.isDeafened ? 0 : audioOutputVolume;
+    const userVol = perUserVolume.get(peerId) ?? 1.0;
+    const isMutedLocally = locallyMutedPeers.get(peerId) || false;
+    audioEl.volume = (state.isDeafened || isMutedLocally) ? 0 : userVol * audioOutputVolume;
 
     // Asegurar reproducción fluida si el navegador pausa el audio por inactividad
     audioEl.play().catch(err => {
@@ -1839,13 +1879,21 @@ function renderVoiceMembers() {
               >${locallyMuted ? '🔊' : '🔇'}</button>`
             : '';
 
-        const volumeSliderHtml = (!isUser && !member.isMusicBot && member.peerId)
-            ? `<div class="user-volume-row">
+        let volumeSliderHtml = '';
+        if (!isUser && !member.isMusicBot && member.peerId) {
+            volumeSliderHtml = `<div class="user-volume-row">
                 <span class="user-vol-icon">🔊</span>
                 <input type="range" class="user-volume-slider" min="0" max="100" value="100"
                     title="Volumen de ${member.name}" aria-label="Volumen de ${member.name}">
-               </div>`
-            : '';
+               </div>`;
+        } else if (isUser) {
+            const currentMicVol = Math.round(audioInputVolume * 100);
+            volumeSliderHtml = `<div class="user-volume-row" title="Tu Volumen de Micrófono (Ganancia)">
+                <span class="user-vol-icon">🎤</span>
+                <input type="range" class="local-mic-volume-slider" min="0" max="150" value="${currentMicVol}"
+                    title="Tu Volumen de Micrófono" aria-label="Tu Volumen de Micrófono">
+               </div>`;
+        }
 
         card.innerHTML = `
             ${speakingWave}
@@ -1858,21 +1906,57 @@ function renderVoiceMembers() {
         // Añadir tarjeta al grid
         grid.appendChild(card);
 
+        // Enlazar slider para el usuario local (ajustar su propia ganancia de micrófono)
+        if (isUser) {
+            const localSlider = card.querySelector('.local-mic-volume-slider');
+            if (localSlider) {
+                localSlider.addEventListener('input', (e) => {
+                    e.stopPropagation();
+                    const val = e.target.value;
+                    audioInputVolume = val / 100;
+                    localStorage.setItem('nexus_audio_input_vol', val);
+                    
+                    const inputVolRange = document.getElementById('audio-input-volume');
+                    const inputVolLabel = document.getElementById('audio-input-vol-label');
+                    if (inputVolRange) inputVolRange.value = val;
+                    if (inputVolLabel) inputVolLabel.textContent = `${val}%`;
+
+                    if (inputVolumeNode && audioCtx) {
+                        inputVolumeNode.gain.setValueAtTime(audioInputVolume, audioCtx.currentTime);
+                    }
+                });
+            }
+        }
+
         // Enlazar slider de volumen personal (solo para usuarios remotos, no para el usuario local ni el bot)
         if (!isUser && !member.isMusicBot && member.peerId) {
             const slider = card.querySelector('.user-volume-slider');
             if (slider) {
-                const savedVol = perUserVolume.get(member.peerId) ?? 1.0;
+                // Recuperar volumen por nombre persistido en localStorage
+                const userKey = 'nexus_user_vol_' + member.name.toLowerCase().replace(/\s+/g, '_');
+                const storedVol = localStorage.getItem(userKey);
+                const savedVol = storedVol !== null ? parseFloat(storedVol) : (perUserVolume.get(member.peerId) ?? 1.0);
+                
+                perUserVolume.set(member.peerId, savedVol);
                 slider.value = Math.round(savedVol * 100);
+
+                // Aplicar inmediatamente al elemento de audio
+                const peerData = activePeers.get(member.peerId);
+                if (peerData && peerData.audioEl) {
+                    const muted = locallyMutedPeers.get(member.peerId) || false;
+                    peerData.audioEl.volume = (state.isDeafened || muted) ? 0 : savedVol * audioOutputVolume;
+                }
+
                 slider.addEventListener('input', (e) => {
                     e.stopPropagation();
                     const newVol = e.target.value / 100;
                     perUserVolume.set(member.peerId, newVol);
-                    const peerData = activePeers.get(member.peerId);
-                    if (peerData && peerData.audioEl) {
-                        // Respetar mute local del admin
+                    localStorage.setItem(userKey, newVol);
+
+                    const pData = activePeers.get(member.peerId);
+                    if (pData && pData.audioEl) {
                         const muted = locallyMutedPeers.get(member.peerId) || false;
-                        peerData.audioEl.volume = (state.isDeafened || muted) ? 0 : newVol * audioOutputVolume;
+                        pData.audioEl.volume = (state.isDeafened || muted) ? 0 : newVol * audioOutputVolume;
                     }
                 });
             }
