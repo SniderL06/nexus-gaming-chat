@@ -736,6 +736,48 @@
         </div>
     </div>
 
+    <!-- MODAL DE SELECCIÓN DE CALIDAD DE TRANSMISIÓN (PRE-DIRECTO) -->
+    <div class="stream-quality-modal hidden" id="stream-quality-modal" style="position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);">
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-dark); width: 100%; max-width: 440px; border-radius: 12px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-dark); padding-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.4rem;">📺</span>
+                    <div>
+                        <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-normal); margin: 0;">Transmitir Pantalla / Juego</h3>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 2px 0 0 0;">Configura la resolución antes de emitir</p>
+                    </div>
+                </div>
+                <button id="stream-modal-close-btn" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="color-picker-group">
+                    <label for="modal-stream-quality-select" style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-normal); margin-bottom: 8px;">Resolución del Directo</label>
+                    <select id="modal-stream-quality-select" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 10px; color: var(--text-normal); border-radius: 8px; outline: none; font-size: 0.85rem; font-family: inherit;">
+                        <option value="480p">480p (Bajo Consumo / Móvil)</option>
+                        <option value="720p">720p HD (Equilibrado)</option>
+                        <option value="1080p" selected>1080p Full HD (Recomendado)</option>
+                        <option value="1440p">2K QHD (Alta Definición Gaming)</option>
+                        <option value="4k">4K Ultra HD (Máxima Resolución)</option>
+                    </select>
+                </div>
+
+                <div class="color-picker-group">
+                    <label for="modal-stream-fps-select" style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-normal); margin-bottom: 8px;">Tasa de Frames por Segundo (FPS)</label>
+                    <select id="modal-stream-fps-select" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 10px; color: var(--text-normal); border-radius: 8px; outline: none; font-size: 0.85rem; font-family: inherit;">
+                        <option value="30">30 FPS (Modo Ahorro)</option>
+                        <option value="60" selected>60 FPS (Ultra Suave / Gaming)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                <button id="stream-modal-cancel-btn" class="theme-reset-btn" style="margin: 0; padding: 10px 16px; font-size: 0.8rem;">Cancelar</button>
+                <button id="stream-modal-start-btn" class="login-submit-btn" style="margin: 0; width: auto; padding: 10px 20px; font-size: 0.8rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer;">🚀 Iniciar Transmisión</button>
+            </div>
+        </div>
+    </div>
+
     <!-- LIGHTBOX -->
     <div class="lightbox-modal hidden" id="lightbox-modal">
         <div class="lightbox-overlay" id="lightbox-overlay"></div>

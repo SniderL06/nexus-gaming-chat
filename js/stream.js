@@ -40,6 +40,30 @@ export function initStream() {
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('mozfullscreenchange', handleFullscreenChange);
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    // Eventos del modal de calidad pre-transmisión
+    const modal = document.getElementById('stream-quality-modal');
+    const closeBtn = document.getElementById('stream-modal-close-btn');
+    const cancelBtn = document.getElementById('stream-modal-cancel-btn');
+    const startBtn = document.getElementById('stream-modal-start-btn');
+
+    const hideModal = () => { if (modal) modal.classList.add('hidden'); };
+    if (closeBtn) closeBtn.addEventListener('click', hideModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', hideModal);
+    if (startBtn) {
+        startBtn.addEventListener('click', async () => {
+            hideModal();
+            // Sincronizar selección del modal con los selectores globales
+            const modalQuality = document.getElementById('modal-stream-quality-select');
+            const modalFps = document.getElementById('modal-stream-fps-select');
+            const globalQuality = document.getElementById('stream-quality-select');
+            const globalFps = document.getElementById('stream-fps-select');
+
+            if (modalQuality && globalQuality) globalQuality.value = modalQuality.value;
+            if (modalFps && globalFps) globalFps.value = modalFps.value;
+
+            await startLocalStream();
+        });
+    }
 }
 
 // Activar o desactivar transmisión de pantalla real
@@ -47,7 +71,12 @@ export async function toggleLocalStream() {
     if (state.isStreaming) {
         stopLocalStream();
     } else {
-        await startLocalStream();
+        const modal = document.getElementById('stream-quality-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+        } else {
+            await startLocalStream();
+        }
     }
 }
 
