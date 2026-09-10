@@ -269,7 +269,7 @@
                             <span class="live-tag">DIRECTO</span>
                             <span class="stream-title" id="stream-user-title">Transmisión de Usuario Nexus</span>
                         </div>
-                        <button class="stream-close" id="stop-stream-btn" title="Finalizar transmisión">✕</button>
+                        <button class="stream-close" id="stop-stream-btn" title="Cerrar / Salir del directo">✕</button>
                     </div>
                     <div class="stream-viewport" id="stream-viewport">
                         <video id="local-stream-video" autoplay playsinline muted title="Doble clic para pantalla completa"></video>
@@ -288,7 +288,7 @@
                             <span class="quality-label" id="stream-quality-indicator">Calidad: 1080p @ 60 FPS (Auto)</span>
                         </div>
                         <div class="control-group">
-                            <button class="control-btn" id="stream-mic-toggle">Mic Off</button>
+                            <button class="control-btn" id="stream-mic-toggle" title="Silenciar / Activar audio del directo">Audio On</button>
                             <button class="control-btn accent" id="stream-fullscreen-btn">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
                                 Pantalla Completa
@@ -1206,57 +1206,95 @@
         </div>
     </div>
 
-    <!-- PANEL DE MENSAJES DIRECTOS -->
+    <!-- PANEL DE MENSAJES DIRECTOS - DM HUB -->
     <div id="dm-panel" class="dm-panel hidden" role="dialog" aria-label="Mensajes directos" aria-modal="true">
-        <!-- Cabecera -->
-        <div class="dm-header">
-            <div class="dm-header-info">
-                <div class="dm-avatar" id="dm-avatar">?</div>
-                <div class="dm-header-text">
-                    <div id="dm-target-name" class="dm-target-name">Usuario</div>
-                    <div class="dm-ephemeral-tag">⚡ Efímero rotativo · Máx. 8 mensajes</div>
+
+        <!-- ── VISTA HUB: Buscador + Conversaciones recientes ── -->
+        <div id="dm-hub-view" class="dm-hub-view">
+            <!-- Cabecera del Hub -->
+            <div class="dm-header dm-hub-header">
+                <div class="dm-hub-title">
+                    <span class="dm-hub-icon">💬</span>
+                    <span>Mensajes Directos</span>
+                </div>
+                <button id="dm-close-btn" class="dm-close-btn" aria-label="Cerrar mensajes directos">✕</button>
+            </div>
+
+            <!-- Buscador de Personas -->
+            <div class="dm-search-wrapper">
+                <span class="dm-search-icon">🔍</span>
+                <input
+                    id="dm-search-input"
+                    class="dm-search-input"
+                    type="text"
+                    placeholder="Buscar usuario por nombre..."
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <button id="dm-search-clear-btn" class="dm-search-clear-btn hidden" title="Limpiar búsqueda">✕</button>
+            </div>
+
+            <!-- Resultados de búsqueda -->
+            <div id="dm-search-results" class="dm-search-results hidden"></div>
+
+            <!-- Lista de conversaciones recientes -->
+            <div class="dm-conversations-header">
+                <span>Recientes</span>
+            </div>
+            <div id="dm-conversations-list" class="dm-conversations-list">
+                <div class="dm-no-convos">
+                    <div class="dm-no-convos-icon">📭</div>
+                    <p>Ninguna conversación aún.<br>Busca a alguien arriba.</p>
                 </div>
             </div>
-            <button id="dm-close-btn" class="dm-close-btn" aria-label="Cerrar mensajes directos">✕</button>
         </div>
 
-        <!-- Estado del canal -->
-        <div id="dm-status" class="dm-status"></div>
-
-        <!-- Área de mensajes -->
-        <div id="dm-messages" class="dm-messages-area">
-            <div class="dm-empty-state">
-                <div class="dm-empty-icon">💬</div>
-                <h3>Mensajes Directos</h3>
-                <p>Haz clic en el icono <strong>💬</strong> junto a un usuario en la lista de miembros para iniciar una conversación privada.</p>
-                <div class="dm-empty-note">⚡ Los mensajes son efímeros — no se guardan</div>
+        <!-- ── VISTA CHAT: Conversación individual ── -->
+        <div id="dm-chat-view" class="dm-chat-view hidden">
+            <!-- Cabecera del Chat -->
+            <div class="dm-header">
+                <div class="dm-header-info">
+                    <button id="dm-back-btn" class="dm-back-btn" title="Volver a mensajes">‹</button>
+                    <div class="dm-avatar" id="dm-avatar">?</div>
+                    <div class="dm-header-text">
+                        <div id="dm-target-name" class="dm-target-name">Usuario</div>
+                        <div class="dm-ephemeral-tag">⚡ Efímero · Máx. 100 mensajes</div>
+                    </div>
+                </div>
+                <button id="dm-close-btn-chat" class="dm-close-btn" aria-label="Cerrar mensajes directos">✕</button>
             </div>
-        </div>
 
-        <!-- Barra de Respuesta DM -->
-        <div class="reply-preview-bar hidden" id="dm-reply-preview-bar">
-            <div class="reply-preview-content">
-                <span class="reply-preview-label">Respondiendo a <strong id="dm-reply-target-author">Usuario</strong>:</span>
-                <span class="reply-preview-text" id="dm-reply-target-text">Texto...</span>
+            <!-- Estado del canal -->
+            <div id="dm-status" class="dm-status"></div>
+
+            <!-- Área de mensajes -->
+            <div id="dm-messages" class="dm-messages-area"></div>
+
+            <!-- Barra de Respuesta DM -->
+            <div class="reply-preview-bar hidden" id="dm-reply-preview-bar">
+                <div class="reply-preview-content">
+                    <span class="reply-preview-label">Respondiendo a <strong id="dm-reply-target-author">Usuario</strong>:</span>
+                    <span class="reply-preview-text" id="dm-reply-target-text">Texto...</span>
+                </div>
+                <button class="reply-preview-close" id="dm-reply-preview-close-btn" title="Cancelar respuesta">✕</button>
             </div>
-            <button class="reply-preview-close" id="dm-reply-preview-close-btn" title="Cancelar respuesta">✕</button>
-        </div>
 
-        <!-- Input de envío -->
-        <div class="dm-input-area">
-            <textarea
-                id="dm-textarea"
-                class="dm-textarea"
-                placeholder="Selecciona un usuario..."
-                rows="1"
-                disabled
-            ></textarea>
-            <button id="dm-send-btn" class="dm-send-btn" disabled aria-label="Enviar mensaje">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-            </button>
+            <!-- Input de envío -->
+            <div class="dm-input-area">
+                <textarea
+                    id="dm-textarea"
+                    class="dm-textarea"
+                    placeholder="Escribe un mensaje..."
+                    rows="1"
+                    disabled
+                ></textarea>
+                <button id="dm-send-btn" class="dm-send-btn" disabled aria-label="Enviar mensaje">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 

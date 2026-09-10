@@ -117,6 +117,9 @@ function updateOnlineMembersSidebar(presenceState) {
     // Actualizar contador
     if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;
 
+    // Compartir lista de usuarios en línea globalmente para el buscador de DM
+    window.nexusOnlineUsers = onlineUsers;
+
     // Obtener nombre propio (considerando nombre personalizado)
     const myEmail = localStorage.getItem('nexus_user_email') || '';
     const myName = (() => {

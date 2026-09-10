@@ -3105,6 +3105,59 @@ body.theme-light .theme-panel {
     50% { transform: translateY(-2px); }
 }
 
+/* ── EN VIVO STREAMING BADGE ─────────────────────────────── */
+.voice-member-live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    background: rgba(220, 38, 38, 0.18);
+    border: 1px solid rgba(220, 38, 38, 0.45);
+    border-radius: 20px;
+    margin-bottom: 6px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+.live-dot-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+    animation: live-pulse 1.4s infinite;
+    flex-shrink: 0;
+}
+@keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70%  { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.live-tag-text {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: #fca5a5;
+    letter-spacing: 0.08em;
+    font-family: 'Orbitron', monospace;
+}
+.watch-stream-pill-btn {
+    background: rgba(239, 68, 68, 0.25);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    letter-spacing: 0.03em;
+}
+.watch-stream-pill-btn:hover {
+    background: rgba(239, 68, 68, 0.5);
+    color: #fff;
+}
+
+
 /* ── CHANNEL MANAGEMENT CONTROLS ────────────────────────── */
 .add-channel-btn {
     background: none;
@@ -4437,6 +4490,198 @@ body.theme-light .theme-panel {
     line-height: 1.4;
     word-break: break-word;
 }
+
+/* ── DM HUB & USER SEARCH STYLES ── */
+.dm-hub-view,
+.dm-chat-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+.dm-hub-view.hidden,
+.dm-chat-view.hidden {
+    display: none !important;
+}
+.dm-hub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.dm-hub-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+.dm-hub-icon {
+    font-size: 1.1rem;
+}
+.dm-search-wrapper {
+    position: relative;
+    padding: 10px 14px;
+    background: hsla(230,16%,11%,0.8);
+    border-bottom: 1px solid hsla(230,12%,18%,0.6);
+    display: flex;
+    align-items: center;
+}
+.dm-search-icon {
+    position: absolute;
+    left: 24px;
+    font-size: 0.85rem;
+    color: var(--text-dark);
+    pointer-events: none;
+}
+.dm-search-input {
+    width: 100%;
+    background: hsla(230,14%,16%,0.9);
+    border: 1px solid hsla(230,12%,24%,0.8);
+    border-radius: 8px;
+    padding: 8px 30px 8px 34px;
+    color: var(--text-normal);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.dm-search-input:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 8px hsla(186,100%,48%,0.2);
+}
+.dm-search-clear-btn {
+    position: absolute;
+    right: 22px;
+    background: transparent;
+    border: none;
+    color: var(--text-dark);
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 4px;
+}
+.dm-search-clear-btn:hover {
+    color: var(--text-normal);
+}
+.dm-search-results {
+    max-height: 220px;
+    overflow-y: auto;
+    background: hsla(230,16%,10%,0.95);
+    border-bottom: 1px solid hsla(230,12%,20%,0.8);
+    display: flex;
+    flex-direction: column;
+}
+.dm-search-results.hidden {
+    display: none;
+}
+.dm-user-result-item,
+.dm-convo-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    border-bottom: 1px solid hsla(230,12%,16%,0.4);
+}
+.dm-user-result-item:hover,
+.dm-convo-item:hover {
+    background: hsla(186,100%,48%,0.08);
+}
+.dm-convo-item.active {
+    background: hsla(186,100%,48%,0.12);
+    border-left: 3px solid var(--accent-cyan);
+}
+.dm-user-result-avatar,
+.dm-convo-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.dm-user-result-info,
+.dm-convo-info {
+    flex: 1;
+    min-width: 0;
+}
+.dm-user-result-name,
+.dm-convo-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dm-user-result-sub,
+.dm-convo-snippet {
+    font-size: 0.72rem;
+    color: var(--text-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dm-user-result-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: hsla(186,100%,48%,0.15);
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+.dm-conversations-header {
+    padding: 10px 14px 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dark);
+}
+.dm-conversations-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.dm-no-convos {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--text-dark);
+    font-size: 0.8rem;
+    gap: 8px;
+}
+.dm-no-convos-icon {
+    font-size: 2rem;
+    opacity: 0.6;
+}
+.dm-back-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+.dm-back-btn:hover {
+    color: var(--accent-cyan);
+}
+
 
 /* ── RESPONSIVE (MÓVIL) ── */
 @media (max-width: 768px) {

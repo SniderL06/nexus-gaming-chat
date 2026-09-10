@@ -1116,6 +1116,19 @@ async function joinMultiplayerVoice(channelId) {
             } else {
                 call.answer();
             }
+
+            // Si estamos transmitiendo pantalla localmente, compartirla también con quien nos llama
+            import('./stream.js').then(({ activeStream }) => {
+                if (state.isStreaming && activeStream) {
+                    setTimeout(() => {
+                        const peerObj = activePeers.get(call.peer);
+                        if (peerObj && !peerObj.videoCall) {
+                            console.log(`[Stream] Compartiendo pantalla con participante entrante: ${call.peer}`);
+                            peerObj.videoCall = peer.call(call.peer, activeStream, { metadata: { type: 'screen' } });
+                        }
+                    }, 500);
+                }
+            }).catch(() => {});
         }
 
         call.on('stream', async (remoteStream) => {
@@ -1139,6 +1152,9 @@ async function joinMultiplayerVoice(channelId) {
                     const { detachRemoteCameraFromCard } = await import('./camera.js');
                     detachRemoteCameraFromCard(peerInfo.name);
                 }
+            } else if (callType === 'screen') {
+                console.log(`[PeerJS] Transmisión de pantalla de ${call.peer} finalizada.`);
+                cleanUpRemoteScreen(call.peer);
             } else {
                 removeRemoteAudio(call.peer);
             }
@@ -1269,6 +1285,7 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
                 avatarStyle: presence.avatarStyle || 'circle',
                 avatarBg: 'bg-blue',
                 isMuted: presence.isMuted || false,
+                isStreaming: presence.isStreaming || false,
                 activeSpeaker: false,
                 isLocalUser: isLocal,
                 peerId: presence.peerId,
@@ -1335,19 +1352,7 @@ function callPeer(remotePeerId, remoteName) {
     import('./stream.js').then(({ activeStream }) => {
         if (state.isStreaming && activeStream) {
             console.log(`[PeerJS] Enviando vídeo de pantalla a nuevo participante: ${remoteName}`);
-            // Combinar con audio del mic para que la voz no se pierda
-            let streamToSend = activeStream;
-            if (microphoneStream && microphoneStream.getAudioTracks().length > 0) {
-                const tracks = [
-                    ...activeStream.getVideoTracks(),
-                    ...microphoneStream.getAudioTracks()
-                ];
-                activeStream.getAudioTracks().forEach(t => {
-                    if (!tracks.includes(t)) tracks.push(t);
-                });
-                streamToSend = new MediaStream(tracks);
-            }
-            const videoCall = peer.call(remotePeerId, streamToSend, {
+            const videoCall = peer.call(remotePeerId, activeStream, {
                 metadata: { type: 'screen' }
             });
             const peerObj = activePeers.get(remotePeerId);
@@ -1369,7 +1374,9 @@ function playRemoteStream(peerId, remoteStream) {
         
         if (remoteVideo) {
             remoteVideo.srcObject = remoteStream;
-            remoteVideo.muted = false; // Permitir audio remoto del juego o stream
+            // Solo reproducir con sonido si la pantalla comparte pistas de audio (ej: audio del juego)
+            const hasAudio = remoteStream.getAudioTracks().length > 0;
+            remoteVideo.muted = !hasAudio;
             remoteVideo.play().catch(err => console.warn('[Stream] Fallo al reproducir vídeo remoto:', err));
         }
         if (streamContainer) streamContainer.classList.remove('hidden');
@@ -1432,6 +1439,43 @@ function playRemoteStream(peerId, remoteStream) {
     const existing = activePeers.get(peerId);
     if (existing) existing.audioEl = audioEl;
     else activePeers.set(peerId, { name: '', audioEl });
+}
+
+// Limpiar video remoto de pantalla compartida sin tocar el audio de voz
+export function cleanUpRemoteScreen(peerId) {
+    if (peerId) {
+        const peerData = activePeers.get(peerId);
+        if (peerData) {
+            if (peerData.videoStream) {
+                peerData.videoStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
+                delete peerData.videoStream;
+            }
+            if (peerData.videoCall) {
+                try { peerData.videoCall.close(); } catch(e){}
+                delete peerData.videoCall;
+            }
+        }
+    }
+    const remoteVideo = document.getElementById('local-stream-video');
+    const streamContainer = document.getElementById('stream-container');
+    const placeholder = document.getElementById('stream-placeholder');
+    if (remoteVideo) {
+        remoteVideo.srcObject = null;
+    }
+    if (streamContainer) streamContainer.classList.add('hidden');
+    if (placeholder) placeholder.classList.remove('hidden');
+    console.log(`[Stream] Limpieza de transmisión remota de ${peerId} completada.`);
+}
+
+// Permitir a un usuario sintonizar la pantalla de un peer con 1 clic
+export function watchPeerStream(peerId) {
+    const peerData = activePeers.get(peerId);
+    if (peerData && peerData.videoStream) {
+        console.log(`[Stream] Conectando visor a la pantalla de ${peerId}...`);
+        playRemoteStream(peerId, peerData.videoStream);
+    } else {
+        console.warn(`[Stream] No hay transmisión de vídeo activa disponible para el peer ${peerId}`);
+    }
 }
 
 function removeRemoteAudio(peerId) {
@@ -1895,7 +1939,22 @@ function renderVoiceMembers() {
                </div>`;
         }
 
+        let streamingBadgeHtml = '';
+        if (member.isStreaming) {
+            const watchBtn = (!isUser && member.peerId)
+                ? `<button class="watch-stream-pill-btn" title="Ver directo de ${member.name}" onclick="(function(e){ e.stopPropagation(); import('./voice.js').then(m => m.watchPeerStream('${member.peerId}')); })(event)">Ver Directo</button>`
+                : '';
+            streamingBadgeHtml = `
+                <div class="voice-member-live-badge">
+                    <span class="live-dot-pulse"></span>
+                    <span class="live-tag-text">EN VIVO</span>
+                    ${watchBtn}
+                </div>
+            `;
+        }
+
         card.innerHTML = `
+            ${streamingBadgeHtml}
             ${speakingWave}
             ${avatarHtml}
             <span class="voice-member-name">${member.name}${opCrown}</span>

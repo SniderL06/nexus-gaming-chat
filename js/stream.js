@@ -21,13 +21,13 @@ export function initStream() {
     const micToggleBtn = document.getElementById('stream-mic-toggle');
 
     if (stopStreamBtn) {
-        stopStreamBtn.addEventListener('click', stopLocalStream);
+        stopStreamBtn.addEventListener('click', handleStopStreamClick);
     }
     if (fullscreenBtn) {
         fullscreenBtn.addEventListener('click', toggleFullscreen);
     }
     if (micToggleBtn) {
-        micToggleBtn.addEventListener('click', toggleStreamMic);
+        micToggleBtn.addEventListener('click', toggleStreamAudio);
     }
 
     // Doble clic en el video para pantalla completa
@@ -115,10 +115,18 @@ async function startLocalStream() {
             });
         } catch (strictErr) {
             console.warn('[Stream] Fallo al capturar con restricciones estrictas de resolución. Reintentando con configuración básica...', strictErr);
-            activeStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { cursor: 'always', frameRate: { ideal: targetFps } },
-                audio: true
-            });
+            try {
+                activeStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: 'always', frameRate: { ideal: targetFps } },
+                    audio: true
+                });
+            } catch (basicAudioErr) {
+                console.warn('[Stream] Fallo al capturar con audio. Reintentando captura solo de video...', basicAudioErr);
+                activeStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: 'always', frameRate: { ideal: targetFps } },
+                    audio: false
+                });
+            }
         }
 
         console.log('[Stream] Captura autorizada correctamente.');
@@ -154,21 +162,10 @@ async function startLocalStream() {
         if (isMultiplayerMode && peer) {
             console.log(`[Stream] Compartiendo pantalla con ${activePeers.size} participantes reales.`);
 
-            // Combinar audio del micrófono con el stream de pantalla para no perder la voz
-            const micStream = getMicrophoneStream();
-            let streamToSend = activeStream;
-            if (micStream && micStream.getAudioTracks().length > 0) {
-                const tracks = [
-                    ...activeStream.getVideoTracks(),
-                    ...micStream.getAudioTracks()  // voz del mic sobre el stream de pantalla
-                ];
-                // Añadir también el audio del sistema si lo capturó getDisplayMedia
-                activeStream.getAudioTracks().forEach(t => {
-                    if (!tracks.includes(t)) tracks.push(t);
-                });
-                streamToSend = new MediaStream(tracks);
-                console.log('[Stream] Audio del micrófono combinado con stream de pantalla.');
-            }
+            // Enviar activeStream directamente (incluye video y audio del sistema/juego si se capturó).
+            // NOTA: NO inyectamos el micrófono aquí porque ya se transmite de forma independiente
+            // y limpia en voice.js, eliminando por completo el eco y la duplicación de voces.
+            const streamToSend = activeStream;
 
             activePeers.forEach(({ name }, remotePeerId) => {
                 if (remotePeerId) {
@@ -206,10 +203,12 @@ async function startLocalStream() {
         }
 
         // Detectar si el usuario detiene la transmisión desde la barra nativa del navegador
-        activeStream.getVideoTracks()[0].addEventListener('ended', () => {
-            console.log('[Stream] Transmisión finalizada por el usuario en el navegador.');
-            stopLocalStream();
-        });
+        if (activeStream.getVideoTracks().length > 0) {
+            activeStream.getVideoTracks()[0].addEventListener('ended', () => {
+                console.log('[Stream] Transmisión finalizada por el usuario en el navegador.');
+                stopLocalStream();
+            });
+        }
 
     } catch (err) {
         console.warn('[Stream] Captura denegada o cancelada. Activando transmisión simulada de prueba.', err);
@@ -231,7 +230,9 @@ export function stopLocalStream() {
 
     // Apagar todos los tracks físicos
     if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
+        activeStream.getTracks().forEach(track => {
+            try { track.stop(); } catch(e){}
+        });
         activeStream = null;
     }
 
@@ -250,7 +251,7 @@ export function stopLocalStream() {
     if (isMultiplayerMode) {
         activePeers.forEach((peerObj) => {
             if (peerObj.videoCall) {
-                peerObj.videoCall.close();
+                try { peerObj.videoCall.close(); } catch(e){}
                 delete peerObj.videoCall;
             }
         });
@@ -289,6 +290,25 @@ export function stopLocalStream() {
     }
 
     updateRenderLatency(startTime);
+}
+
+// Acción del botón de cerrar stream (funciona para emisor y para espectador)
+export function handleStopStreamClick() {
+    if (state.isStreaming) {
+        stopLocalStream();
+    } else {
+        stopWatchingRemoteStream();
+    }
+}
+
+// Para espectadores: cerrar el visor de transmisión remota sin afectar la sala de voz
+export function stopWatchingRemoteStream() {
+    console.log('[Stream] Espectador cerró el visor de transmisión.');
+    if (streamVideoElement) {
+        streamVideoElement.srcObject = null;
+    }
+    if (streamContainer) streamContainer.classList.add('hidden');
+    if (streamPlaceholder) streamPlaceholder.classList.remove('hidden');
 }
 
 // Fallback: Simulación interactiva de juego en curso para propósitos locales
@@ -415,20 +435,31 @@ function showCursorAndResetTimer() {
     resetCursorTimer();
 }
 
-// Control del micrófono en la transmisión
-let streamMicActive = false;
-function toggleStreamMic() {
-    streamMicActive = !streamMicActive;
+// Control del audio de la transmisión (para emisor y espectador)
+let streamAudioMuted = false;
+export function toggleStreamAudio() {
     const btn = document.getElementById('stream-mic-toggle');
-    if (btn) {
-        if (streamMicActive) {
-            btn.textContent = 'Mic On';
-            btn.classList.add('accent');
-            console.log('[Stream] Micrófono de transmisión activado.');
+    if (state.isStreaming && activeStream) {
+        // El emisor silencia/reactiva el audio compartido de su pantalla/juego
+        const audioTracks = activeStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+            streamAudioMuted = !streamAudioMuted;
+            audioTracks.forEach(t => { t.enabled = !streamAudioMuted; });
+            if (btn) {
+                btn.textContent = streamAudioMuted ? 'Audio Off' : 'Audio On';
+                btn.classList.toggle('accent', !streamAudioMuted);
+            }
+            console.log(`[Stream] Audio de pantalla ${streamAudioMuted ? 'silenciado' : 'activado'}.`);
         } else {
-            btn.textContent = 'Mic Off';
-            btn.classList.remove('accent');
-            console.log('[Stream] Micrófono de transmisión desactivado.');
+            if (btn) btn.textContent = 'Sin Audio';
         }
+    } else if (streamVideoElement) {
+        // El espectador silencia/reactiva el volumen del directo que está viendo
+        streamVideoElement.muted = !streamVideoElement.muted;
+        if (btn) {
+            btn.textContent = streamVideoElement.muted ? 'Sonido Off' : 'Sonido On';
+            btn.classList.toggle('accent', !streamVideoElement.muted);
+        }
+        console.log(`[Stream] Sonido de espectador ${streamVideoElement.muted ? 'muteado' : 'activo'}.`);
     }
 }
