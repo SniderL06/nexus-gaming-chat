@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoAdModal = document.getElementById('video-ad-modal');
     const videoAdCloseBtn = document.getElementById('video-ad-close-btn');
     const videoAdFinishBtn = document.getElementById('video-ad-finish-btn');
-    const ADSTERRA_SMARTLINK_URL = null; // Anuncios gestionados por Google AdSense
+    const ADSTERRA_SMARTLINK_URL = 'https://www.profitableratecpmnetwork.com/bwkq78ksa?key=ed92c2748e0d83b724a9cfe9bf05b482';
 
     if (supportAdBtn && videoAdModal) {
         // Al hacer clic en '🎁 Apoyar Servidor', abre el modal y muestra mensaje de agradecimiento inmediato
@@ -210,7 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const openSmartlinkBtn = document.getElementById('open-smartlink-btn');
         if (openSmartlinkBtn) {
             openSmartlinkBtn.addEventListener('click', () => {
-                // Los anuncios ahora son gestionados por Google AdSense — solo mostramos agradecimiento
+                // Abrir el smartlink en nueva pestaña
+                window.open(ADSTERRA_SMARTLINK_URL, '_blank', 'noopener,noreferrer');
                 if (typeof window.showNexusToast === 'function') {
                     window.showNexusToast('🎬 ¡Gracias por apoyar el servidor!');
                 }
