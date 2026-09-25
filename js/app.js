@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoAdModal = document.getElementById('video-ad-modal');
     const videoAdCloseBtn = document.getElementById('video-ad-close-btn');
     const videoAdFinishBtn = document.getElementById('video-ad-finish-btn');
-    const ADSTERRA_SMARTLINK_URL = 'https://www.effectivecpmnetwork.com/bwkq78ksa?key=ed92c2748e0d83b724a9cfe9bf05b482';
+    const ADSTERRA_SMARTLINK_URL = null; // Anuncios gestionados por Google AdSense
 
     if (supportAdBtn && videoAdModal) {
         // Al hacer clic en '🎁 Apoyar Servidor', abre el modal y muestra mensaje de agradecimiento inmediato
@@ -199,10 +199,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const openSmartlinkBtn = document.getElementById('open-smartlink-btn');
         if (openSmartlinkBtn) {
             openSmartlinkBtn.addEventListener('click', () => {
-                window.open(ADSTERRA_SMARTLINK_URL, '_blank', 'noopener,noreferrer');
+                // Los anuncios ahora son gestionados por Google AdSense — solo mostramos agradecimiento
                 if (typeof window.showNexusToast === 'function') {
-                    window.showNexusToast('🎬 ¡Gracias por ver el anuncio patrocinado y apoyar el servidor!');
+                    window.showNexusToast('🎬 ¡Gracias por apoyar el servidor!');
                 }
+                videoAdModal.classList.add('hidden');
             });
         }
 
