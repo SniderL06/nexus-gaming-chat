@@ -205,16 +205,6 @@ function updateOnlineMembersSidebar(presenceState) {
     // Compartir lista de usuarios en línea globalmente para el buscador de DM
     window.nexusOnlineUsers = onlineUsers;
 
-    // Obtener nombre propio (considerando nombre personalizado)
-    const myEmail = localStorage.getItem('nexus_user_email') || '';
-    const myName = (() => {
-        if (!myEmail) return null;
-        const customName = localStorage.getItem('nexus_username_' + myEmail);
-        if (customName) return customName;
-        const base = myEmail.split('@')[0];
-        return base.charAt(0).toUpperCase() + base.slice(1);
-    })();
-
     // Reconstruir lista
     membersList.innerHTML = '';
 
