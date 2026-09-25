@@ -1374,13 +1374,13 @@ async function joinSupabasePresence(channelId, myName, peerId) {
             // Heartbeat de presencia de voz cada 20 segundos para evitar cortes durante eventos largos
             if (voicePresenceHeartbeat) clearInterval(voicePresenceHeartbeat);
             voicePresenceHeartbeat = setInterval(sendVoicePresence, 20_000);
-        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
             console.warn(`[Presence] Canal de voz ${status}. Reintentando suscripción...`);
             setTimeout(() => {
-                if (state.activeVoiceChannel === channelId) {
-                    joinSupabasePresence(channelId, myName, localPeerId || peerId);
+                if (state.activeVoiceChannel === channelId && presenceChannel) {
+                    sendVoicePresence();
                 }
-            }, 2500);
+            }, 5000);
         }
     });
 }

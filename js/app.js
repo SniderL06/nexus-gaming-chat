@@ -676,31 +676,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             updateAvatarUI();
 
-            // Sincronizar desde Supabase si existe perfil guardado en la base de datos
-            if (supabaseReady && supabase) {
-                supabase.from('profiles').select('*').eq('email', email.toLowerCase()).single().then(({ data, error }) => {
-                    if (!error && data) {
-                        let changed = false;
-                        if (data.username && !localStorage.getItem('nexus_username_' + email)) {
-                            localStorage.setItem('nexus_username_' + email, data.username);
-                            if (usernameSpan) usernameSpan.textContent = data.username;
-                            if (profileNameInput) profileNameInput.value = data.username;
-                            savedName = data.username;
-                            changed = true;
-                        }
-                        if (data.avatar && !localStorage.getItem('nexus_user_avatar_' + email)) {
-                            localStorage.setItem('nexus_user_avatar_' + email, data.avatar);
-                            changed = true;
-                        }
-                        if (changed) {
-                            updateAvatarUI();
-                            const sName = document.getElementById('sidebar-local-name');
-                            if (sName) sName.textContent = savedName;
-                        }
-                    }
-                }).catch(() => {});
-            }
-
             // Actualizar el item local en la sidebar de miembros
             const sidebarName = document.getElementById('sidebar-local-name');
             if (sidebarName) sidebarName.textContent = savedName;
@@ -855,18 +830,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Actualizar todos los avatares del usuario actual en el chat sin recargar
                 updateAllChatAvatars(tempAvatarBase64, selectedCropStyle);
 
-                // Volver a transmitir presencia global y guardar en profiles de Supabase
+                // Volver a transmitir presencia global
                 const savedName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : 'Usuario Nexus';
                 if (supabaseReady && supabase) {
                     startGlobalPresence(savedName);
-                    if (email) {
-                        supabase.from('profiles').upsert({
-                            email: email.toLowerCase(),
-                            username: savedName,
-                            avatar: tempAvatarBase64,
-                            last_seen: new Date().toISOString()
-                        }).then(() => {}).catch(() => {});
-                    }
                 }
                 // Si está en sala de voz, actualizar la presencia en la sala de voz también
                 if (state.activeVoiceChannel) {
@@ -976,16 +943,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Actualizar interfaz local
             updateUserProfileUI(email);
 
-            // Retransmitir presencia global con el nuevo nombre y guardar en Supabase
+            // Retransmitir presencia global con el nuevo nombre
             if (supabaseReady && supabase) {
                 startGlobalPresence(newName);
-                const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
-                supabase.from('profiles').upsert({
-                    email: email.toLowerCase(),
-                    username: newName,
-                    avatar: savedAvatar,
-                    last_seen: new Date().toISOString()
-                }).then(() => {}).catch(() => {});
             }
 
             // Si está en sala de voz, actualizar la presencia en la sala de voz también

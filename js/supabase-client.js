@@ -76,16 +76,7 @@ export function startGlobalPresence(userName) {
                 online_at: new Date().toISOString()
             });
 
-            // Guardar también en tabla profiles si existe en Supabase para persistencia entre sesiones
-            if (email && supabase) {
-                supabase.from('profiles').upsert({
-                    email: email,
-                    username: userName,
-                    avatar: userAvatar || '',
-                    status: 'online',
-                    last_seen: new Date().toISOString()
-                }).then(() => {}).catch(() => {});
-            }
+            // Presencia local guardada en memoria y transmitida
         } catch (err) {
             console.warn('[Presencia] Error al actualizar estado de presencia:', err);
         }
@@ -110,13 +101,20 @@ export function startGlobalPresence(userName) {
                 // Heartbeat cada 25 segundos para no expirar y asegurar persistencia durante horas
                 if (globalPresenceHeartbeat) clearInterval(globalPresenceHeartbeat);
                 globalPresenceHeartbeat = setInterval(trackPresence, 25_000);
-            } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-                console.warn(`[Presencia] Canal de presencia ${status}. Reintentando reconexión en 3s...`);
+            } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                console.warn(`[Presencia] Canal de presencia ${status}. Reintentando suscripción en 5s...`);
                 setTimeout(() => {
-                    if (localStorage.getItem('nexus_user_email')) {
-                        startGlobalPresence(userName);
+                    if (localStorage.getItem('nexus_user_email') && globalPresenceChannel) {
+                        trackPresence();
                     }
-                }, 3000);
+                }, 5000);
+            } else if (status === 'CLOSED') {
+                // CLOSED ocurre de forma natural cuando removeChannel() limpia el canal anterior.
+                // NO reintentar aquí para evitar bucles infinitos de reconexión.
+                if (globalPresenceHeartbeat) {
+                    clearInterval(globalPresenceHeartbeat);
+                    globalPresenceHeartbeat = null;
+                }
             }
         });
 }
