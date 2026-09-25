@@ -474,28 +474,81 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'chipmunk': {
-            // Voz aguda: treble boost + supresión de graves
+            // ─── FILTRO ARDILLA (CHIPMUNK) REALÍSTICO ───
+            // 1. Corte drástico de frecuencias graves (por debajo de 500Hz)
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 400;
+            hp.frequency.value = 520;
+            hp.Q.value = 1.6;
+
+            // 2. Resonancia de formante alta (efecto cavidad vocal pequeña, típica de ardilla)
+            const formant1 = audioCtx.createBiquadFilter();
+            formant1.type = 'peaking';
+            formant1.frequency.value = 1600;
+            formant1.Q.value = 2.5;
+            formant1.gain.value = 14;
+
+            const formant2 = audioCtx.createBiquadFilter();
+            formant2.type = 'peaking';
+            formant2.frequency.value = 3200;
+            formant2.Q.value = 2.0;
+            formant2.gain.value = 16;
 
             const highShelf = audioCtx.createBiquadFilter();
             highShelf.type = 'highshelf';
-            highShelf.frequency.value = 2500;
-            highShelf.gain.value = 14;
+            highShelf.frequency.value = 4500;
+            highShelf.gain.value = 12;
 
-            const presence = audioCtx.createBiquadFilter();
-            presence.type = 'peaking';
-            presence.frequency.value = 3500;
-            presence.Q.value = 0.8;
-            presence.gain.value = 8;
+            // 3. Modulación de tono vibrato rápido / pitch-shifter simulado con oscilador de delay
+            const delay = audioCtx.createDelay(0.1);
+            delay.delayTime.value = 0.012;
 
+            const lfo = audioCtx.createOscillator();
+            lfo.type = 'sawtooth';
+            lfo.frequency.value = 14; // Modulación rápida que eleva el tono percibido
+
+            const lfoGain = audioCtx.createGain();
+            lfoGain.gain.value = 0.005; // 5ms de profundidad
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(delay.delayTime);
+            lfo.start();
+
+            // Compresión rápida para voz apretada de ardilla
+            const comp = audioCtx.createDynamicsCompressor();
+            comp.threshold.value = -18;
+            comp.ratio.value = 6;
+            comp.attack.value = 0.002;
+            comp.release.value = 0.05;
+
+            // Ganancia de salida
+            const outputBoost = audioCtx.createGain();
+            outputBoost.gain.value = 2.2;
+
+            // Encadenado: input -> hp -> formant1 -> formant2 -> highShelf -> delay -> comp -> outputBoost
             inputNode.connect(hp);
-            hp.connect(highShelf);
-            highShelf.connect(presence);
+            hp.connect(formant1);
+            formant1.connect(formant2);
+            formant2.connect(highShelf);
+            highShelf.connect(delay);
+            delay.connect(comp);
+            comp.connect(outputBoost);
 
-            filterCleanupFns.push(() => { try { hp.disconnect(); highShelf.disconnect(); presence.disconnect(); } catch(e){} });
-            return presence;
+            filterCleanupFns.push(() => {
+                try {
+                    lfo.stop();
+                    lfo.disconnect();
+                    lfoGain.disconnect();
+                    delay.disconnect();
+                    hp.disconnect();
+                    formant1.disconnect();
+                    formant2.disconnect();
+                    highShelf.disconnect();
+                    comp.disconnect();
+                    outputBoost.disconnect();
+                } catch(e){}
+            });
+            return outputBoost;
         }
 
         default: // 'none' — sin filtro

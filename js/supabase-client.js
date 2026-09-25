@@ -45,10 +45,11 @@ let globalPresenceHeartbeat = null;
 export function startGlobalPresence(userName) {
     if (!supabase || !userName) return;
 
-    // Obtener avatar y estilo del correo actual
-    const email = localStorage.getItem('nexus_user_email') || '';
+    // Obtener avatar, estilo e identificador estable por email para la presencia
+    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
     const userAvatar = email ? localStorage.getItem('nexus_user_avatar_' + email) : null;
     const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+    const presenceKey = email ? `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}` : `user_${userName.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
     // Limpiar canal e intervalo anterior si existía
     if (globalPresenceHeartbeat) {
@@ -61,7 +62,7 @@ export function startGlobalPresence(userName) {
     }
 
     globalPresenceChannel = supabase.channel('nexus:online-users', {
-        config: { presence: { key: userName } }
+        config: { presence: { key: presenceKey } }
     });
 
     const trackPresence = async () => {
@@ -69,11 +70,22 @@ export function startGlobalPresence(userName) {
         try {
             await globalPresenceChannel.track({
                 name: userName,
-                email: email,          // identificador seguro para DMs
+                email: email,          // identificador seguro para DMs y unicidad
                 avatar: userAvatar || '',
                 avatarStyle: userAvatarStyle,
                 online_at: new Date().toISOString()
             });
+
+            // Guardar también en tabla profiles si existe en Supabase para persistencia entre sesiones
+            if (email && supabase) {
+                supabase.from('profiles').upsert({
+                    email: email,
+                    username: userName,
+                    avatar: userAvatar || '',
+                    status: 'online',
+                    last_seen: new Date().toISOString()
+                }).then(() => {}).catch(() => {});
+            }
         } catch (err) {
             console.warn('[Presencia] Error al actualizar estado de presencia:', err);
         }
@@ -128,21 +140,64 @@ function updateOnlineMembersSidebar(presenceState) {
     const onlineCountEl = document.getElementById('online-count');
     if (!membersList) return;
 
-    // Recopilar todos los usuarios únicos presentes
+    // Obtener nombre y correo propio actualizados
+    const myEmail = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    const myName = (() => {
+        if (!myEmail) return null;
+        const customName = localStorage.getItem('nexus_username_' + myEmail);
+        if (customName) return customName;
+        const base = myEmail.split('@')[0];
+        return base.charAt(0).toUpperCase() + base.slice(1);
+    })();
+    const myAvatar = myEmail ? localStorage.getItem('nexus_user_avatar_' + myEmail) : null;
+    const myAvatarStyle = myEmail ? (localStorage.getItem('nexus_user_avatar_style_' + myEmail) || 'circle') : 'circle';
+
+    // Recopilar todos los usuarios únicos presentes (priorizando deduplicación estricta por email y nombre)
     const onlineUsers = [];
+    const seenEmails = new Set();
+    const seenNames = new Set();
+
     Object.values(presenceState).forEach(presences => {
         presences.forEach(p => {
-            if (p.name && !onlineUsers.find(u => u.name === p.name)) {
-                onlineUsers.push({
-                    name: p.name,
-                    email: p.email || '',   // email para DM seguro
-                    online_at: p.online_at,
-                    avatar: p.avatar || '',
-                    avatarStyle: p.avatarStyle || 'circle'
-                });
-            }
+            if (!p || !p.name) return;
+            const pEmail = (p.email || '').trim().toLowerCase();
+            const pName = p.name.trim();
+
+            // Si es el usuario local actual, asegurarnos de usar sus datos locales más frescos
+            const isLocal = (myEmail && pEmail && pEmail === myEmail) || (myName && pName.toLowerCase() === myName.toLowerCase());
+
+            const effectiveEmail = isLocal && myEmail ? myEmail : pEmail;
+            const effectiveName = isLocal && myName ? myName : pName;
+            const effectiveAvatar = isLocal && myAvatar ? myAvatar : (p.avatar || '');
+            const effectiveStyle = isLocal ? myAvatarStyle : (p.avatarStyle || 'circle');
+
+            if (effectiveEmail && seenEmails.has(effectiveEmail)) return;
+            if (effectiveName && seenNames.has(effectiveName.toLowerCase())) return;
+
+            if (effectiveEmail) seenEmails.add(effectiveEmail);
+            seenNames.add(effectiveName.toLowerCase());
+
+            onlineUsers.push({
+                name: effectiveName,
+                email: effectiveEmail,
+                online_at: p.online_at || new Date().toISOString(),
+                avatar: effectiveAvatar,
+                avatarStyle: effectiveStyle
+            });
         });
     });
+
+    // Si el usuario local está autenticado pero la presencia remota aún no ha sincronizado su frame,
+    // mantenerlo visible de forma estable para evitar parpadeos molestos a (0)
+    if (myName && !onlineUsers.some(u => (myEmail && u.email === myEmail) || u.name.toLowerCase() === myName.toLowerCase())) {
+        onlineUsers.unshift({
+            name: myName,
+            email: myEmail,
+            online_at: new Date().toISOString(),
+            avatar: myAvatar || '',
+            avatarStyle: myAvatarStyle
+        });
+    }
 
     // Actualizar contador
     if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;

@@ -5193,4 +5193,65 @@ body.theme-light .theme-panel {
         max-width: 100vw !important;
         right: 0 !important;
     }
+
+    /* ── MEJORAS DE MICRÓFONO Y CONTROLES EN CELULAR ── */
+    .voice-status-panel {
+        padding: 10px 12px !important;
+        background: rgba(13, 17, 23, 0.95) !important;
+        border-bottom: 1px solid rgba(0, 212, 255, 0.2) !important;
+    }
+
+    .voice-status-panel .voice-actions {
+        gap: 8px !important;
+    }
+
+    .voice-status-panel .voice-btn {
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+        border-radius: 8px !important;
+    }
+
+    .voice-status-panel .voice-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+    }
+
+    .user-panel {
+        height: 68px !important;
+        padding: 0 12px !important;
+        background: rgba(18, 22, 34, 0.98) !important;
+        gap: 8px !important;
+    }
+
+    .user-profile {
+        max-width: calc(100% - 110px) !important;
+    }
+
+    .user-panel-actions {
+        gap: 6px !important;
+    }
+
+    .user-panel-actions .panel-btn,
+    .user-panel-actions .logout-action-btn {
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        border-radius: 8px !important;
+    }
+
+    .user-panel-actions .panel-btn svg,
+    .user-panel-actions .logout-action-btn svg {
+        width: 16px !important;
+        height: 16px !important;
+    }
+
+    .user-volume-row {
+        margin-top: 6px !important;
+    }
+
+    .user-volume-slider,
+    .local-mic-volume-slider {
+        height: 8px !important;
+    }
 }
