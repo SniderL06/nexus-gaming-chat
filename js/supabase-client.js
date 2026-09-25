@@ -18,12 +18,12 @@ function tryInitClient(url, key) {
         try {
             const client = window.supabase.createClient(url, key, {
                 realtime: {
-                    params: { eventsPerSecond: 10 }
+                    params: { eventsPerSecond: 30 }
                 }
             });
             supabase = client;
             supabaseReady = true;
-            console.log('[Supabase] Cliente inicializado correctamente.');
+            console.log('[Supabase] Cliente inicializado correctamente con 30 ev/s.');
             setTimeout(updateStatusIndicator, 500);
             return true;
         } catch (e) {
@@ -40,6 +40,8 @@ tryInitClient(NEXUS_SUPABASE_URL, NEXUS_SUPABASE_KEY);
 // PRESENCIA GLOBAL: quién está conectado en tiempo real
 // Llama a esta función desde app.js tras el login del usuario.
 // ─────────────────────────────────────────────────────────────
+let globalPresenceHeartbeat = null;
+
 export function startGlobalPresence(userName) {
     if (!supabase || !userName) return;
 
@@ -48,15 +50,34 @@ export function startGlobalPresence(userName) {
     const userAvatar = email ? localStorage.getItem('nexus_user_avatar_' + email) : null;
     const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
 
-    // Limpiar canal anterior si existía
+    // Limpiar canal e intervalo anterior si existía
+    if (globalPresenceHeartbeat) {
+        clearInterval(globalPresenceHeartbeat);
+        globalPresenceHeartbeat = null;
+    }
     if (globalPresenceChannel) {
-        supabase.removeChannel(globalPresenceChannel);
+        try { supabase.removeChannel(globalPresenceChannel); } catch (e) {}
         globalPresenceChannel = null;
     }
 
     globalPresenceChannel = supabase.channel('nexus:online-users', {
         config: { presence: { key: userName } }
     });
+
+    const trackPresence = async () => {
+        if (!globalPresenceChannel) return;
+        try {
+            await globalPresenceChannel.track({
+                name: userName,
+                email: email,          // identificador seguro para DMs
+                avatar: userAvatar || '',
+                avatarStyle: userAvatarStyle,
+                online_at: new Date().toISOString()
+            });
+        } catch (err) {
+            console.warn('[Presencia] Error al actualizar estado de presencia:', err);
+        }
+    };
 
     globalPresenceChannel
         .on('presence', { event: 'sync' }, () => {
@@ -71,21 +92,30 @@ export function startGlobalPresence(userName) {
         })
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                await globalPresenceChannel.track({
-                    name: userName,
-                    email: email,          // identificador seguro para DMs
-                    avatar: userAvatar || '',
-                    avatarStyle: userAvatarStyle,
-                    online_at: new Date().toISOString()
-                });
+                await trackPresence();
                 console.log(`[Presencia] ${userName} marcado como en línea.`);
+
+                // Heartbeat cada 25 segundos para no expirar y asegurar persistencia durante horas
+                if (globalPresenceHeartbeat) clearInterval(globalPresenceHeartbeat);
+                globalPresenceHeartbeat = setInterval(trackPresence, 25_000);
+            } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+                console.warn(`[Presencia] Canal de presencia ${status}. Reintentando reconexión en 3s...`);
+                setTimeout(() => {
+                    if (localStorage.getItem('nexus_user_email')) {
+                        startGlobalPresence(userName);
+                    }
+                }, 3000);
             }
         });
 }
 
 export function stopGlobalPresence() {
+    if (globalPresenceHeartbeat) {
+        clearInterval(globalPresenceHeartbeat);
+        globalPresenceHeartbeat = null;
+    }
     if (globalPresenceChannel && supabase) {
-        supabase.removeChannel(globalPresenceChannel);
+        try { supabase.removeChannel(globalPresenceChannel); } catch(e){}
         globalPresenceChannel = null;
     }
 }

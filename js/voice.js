@@ -28,6 +28,70 @@ let canvas = null;
 let canvasCtx = null;
 
 // ─────────────────────────────────────────────────────────────
+// WATCHDOG DE AUDIOCTX — Previene que el mic se congele después de horas
+// Los navegadores suspenden el AudioContext por inactividad. Este watchdog
+// lo detecta y lo resume automáticamente cada 30 segundos.
+// ─────────────────────────────────────────────────────────────
+let audioCtxWatchdogInterval = null;
+
+function startAudioCtxWatchdog() {
+    if (audioCtxWatchdogInterval) clearInterval(audioCtxWatchdogInterval);
+    audioCtxWatchdogInterval = setInterval(async () => {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+            console.warn('[AudioCtx Watchdog] AudioContext suspendido — resumiendo...');
+            try {
+                await audioCtx.resume();
+                console.log('[AudioCtx Watchdog] AudioContext resumido con éxito.');
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('🎤 Audio de micrófono restaurado automáticamente.');
+                }
+            } catch (e) {
+                console.error('[AudioCtx Watchdog] No se pudo resumir el AudioContext:', e);
+            }
+        } else if (audioCtx.state === 'closed') {
+            // El ctx fue cerrado inesperadamente — reiniciar el motor de audio completo
+            console.warn('[AudioCtx Watchdog] AudioContext cerrado inesperadamente — reiniciando motor...');
+            clearInterval(audioCtxWatchdogInterval);
+            audioCtxWatchdogInterval = null;
+            if (state.activeVoiceChannel) {
+                await startAudioEngine();
+            }
+        }
+    }, 30_000); // Cada 30 segundos
+}
+
+function stopAudioCtxWatchdog() {
+    if (audioCtxWatchdogInterval) {
+        clearInterval(audioCtxWatchdogInterval);
+        audioCtxWatchdogInterval = null;
+    }
+}
+
+// Resume el AudioContext cuando el usuario vuelve al tab (tab visibility change)
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && audioCtx) {
+        if (audioCtx.state === 'suspended') {
+            console.log('[VisibilityChange] Tab reactivado — resumiendo AudioContext...');
+            try {
+                await audioCtx.resume();
+                console.log('[VisibilityChange] AudioContext resumido.');
+            } catch (e) {}
+        }
+        // Si hay microphoneStream pero la pista está inactiva, reiniciar el motor
+        if (microphoneStream) {
+            const track = microphoneStream.getAudioTracks()[0];
+            if (track && track.readyState === 'ended') {
+                console.warn('[VisibilityChange] Pista de micrófono terminada — reiniciando motor de audio...');
+                if (state.activeVoiceChannel) {
+                    await startAudioEngine();
+                }
+            }
+        }
+    }
+});
+
+// ─────────────────────────────────────────────────────────────
 // SISTEMA DE FILTROS DE MICRÓFONO (Web Audio API)
 // ─────────────────────────────────────────────────────────────
 let processedStream   = null;  // Stream filtrado que se envía por WebRTC
@@ -1168,15 +1232,22 @@ async function joinMultiplayerVoice(channelId) {
     });
 }
 
+let voicePresenceHeartbeat = null;
+
 async function joinSupabasePresence(channelId, myName, peerId) {
     if (!supabase) return;
+
+    if (voicePresenceHeartbeat) {
+        clearInterval(voicePresenceHeartbeat);
+        voicePresenceHeartbeat = null;
+    }
 
     const roomChannel = `voice:${channelId}`;
     const userEmail = (localStorage.getItem('nexus_user_email') || myName).toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
     const userKey = `user_${userEmail}`;
 
     if (presenceChannel) {
-        await supabase.removeChannel(presenceChannel);
+        try { await supabase.removeChannel(presenceChannel); } catch (e) {}
         presenceChannel = null;
     }
 
@@ -1184,24 +1255,42 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         config: { presence: { key: userKey } }
     });
 
+    const sendVoicePresence = async () => {
+        if (!presenceChannel) return;
+        try {
+            const email = localStorage.getItem('nexus_user_email') || '';
+            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+            await presenceChannel.track({
+                name: myName,
+                email: email.toLowerCase(),
+                peerId: localPeerId || peerId,
+                avatar: myAvatar,
+                avatarStyle: myAvatarStyle,
+                isMuted: state.isMuted || state.isDeafened,
+                isOp: email.toLowerCase() === OP_EMAIL.toLowerCase(),
+                joinedAt: Date.now()
+            });
+        } catch (e) {
+            console.warn('[Presence] Error actualizando presencia en sala de voz:', e);
+        }
+    };
+
     presenceChannel.on('presence', { event: 'sync' }, () => {
         const presenceState = presenceChannel.presenceState();
         syncVoiceRoomFromPresence(presenceState, myName);
 
         // ── FIX: llamar a peers que YA estaban en la sala al momento del sync ──
-        // El evento 'join' solo dispara para nuevos ingresos DESPUÉS de suscribirse.
-        // Los peers que ya estaban presentes cuando llegamos solo aparecen en 'sync'.
-        // Sin esta lógica, si ambos usuarios se unen casi al mismo tiempo, ninguno llama al otro.
         Object.values(presenceState).forEach(presences => {
             presences.forEach(presence => {
                 if (
                     presence.peerId &&
                     presence.peerId !== localPeerId &&
+                    !presence.peerId.startsWith('nexus_') &&
                     !activePeers.has(presence.peerId)
                 ) {
                     console.log(`[Presence Sync] Peer existente detectado: ${presence.name} — iniciando llamada...`);
-                    // Pequeño delay para evitar race condition cuando ambos publican al mismo tiempo
-                    setTimeout(() => callPeer(presence.peerId, presence.name), 500);
+                    setTimeout(() => callPeer(presence.peerId, presence.name), 400 + Math.random() * 400);
                 }
             });
         });
@@ -1209,7 +1298,7 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
     presenceChannel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
         newPresences.forEach(presence => {
-            if (presence.peerId !== localPeerId) {
+            if (presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
                 console.log(`[Presence] ${presence.name} se unió. Llamando...`);
                 callPeer(presence.peerId, presence.name);
             }
@@ -1226,20 +1315,19 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
     await presenceChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-            const email = localStorage.getItem('nexus_user_email') || '';
-            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
-            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
-            await presenceChannel.track({
-                name: myName,
-                email: email.toLowerCase(),
-                peerId: localPeerId,
-                avatar: myAvatar,
-                avatarStyle: myAvatarStyle,
-                isMuted: state.isMuted || state.isDeafened,
-                isOp: email === OP_EMAIL,
-                joinedAt: Date.now()
-            });
+            await sendVoicePresence();
             console.log(`[Presence] Presencia publicada en ${roomChannel}`);
+
+            // Heartbeat de presencia de voz cada 20 segundos para evitar cortes durante eventos largos
+            if (voicePresenceHeartbeat) clearInterval(voicePresenceHeartbeat);
+            voicePresenceHeartbeat = setInterval(sendVoicePresence, 20_000);
+        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+            console.warn(`[Presence] Canal de voz ${status}. Reintentando suscripción...`);
+            setTimeout(() => {
+                if (state.activeVoiceChannel === channelId) {
+                    joinSupabasePresence(channelId, myName, localPeerId || peerId);
+                }
+            }, 2500);
         }
     });
 }
@@ -1328,17 +1416,24 @@ function callPeer(remotePeerId, remoteName) {
 
     // Monitor de salud de la conexión WebRTC P2P (auto-recuperación si cae el audio)
     if (call.peerConnection) {
+        let reconnectAttempts = 0;
         call.peerConnection.oniceconnectionstatechange = () => {
             const iceState = call.peerConnection.iceConnectionState;
             console.log(`[WebRTC P2P] Estado de conexión ICE con ${remoteName}: ${iceState}`);
             if (iceState === 'disconnected' || iceState === 'failed') {
                 console.warn(`[WebRTC P2P] Conexión caída con ${remoteName}. Reintentando reconexión...`);
                 removeRemoteAudio(remotePeerId);
+                
+                // Backoff con jitter para que 30 personas no reconecten al mismo milisegundo
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 6000) + Math.random() * 500;
                 setTimeout(() => {
                     if (state.activeVoiceChannel && isMultiplayerMode && !activePeers.has(remotePeerId)) {
                         callPeer(remotePeerId, remoteName);
                     }
-                }, 1500);
+                }, delay);
+            } else if (iceState === 'connected' || iceState === 'completed') {
+                reconnectAttempts = 0;
             }
         };
     }
@@ -1521,6 +1616,12 @@ export function disconnectVoiceChannel(triggerUI = true) {
             if (audioEl) { audioEl.srcObject = null; audioEl.remove(); }
         });
         activePeers.clear();
+        // Limpiar heartbeat de voz
+        if (voicePresenceHeartbeat) {
+            clearInterval(voicePresenceHeartbeat);
+            voicePresenceHeartbeat = null;
+        }
+
         // Desregistrar presencia y desuscribirse limpiamente
         if (presenceChannel && supabase) {
             try {
@@ -1645,6 +1746,8 @@ async function startAudioEngine() {
     drawVisualizer();
     // Iniciar detección de actividad de voz local (VAD)
     startLocalVAD();
+    // Iniciar watchdog que previene que el AudioContext se congele después de horas
+    startAudioCtxWatchdog();
 }
 
 let virtualGainNode = null;
@@ -1692,6 +1795,8 @@ function startVirtualAudioEngine() {
 }
 
 function stopAudioEngine() {
+    stopAudioCtxWatchdog();
+
     if (visualizerAnimationId) {
         cancelAnimationFrame(visualizerAnimationId);
         visualizerAnimationId = null;

@@ -143,13 +143,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let serversRealtimeChannel = null;
     let channelsRealtimeChannel = null;
 
+    // Helper para sincronizar botones de creación según permisos de OP
+    function syncOpCreationButtons() {
+        const isOp = isCurrentUserOp();
+        const addServerBtn = document.getElementById('add-server-btn');
+        const addTextChannelBtn = document.getElementById('add-text-channel-btn');
+        const addVoiceChannelBtn = document.getElementById('add-voice-channel-btn');
+        if (addServerBtn) addServerBtn.style.display = isOp ? 'flex' : 'none';
+        if (addTextChannelBtn) addTextChannelBtn.style.display = isOp ? 'inline-flex' : 'none';
+        if (addVoiceChannelBtn) addVoiceChannelBtn.style.display = isOp ? 'inline-flex' : 'none';
+    }
+
     // Cargar servidores y canales iniciales
-    loadAndRenderServers();
-    loadAndRenderChannels();
+    loadAndRenderServers().then(syncOpCreationButtons);
+    loadAndRenderChannels().then(syncOpCreationButtons);
 
     window.addEventListener('supabase-ready', () => {
-        loadAndRenderServers();
-        loadAndRenderChannels();
+        loadAndRenderServers().then(syncOpCreationButtons);
+        loadAndRenderChannels().then(syncOpCreationButtons);
         subscribeToServersAndChannels();
     });
 
@@ -669,6 +680,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const sidebarName = document.getElementById('sidebar-local-name');
             if (sidebarName) sidebarName.textContent = savedName;
 
+            // Ajustar visibilidad de botones de creación según permisos OP
+            const isOp = isCurrentUserOp();
+            const addServerBtn = document.getElementById('add-server-btn');
+            const addTextChannelBtn = document.getElementById('add-text-channel-btn');
+            const addVoiceChannelBtn = document.getElementById('add-voice-channel-btn');
+            if (addServerBtn) addServerBtn.style.display = isOp ? 'flex' : 'none';
+            if (addTextChannelBtn) addTextChannelBtn.style.display = isOp ? 'inline-flex' : 'none';
+            if (addVoiceChannelBtn) addVoiceChannelBtn.style.display = isOp ? 'inline-flex' : 'none';
+
             // Iniciar presencia global para que todos vean quién está conectado
             if (supabaseReady && supabase) {
                 startGlobalPresence(savedName);
@@ -1018,7 +1038,8 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.setAttribute('data-server-id', server.id);
             wrapper.id = `server-item-${server.id}`;
 
-            const deleteBtnHtml = server.id !== 'nexus-default' ? `
+            const isOpUser = isCurrentUserOp();
+            const deleteBtnHtml = (server.id !== 'nexus-default' && isOpUser) ? `
                 <button class="delete-server-btn" title="Eliminar Servidor" data-server-id="${server.id}">✕</button>
             ` : '';
 
@@ -1180,18 +1201,22 @@ document.addEventListener('DOMContentLoaded', () => {
         textList.innerHTML = '';
         voiceList.innerHTML = '';
 
+        const isOp = isCurrentUserOp();
+
         channels.forEach(ch => {
             const li = document.createElement('li');
             li.className = 'channel-item';
             li.setAttribute('data-channel', ch.id);
             li.setAttribute('data-type', ch.type);
 
+            const deleteBtnHtml = isOp ? `<button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>` : '';
+
             if (ch.type === 'text') {
                 li.innerHTML = `
                     <div class="channel-main-row">
                         <span class="channel-icon">#</span>
                         <span class="channel-name">${escapeHTMLForApp(ch.name.toLowerCase())}</span>
-                        <button class="delete-channel-btn" title="Eliminar Canal">🗑️</button>
+                        ${deleteBtnHtml}
                     </div>
                 `;
             } else if (ch.type === 'voice') {
@@ -1200,7 +1225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <svg class="channel-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         <span class="channel-name">${escapeHTMLForApp(ch.name)}</span>
                         <span class="active-count" id="voice-count-${ch.id}">0</span>
-                        <button class="delete-channel-btn" title="Eliminar Sala">🗑️</button>
+                        ${deleteBtnHtml}
                     </div>
                     <div class="channel-users-list" id="voice-users-${ch.id}"></div>
                 `;
@@ -1256,17 +1281,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (addTextChannelBtn) {
         addTextChannelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!isCurrentUserOp()) {
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('🔒 Se requiere rango Operator (OP) para crear canales.');
+                } else {
+                    alert('Se requiere rango Operator (OP) para crear canales.');
+                }
+                return;
+            }
             openChannelModal('text');
         });
     }
     if (addVoiceChannelBtn) {
         addVoiceChannelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!isCurrentUserOp()) {
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('🔒 Se requiere rango Operator (OP) para crear salas de voz.');
+                } else {
+                    alert('Se requiere rango Operator (OP) para crear salas de voz.');
+                }
+                return;
+            }
             openChannelModal('voice');
         });
     }
 
     function openChannelModal(type) {
+        if (!isCurrentUserOp()) return;
         currentAddingChannelType = type;
         if (channelModalTitle) {
             channelModalTitle.textContent = type === 'text' ? 'Crear Canal de Texto' : 'Crear Sala de Voz';
@@ -1443,6 +1485,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (addServerBtn) {
         addServerBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!isCurrentUserOp()) {
+                if (typeof window.showNexusToast === 'function') {
+                    window.showNexusToast('🔒 Se requiere rango Operator (OP) para crear nuevos servidores.');
+                } else {
+                    alert('Se requiere rango Operator (OP) para crear nuevos servidores.');
+                }
+                return;
+            }
             if (newServerNameInput) newServerNameInput.value = '';
             if (newServerIconInput) newServerIconInput.value = '';
             if (serverModal) serverModal.classList.remove('hidden');

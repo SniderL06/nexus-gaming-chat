@@ -547,9 +547,13 @@ function subscribeToChannel(channelId) {
         })
         .subscribe((status) => {
             console.log(`[Chat] Supabase Realtime en #${channelId}: ${status}`);
-            if (status === 'CHANNEL_ERROR') {
-                console.warn('[Chat] Error en canal Realtime, reintentando en 3s...');
-                setTimeout(() => subscribeToChannel(channelId), 3000);
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.warn(`[Chat] Estado Realtime ${status} en #${channelId}, reintentando en 3s...`);
+                setTimeout(() => {
+                    if (state.activeChannel === channelId) {
+                        subscribeToChannel(channelId);
+                    }
+                }, 3000);
             }
         });
 }
