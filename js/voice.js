@@ -238,36 +238,36 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'extreme': {
-            // ─── FILTRO ANTI-RUIDO EXTREMO v5: AISLAMIENTO VOCAL DE TRÁFICO Y CALLE ───
-            // 1. High-Pass 220Hz: Elimina el retumbe de motores diésel, rodamiento de neumáticos y viento
+            // ─── FILTRO ANTI-RUIDO EXTREMO v6: AISLAMIENTO VOCAL (INTERIOR Y EXTERIOR) ───
+            // 1. High-Pass 120Hz: Elimina zumbido eléctrico y sub-graves sin cortar voces graves
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 220;
-            hp.Q.value = 1.4;
+            hp.frequency.value = 120;
+            hp.Q.value = 1.0;
 
-            // 2. Low-Pass 3400Hz (Banda Telefónica Estándar): Corta los cláxones lejanos, viento agudo y siseos de asfalto mojado
+            // 2. Low-Pass 3400Hz (Banda Telefónica Estándar): Corta siseos y ruidos agudos
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
             lp.frequency.value = 3400;
             lp.Q.value = 1.0;
 
-            // 3. Notch Filter en 500Hz: Frecuencia de resonancia metálica de carrocerías y tubos de escape
+            // 3. Notch Filter en 60Hz: Elimina zumbido eléctrico de la red (50Hz/60Hz)
             const exhaustNotch = audioCtx.createBiquadFilter();
             exhaustNotch.type = 'notch';
-            exhaustNotch.frequency.value = 500;
-            exhaustNotch.Q.value = 2.5;
+            exhaustNotch.frequency.value = 60;
+            exhaustNotch.Q.value = 5.0;
 
-            // 4. Compresor Expansor Múltiple: Aumenta el contraste de la voz sobre el ruido continuo
+            // 4. Compresor: Eleva la voz sobre el ruido continuo (ajustado para micros de escritorio)
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -28;
-            comp.knee.value = 2;
-            comp.ratio.value = 16;
-            comp.attack.value = 0.001; // 1ms: suprime inmediatamente cláxones y ladridos
-            comp.release.value = 0.04;
+            comp.threshold.value = -40; // más permisivo que -28 — detecta voces más suaves
+            comp.knee.value = 6;
+            comp.ratio.value = 6;       // menos agresivo que 16:1
+            comp.attack.value = 0.003;
+            comp.release.value = 0.1;
 
-            // 5. Gate Gain (Silencio dinámico de fondo)
+            // 5. Gate Gain (Silencio dinámico de fondo con paso base)
             const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 0.0; // Silencio total en pausas
+            gateGain.gain.value = 0.2; // Nivel base inicial para no bloquear de entrada
 
             // 6. Analizador de Formantes Vocales
             const analyser = audioCtx.createAnalyser();
@@ -275,9 +275,10 @@ function buildFilterChain(filterName, inputNode) {
             analyser.smoothingTimeConstant = 0.05;
             const freqData = new Float32Array(analyser.frequencyBinCount);
 
-            let lastVoiceTime = 0;
-            const HOLD_MS = 350; // Aumentado a 350ms para evitar cortes entre sílabas y pausas cortas al hablar
+            let lastVoiceTime = Date.now();
+            const HOLD_MS = 450; // Hold extendido para no cortar finales de frases o pausas breves
 
+            let extremeDebugCounter = 0;
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
                     clearInterval(gateInterval);
@@ -287,26 +288,35 @@ function buildFilterChain(filterName, inputNode) {
                 analyser.getFloatFrequencyData(freqData);
                 const sampleRate = audioCtx.sampleRate || 48000;
 
-                // Banda Formante Vocal Humana (200Hz a 2800Hz)
-                const bStart = Math.floor((200 * 256) / sampleRate);
-                const bEnd   = Math.floor((2800 * 256) / sampleRate);
-                let sum = -100;
+                // Banda Formante Vocal Humana (150Hz a 3200Hz)
+                const bStart = Math.floor((150 * 256) / sampleRate);
+                const bEnd   = Math.floor((3200 * 256) / sampleRate);
+                let sum = 0;
                 let count = 0;
                 for (let i = bStart; i <= bEnd; i++) {
-                    if (freqData[i] > -100) { sum += freqData[i]; count++; }
+                    if (freqData[i] > -Infinity && freqData[i] > -120) {
+                        sum += freqData[i];
+                        count++;
+                    }
                 }
                 const avgVocalPower = count > 0 ? (sum / count) : -100;
 
+                // Log de diagnóstico cada ~2 segundos para depurar problemas de micrófono
+                extremeDebugCounter++;
+                if (extremeDebugCounter % 167 === 0) {
+                    console.log(`[Filtro Extremo] avgVocalPower=${avgVocalPower.toFixed(1)}dBFS gateGain=${gateGain.gain.value.toFixed(2)} bins=${count}`);
+                }
+
                 const now = Date.now();
-                // Umbral más permisivo (-64 dBFS) para capturar voz suave o susurrada sin cortar la frase
-                const isSpeaking = avgVocalPower > -64;
+                // Umbral permisivo (-60 dBFS) para capturar voz normal de escritorio
+                const isSpeaking = avgVocalPower > -60;
 
                 if (isSpeaking) {
                     lastVoiceTime = now;
-                    try { gateGain.gain.setTargetAtTime(1.1, audioCtx.currentTime, 0.008); } catch(e){}
+                    try { gateGain.gain.setTargetAtTime(1.2, audioCtx.currentTime, 0.005); } catch(e){}
                 } else if ((now - lastVoiceTime) > HOLD_MS) {
-                    // Desvanecimiento suave (fade out) de 40ms en lugar de corte seco
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.04); } catch(e){}
+                    // Cierre gradual — nunca silencio total (0.05 mínimo)
+                    try { gateGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.05); } catch(e){}
                 }
             }, 12);
 
@@ -2020,8 +2030,9 @@ function renderVoiceMembers() {
         }
 
         const card = document.createElement('div');
-        card.className = `voice-member-card ${member.activeSpeaker ? 'speaking' : ''}`;
+        card.className = `voice-member-card ${member.activeSpeaker ? 'speaking' : ''} ${isUser ? 'is-local-user-card' : ''}`;
         card.id = `voice-member-${member.name.replace(/\s+/g, '-')}`;
+        if (isUser) card.setAttribute('data-is-local', 'true');
 
         let statusIcons = '';
         if (member.isMuted || (isUser && state.isMuted)) {
@@ -2498,9 +2509,15 @@ function startLocalVAD() {
 // (sin re-renderizar todo el grid para máxima fluidez y 0 parpadeos)
 function applyLocalSpeakingGlow(speaking) {
     const myName = getLocalUserName();
-    // El card id usa el nombre con guiones
-    const cardId = `voice-member-${myName.replace(/\s+/g, '-')}`;
-    const card = document.getElementById(cardId);
+    // Prioridad 1: buscar por selector de usuario local
+    let card = document.querySelector('.voice-member-card.is-local-user-card') ||
+               document.querySelector('.voice-member-card[data-is-local="true"]');
+
+    // Prioridad 2: fallback por ID formateado con el nombre
+    if (!card) {
+        const cardId = `voice-member-${myName.replace(/\s+/g, '-')}`;
+        card = document.getElementById(cardId);
+    }
     if (!card) return;
 
     if (speaking) {

@@ -1008,6 +1008,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             servers.push(localS);
                         }
                     }
+
+                    // Guardar en localStorage como caché para carga instantánea la próxima vez
+                    // Esto asegura que todos los usuarios vean TODOS los servidores aunque Supabase tarde
+                    localStorage.setItem('nexus_servers', JSON.stringify(servers.map(s => ({ id: s.id, name: s.name, icon: s.icon }))));
                 } else if (error) {
                     console.error('[Servidores] Error de Supabase:', error.message);
                 }
