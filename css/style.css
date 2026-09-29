@@ -625,7 +625,10 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
+    min-height: 0;
     overflow: hidden;
+    position: relative;
 }
 
 .channel-header {
@@ -1339,6 +1342,7 @@ body {
     padding: 0 20px 20px 20px;
     background-color: var(--bg-primary);
     position: relative;
+    flex-shrink: 0;
 }
 
 .chat-input-wrapper {
@@ -1392,6 +1396,31 @@ body {
     color: var(--accent-cyan);
     background-color: var(--bg-hover);
     transform: scale(1.05);
+}
+
+.chat-send-btn {
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: var(--transition-fast);
+    box-shadow: 0 2px 8px var(--accent-purple-glow);
+}
+
+.chat-send-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 4px 14px var(--accent-cyan-glow);
+}
+
+.chat-send-btn:active {
+    transform: scale(0.95);
 }
 
 .emoji-icon {
@@ -5083,7 +5112,10 @@ body.theme-light .theme-panel {
 
 @media (max-width: 768px) {
     .app-container {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: 100% !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
         position: relative;
         overflow: hidden;
     }
@@ -5158,13 +5190,34 @@ body.theme-light .theme-panel {
 
     /* Barra de entrada táctil */
     .chat-footer {
-        padding: 8px 10px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+        position: relative;
+        z-index: 20;
+        background-color: var(--bg-primary);
+        flex-shrink: 0;
     }
     .chat-input-wrapper {
-        gap: 4px;
+        gap: 6px;
+        padding: 6px 8px;
     }
     .chat-input {
         font-size: 0.95rem; /* Evita zoom automático en iOS Safari */
+        min-height: 36px;
+    }
+    /* Ocultar botones secundarios de stickers/memes en pantallas móviles muy angostas para dar prioridad a escribir y enviar */
+    #sticker-btn,
+    #meme-btn {
+        display: none !important;
+    }
+    .chat-send-btn {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        border-radius: 8px !important;
+    }
+    .chat-send-btn svg {
+        width: 18px !important;
+        height: 18px !important;
     }
 
     /* Cuadrícula de Miembros de Voz */

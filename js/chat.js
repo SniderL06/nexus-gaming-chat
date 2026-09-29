@@ -192,7 +192,7 @@ export function initChat() {
         subscribeToChannel(state.activeChannel);
     });
 
-    // Enviar con Enter
+    // Enviar con Enter y con el botón Enviar
     if (chatTextarea) {
         chatTextarea.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -204,6 +204,14 @@ export function initChat() {
             chatTextarea.style.height = 'auto';
             chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 120) + 'px';
             handleMentionAutocomplete();
+        });
+    }
+
+    const chatSendBtn = document.getElementById('chat-send-btn');
+    if (chatSendBtn) {
+        chatSendBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            sendMessage();
         });
     }
 
