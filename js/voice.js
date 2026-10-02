@@ -1379,9 +1379,24 @@ async function joinSupabasePresence(channelId, myName, peerId) {
 
     presenceChannel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         leftPresences.forEach(presence => {
-            console.log(`[Presence] ${presence.name} salió del canal de voz.`);
-            removeRemoteAudio(presence.peerId);
-            removeMemberFromRoom(presence.name);
+            console.log(`[Presence] ${presence.name} salió del canal de voz (esperando 3s para confirmar...)`);
+
+            // Período de gracia: Supabase puede emitir eventos 'leave' transitorios durante
+            // actualizaciones de track. Esperamos 3 s antes de realmente desconectar al peer.
+            setTimeout(() => {
+                if (!presenceChannel) return;
+                const currentState = presenceChannel.presenceState();
+                const stillPresent = Object.values(currentState).some(list =>
+                    list.some(p => p.email === presence.email || p.peerId === presence.peerId)
+                );
+                if (stillPresent) {
+                    console.log(`[Presence] ${presence.name} volvió a conectarse — ignorando desconexión falsa.`);
+                    return;
+                }
+                console.log(`[Presence] ${presence.name} confirmado fuera del canal. Eliminando audio.`);
+                removeRemoteAudio(presence.peerId);
+                removeMemberFromRoom(presence.name);
+            }, 3000);
         });
     });
 

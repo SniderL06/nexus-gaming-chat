@@ -51,7 +51,23 @@ export function startGlobalPresence(userName) {
     const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
     const presenceKey = email ? `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}` : `user_${userName.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
-    // Limpiar canal e intervalo anterior si existía
+    // ─── REUTILIZAR canal existente: solo actualizar el track sin destruir ──────
+    // Destruir y recrear el canal causa un evento leave+join visible para TODOS los
+    // demás usuarios, lo que rompe las llamadas de voz activas.
+    if (globalPresenceChannel && globalPresenceHeartbeat) {
+        console.log('[Presencia] Canal ya activo — actualizando track sin reconectar.');
+        globalPresenceChannel.track({
+            name: userName,
+            email: email,
+            avatar: userAvatar || '',
+            avatarStyle: userAvatarStyle,
+            online_at: new Date().toISOString()
+        }).catch(err => console.warn('[Presencia] Error al re-trackear:', err));
+        return; // ← NO destruir el canal
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // Primera vez (o si el canal fue limpiado explícitamente): crear canal nuevo
     if (globalPresenceHeartbeat) {
         clearInterval(globalPresenceHeartbeat);
         globalPresenceHeartbeat = null;
@@ -75,8 +91,6 @@ export function startGlobalPresence(userName) {
                 avatarStyle: userAvatarStyle,
                 online_at: new Date().toISOString()
             });
-
-            // Presencia local guardada en memoria y transmitida
         } catch (err) {
             console.warn('[Presencia] Error al actualizar estado de presencia:', err);
         }
