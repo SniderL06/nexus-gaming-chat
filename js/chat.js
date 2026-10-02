@@ -548,7 +548,6 @@ function subscribeToChannel(channelId) {
                 }
 
                 // ── Notificación de @mención ──────────────────────────────
-                const myName = getLocalUserName();
                 const msgText = msg.text || '';
                 if (myName) {
                     const safeMyName = myName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

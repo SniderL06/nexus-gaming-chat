@@ -304,16 +304,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Paso 1: Enviar correo
     if (loginFormStep1 && loginEmailInput) {
-        loginFormStep1.addEventListener('submit', (e) => {
-            e.preventDefault();
-            sendVerificationCode();
-        });
-        // Respaldo por si onsubmit="return false" bloquea el submit del formulario en algunos navegadores
+        let isSending = false;
+        const handleSend = (e) => {
+            if (e) e.preventDefault();
+            if (isSending) return;
+            isSending = true;
+            sendVerificationCode().finally(() => {
+                isSending = false;
+            });
+        };
+
+        loginFormStep1.addEventListener('submit', handleSend);
         if (loginSendBtn) {
             loginSendBtn.addEventListener('click', (e) => {
-                if (loginEmailInput.reportValidity()) {
-                    e.preventDefault();
-                    sendVerificationCode();
+                if (loginEmailInput.checkValidity()) {
+                    handleSend(e);
+                } else {
+                    loginEmailInput.reportValidity();
                 }
             });
         }

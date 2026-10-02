@@ -4,8 +4,9 @@
 
 // ─── Estado ───────────────────────────────────────────────────────────
 let swRegistration = null;
-let notifPermission = Notification?.permission || 'default';
+let notifPermission = (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'default';
 let installPromptEvent = null; // BeforeInstallPromptEvent guardado
+
 
 // ─── REGISTRO DEL SERVICE WORKER ─────────────────────────────────────
 export async function initPWA() {
