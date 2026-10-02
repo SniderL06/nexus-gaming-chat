@@ -1538,12 +1538,15 @@ function callPeer(remotePeerId, remoteName) {
     activePeers.set(remotePeerId, { name: remoteName, call });
 
     // Si estamos transmitiendo pantalla localmente, llamar con el stream de vídeo también
-    import('./stream.js').then(({ activeStream }) => {
+    import('./stream.js').then(({ activeStream, applyHighQualityVideoBitrate }) => {
         if (state.isStreaming && activeStream) {
             console.log(`[PeerJS] Enviando vídeo de pantalla a nuevo participante: ${remoteName}`);
             const videoCall = peer.call(remotePeerId, activeStream, {
                 metadata: { type: 'screen' }
             });
+            if (typeof applyHighQualityVideoBitrate === 'function') {
+                applyHighQualityVideoBitrate(videoCall, '1080p', 60);
+            }
             const peerObj = activePeers.get(remotePeerId);
             if (peerObj) peerObj.videoCall = videoCall;
         }

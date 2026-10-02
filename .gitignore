@@ -20,3 +20,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.swp
+
+# Tauri y Frontend Dist
+dist/
+src-tauri/target/
+

@@ -270,7 +270,10 @@
                             <span class="live-tag">DIRECTO</span>
                             <span class="stream-title" id="stream-user-title">Transmisión de Usuario Nexus</span>
                         </div>
-                        <button class="stream-close" id="stop-stream-btn" title="Cerrar / Salir del directo">✕</button>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <button class="stream-action-header-btn" id="stream-compact-btn" title="Modo compacto / Expandir (para ver el chat)">🗗 Reducir</button>
+                            <button class="stream-close" id="stop-stream-btn" title="Cerrar / Salir del directo">✕</button>
+                        </div>
                     </div>
                     <div class="stream-viewport" id="stream-viewport">
                         <video id="local-stream-video" autoplay playsinline muted title="Doble clic para pantalla completa"></video>

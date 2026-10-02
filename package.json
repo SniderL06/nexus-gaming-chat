@@ -1,0 +1,10 @@
+{
+  "name": "nexus-gaming-chat",
+  "version": "1.0.0",
+  "description": "Nexus Gaming Chat Client",
+  "scripts": {
+    "copy-dist": "node scripts/prepare-dist.js",
+    "tauri": "tauri",
+    "build:app": "node scripts/prepare-dist.js && tauri build"
+  }
+}

@@ -19,6 +19,7 @@ export function initStream() {
     const stopStreamBtn = document.getElementById('stop-stream-btn');
     const fullscreenBtn = document.getElementById('stream-fullscreen-btn');
     const micToggleBtn = document.getElementById('stream-mic-toggle');
+    const compactBtn = document.getElementById('stream-compact-btn');
 
     if (stopStreamBtn) {
         stopStreamBtn.addEventListener('click', handleStopStreamClick);
@@ -28,6 +29,16 @@ export function initStream() {
     }
     if (micToggleBtn) {
         micToggleBtn.addEventListener('click', toggleStreamAudio);
+    }
+    if (compactBtn) {
+        compactBtn.addEventListener('click', () => {
+            if (!streamContainer) streamContainer = document.getElementById('stream-container');
+            if (streamContainer) {
+                const isCompact = streamContainer.classList.toggle('compact-mode');
+                compactBtn.textContent = isCompact ? '🗖 Expandir' : '🗗 Reducir';
+                compactBtn.title = isCompact ? 'Modo normal (pantalla completa o grande)' : 'Modo compacto (para ver el chat)';
+            }
+        });
     }
 
     // Doble clic en el video para pantalla completa
@@ -104,20 +115,27 @@ async function startLocalStream() {
             activeStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: 'always',
+                    displaySurface: 'monitor',
                     frameRate: { ideal: targetFps, max: targetFps },
                     width: { ideal: width, max: width },
                     height: { ideal: height, max: height }
                 },
                 audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
                 }
             });
         } catch (strictErr) {
-            console.warn('[Stream] Fallo al capturar con restricciones estrictas de resolución. Reintentando con configuración básica...', strictErr);
+            console.warn('[Stream] Fallo al capturar con restricciones estrictas. Reintentando con configuración general...', strictErr);
             try {
                 activeStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: 'always', frameRate: { ideal: targetFps } },
+                    video: {
+                        cursor: 'always',
+                        frameRate: { ideal: targetFps },
+                        width: { ideal: width },
+                        height: { ideal: height }
+                    },
                     audio: true
                 });
             } catch (basicAudioErr) {
@@ -126,6 +144,14 @@ async function startLocalStream() {
                     video: { cursor: 'always', frameRate: { ideal: targetFps } },
                     audio: false
                 });
+            }
+        }
+
+        // Optimizar el track de video para máxima nitidez (priorizar resolución antes que bajar calidad)
+        const videoTrack = activeStream.getVideoTracks()[0];
+        if (videoTrack) {
+            if ('contentHint' in videoTrack) {
+                videoTrack.contentHint = 'detail'; // Forzar codec a no pixelar texto ni HUD de juegos
             }
         }
 
@@ -149,7 +175,7 @@ async function startLocalStream() {
         const qualityIndicator = document.getElementById('stream-quality-indicator');
         if (qualityIndicator) {
             const qualityLabels = { '480p': '480p', '720p': '720p HD', '1080p': '1080p Full HD', '1440p': '2K QHD', '4k': '4K Ultra HD' };
-            qualityIndicator.textContent = `Calidad: ${qualityLabels[targetQuality] || targetQuality} @ ${targetFps} FPS (Seleccionado)`;
+            qualityIndicator.textContent = `Calidad: ${qualityLabels[targetQuality] || targetQuality} @ ${targetFps} FPS (Nitidez Alta)`;
         }
 
         // Actualizar botón de la barra de usuario
@@ -158,13 +184,10 @@ async function startLocalStream() {
             goLiveBtn.querySelector('span').textContent = 'Transmitiendo';
         }
 
-        // Transmisión PeerJS en multijugador
+        // Transmisión PeerJS en multijugador con Bitrate de Alta Definición
         if (isMultiplayerMode && peer) {
             console.log(`[Stream] Compartiendo pantalla con ${activePeers.size} participantes reales.`);
 
-            // Enviar activeStream directamente (incluye video y audio del sistema/juego si se capturó).
-            // NOTA: NO inyectamos el micrófono aquí porque ya se transmite de forma independiente
-            // y limpia en voice.js, eliminando por completo el eco y la duplicación de voces.
             const streamToSend = activeStream;
 
             activePeers.forEach(({ name }, remotePeerId) => {
@@ -173,6 +196,10 @@ async function startLocalStream() {
                     const videoCall = peer.call(remotePeerId, streamToSend, {
                         metadata: { type: 'screen' }
                     });
+
+                    // Maximizar el bitrate del encoder WebRTC para que no comprima a 720p/borroso
+                    applyHighQualityVideoBitrate(videoCall, targetQuality, targetFps);
+
                     // Guardar referencia para poder colgarla después
                     const peerObj = activePeers.get(remotePeerId);
                     if (peerObj) peerObj.videoCall = videoCall;
@@ -463,3 +490,62 @@ export function toggleStreamAudio() {
         console.log(`[Stream] Sonido de espectador ${streamVideoElement.muted ? 'muteado' : 'activo'}.`);
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// CONFIGURACIÓN DE BITRATE Y NITIDEZ WEBRTC EN TIEMPO REAL
+// ─────────────────────────────────────────────────────────────
+export function applyHighQualityVideoBitrate(mediaConnection, targetQuality = '1080p', targetFps = 60) {
+    if (!mediaConnection) return;
+
+    // Tabla de bitrates balanceados para máxima fluidez y cero tirones (60 FPS estables)
+    const bitrateMap = {
+        '480p': 1_200_000,    // 1.2 Mbps
+        '720p': 2_800_000,    // 2.8 Mbps
+        '1080p': 5_500_000,   // 5.5 Mbps (Punto dulce de WebRTC: máxima nitidez sin saturar el enlace)
+        '1440p': 8_500_000,   // 8.5 Mbps
+        '4k': 14_000_000      // 14 Mbps
+    };
+    const maxBitrate = bitrateMap[targetQuality] || 5_500_000;
+
+    const configureSender = (pc) => {
+        if (!pc || typeof pc.getSenders !== 'function') return;
+        const senders = pc.getSenders();
+        senders.forEach(async (sender) => {
+            if (sender.track && sender.track.kind === 'video') {
+                try {
+                    const params = sender.getParameters();
+                    if (!params.encodings || params.encodings.length === 0) {
+                        params.encodings = [{}];
+                    }
+                    
+                    // Configuración equilibrada: alta tasa de refresco sin bufferbloat ni tirones
+                    params.encodings[0].maxBitrate = maxBitrate;
+                    params.encodings[0].maxFramerate = targetFps;
+                    params.encodings[0].networkPriority = 'high';
+                    params.encodings[0].priority = 'high';
+                    params.degradationPreference = 'balanced'; // Permite microajustes dinámicos para evitar congelamiento
+
+                    await sender.setParameters(params);
+                    console.log(`[Stream WebRTC] Modo Fluidez Gaming: ${(maxBitrate / 1_000_000).toFixed(1)} Mbps @ ${targetFps} FPS (${params.degradationPreference})`);
+                } catch (e) {
+                    console.warn('[Stream WebRTC] No se pudo configurar parámetros de encoder:', e);
+                }
+            }
+        });
+    };
+
+    // Intentar configurar inmediatamente y luego de establecer el handshake
+    if (mediaConnection.peerConnection) {
+        configureSender(mediaConnection.peerConnection);
+    }
+
+    const tryConfigureLater = () => {
+        if (mediaConnection.peerConnection) {
+            configureSender(mediaConnection.peerConnection);
+        }
+    };
+    setTimeout(tryConfigureLater, 800);
+    setTimeout(tryConfigureLater, 2500);
+}
+
+
