@@ -139,10 +139,11 @@ function updateOnlineMembersSidebar(presenceState) {
     if (!membersList) return;
 
     // Obtener nombre y correo propio actualizados
-    const myEmail = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    const rawEmail = localStorage.getItem('nexus_user_email') || '';
+    const myEmail = rawEmail.trim().toLowerCase();
     const myName = (() => {
         if (!myEmail) return null;
-        const customName = localStorage.getItem('nexus_username_' + myEmail);
+        const customName = localStorage.getItem('nexus_username_' + myEmail) || localStorage.getItem('nexus_username_' + rawEmail);
         if (customName) return customName;
         const base = myEmail.split('@')[0];
         return base.charAt(0).toUpperCase() + base.slice(1);

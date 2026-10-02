@@ -160,28 +160,28 @@ function buildFilterChain(filterName, inputNode) {
             lp.frequency.value = 8000;
             lp.Q.value = 0.7;
 
-            // 7. Compresor dinámico agresivo: aplasta ruido de fondo, preserva voz
+            // 7. Compresor dinámico musical: balanceado para nivelar voz sin recortar el final de palabras
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -55;  // dB — umbral más bajo: captura más ruido
-            comp.knee.value = 8;         // rodilla suave
-            comp.ratio.value = 14;       // 14:1 — compresión fuerte
-            comp.attack.value = 0.001;   // 1ms — reacción casi instantánea
-            comp.release.value = 0.08;   // 80ms — suelta rápido para no cortar consonantes
+            comp.threshold.value = -36;  // dB — nivel natural para voz
+            comp.knee.value = 6;         // transición suave
+            comp.ratio.value = 4;        // 4:1 — compresión controlada y transparente
+            comp.attack.value = 0.003;   // 3ms
+            comp.release.value = 0.15;   // 150ms — suelta suavemente para no entrecortar
 
-            // 8. Noise Gate via GainNode con ScriptProcessor (umbral de energía)
-            // Silencia completamente cuando el nivel cae por debajo del floor de ruido
+            // 8. Noise Gate dinámico (umbral de energía no destructivo)
+            // Atenúa el ruido de fondo sin silenciar abruptamente la voz
             const gateGain = audioCtx.createGain();
             gateGain.gain.value = 1.0;
 
             const gateAnalyser = audioCtx.createAnalyser();
             gateAnalyser.fftSize = 256;
             const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
-            // Threshold 32: más alto para cortar clicks de teclado (eran 20)
-            // Los clicks de teclado suelen tener RMS ~18-28 en este rango
-            const GATE_THRESHOLD = 32; // RMS umbral (0-255) — por debajo = silencio
-            const GATE_HOLD_MS = 80;   // ms de hold más corto = corte más rápido post-click
+            // Threshold 18 (en lugar de 32): capta tonos suaves y finales de oraciones
+            const GATE_THRESHOLD = 18;
+            // Hold de 320ms (en lugar de 80ms) para que la voz no se corte entre palabras
+            const GATE_HOLD_MS = 320;
             let gateOpen = false;
-            let lastAboveThresholdTime = 0;
+            let lastAboveThresholdTime = Date.now();
 
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
@@ -204,7 +204,8 @@ function buildFilterChain(filterName, inputNode) {
                     }
                 } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
                     gateOpen = false;
-                    try { gateGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.015); } catch(e){}
+                    // Cierre atenuado a 0.05 en lugar de 0.0 total: evita el efecto "mudo/cortado" entrecortado
+                    try { gateGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.04); } catch(e){}
                 }
             }, 20); // 50 Hz de polling
 
@@ -1244,6 +1245,14 @@ async function joinMultiplayerVoice(channelId) {
                 call.answer();
             }
 
+            // Registrar en activePeers de inmediato para evitar que callPeer intente una llamada saliente duplicada en paralelo
+            if (!activePeers.has(call.peer)) {
+                activePeers.set(call.peer, { name: '', call });
+            } else {
+                const existing = activePeers.get(call.peer);
+                if (existing) existing.call = call;
+            }
+
             // Si estamos transmitiendo pantalla localmente, compartirla también con quien nos llama
             import('./stream.js').then(({ activeStream }) => {
                 if (state.isStreaming && activeStream) {
@@ -1472,6 +1481,9 @@ function callPeer(remotePeerId, remoteName) {
     const call = peer.call(remotePeerId, streamToCall, {
         metadata: { type: 'audio' }
     });
+
+    // Guardar inmediatamente en activePeers para bloquear llamadas duplicadas concurrentes
+    activePeers.set(remotePeerId, { name: remoteName, call });
 
     call.on('stream', (remoteStream) => {
         playRemoteStream(remotePeerId, remoteStream);
@@ -2375,9 +2387,10 @@ function toggleDeafen() {
 
 // Obtener el nombre de display del usuario autenticado
 function getLocalUserName() {
-    const email = localStorage.getItem('nexus_user_email') || '';
-    if (!email) return 'Usuario Nexus';
-    const customName = localStorage.getItem('nexus_username_' + email);
+    const rawEmail = localStorage.getItem('nexus_user_email') || '';
+    if (!rawEmail) return 'Usuario Nexus';
+    const email = rawEmail.trim().toLowerCase();
+    const customName = localStorage.getItem('nexus_username_' + email) || localStorage.getItem('nexus_username_' + rawEmail);
     if (customName) return customName;
     const base = email.split('@')[0];
     return base.charAt(0).toUpperCase() + base.slice(1);

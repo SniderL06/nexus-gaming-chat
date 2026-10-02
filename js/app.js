@@ -667,9 +667,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const profileNameInput = document.getElementById('profile-display-name');
         
         if (email) {
-            const namePart = email.split('@')[0];
+            const cleanEmail = email.trim().toLowerCase();
+            const namePart = cleanEmail.split('@')[0];
             const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-            let savedName = localStorage.getItem('nexus_username_' + email) || defaultName;
+            let savedName = localStorage.getItem('nexus_username_' + cleanEmail) || localStorage.getItem('nexus_username_' + email) || defaultName;
             
             if (usernameSpan) usernameSpan.textContent = savedName;
             if (emailSpan) emailSpan.textContent = email;
@@ -699,11 +700,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Si Supabase se conecta después de que el usuario ya estaba logueado
     window.addEventListener('supabase-ready', () => {
-        const savedEmail = localStorage.getItem('nexus_user_email');
-        if (savedEmail) {
-            const namePart = savedEmail.split('@')[0];
+        const rawSavedEmail = localStorage.getItem('nexus_user_email');
+        if (rawSavedEmail) {
+            const cleanSavedEmail = rawSavedEmail.trim().toLowerCase();
+            const namePart = cleanSavedEmail.split('@')[0];
             const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-            const savedName = localStorage.getItem('nexus_username_' + savedEmail) || defaultName;
+            const savedName = localStorage.getItem('nexus_username_' + cleanSavedEmail) || localStorage.getItem('nexus_username_' + rawSavedEmail) || defaultName;
             startGlobalPresence(savedName);
         }
     });
@@ -921,63 +923,79 @@ document.addEventListener('DOMContentLoaded', () => {
     // Vincular botón para guardar perfil (nombre de usuario)
     const saveProfileBtn = document.getElementById('save-profile-btn');
     const profileNameInput = document.getElementById('profile-display-name');
-    if (saveProfileBtn && profileNameInput) {
-        saveProfileBtn.addEventListener('click', () => {
-            const email = localStorage.getItem('nexus_user_email') || '';
-            if (!email) {
-                alert('Debes iniciar sesión para cambiar tu nombre.');
-                return;
-            }
-            const newName = profileNameInput.value.trim();
-            if (!newName) {
-                alert('El nombre de usuario no puede estar vacío.');
-                return;
-            }
-            if (newName.length > 25) {
-                alert('El nombre de usuario no puede tener más de 25 caracteres.');
-                return;
-            }
-            
-            // Guardar
-            localStorage.setItem('nexus_username_' + email, newName);
-            
-            // Actualizar interfaz local
-            updateUserProfileUI(email);
+    function handleSaveProfile() {
+        const rawEmail = localStorage.getItem('nexus_user_email') || '';
+        const email = rawEmail.trim().toLowerCase();
+        if (!email) {
+            alert('Debes iniciar sesión para cambiar tu nombre.');
+            return;
+        }
+        const newName = profileNameInput.value.trim();
+        if (!newName) {
+            alert('El nombre de usuario no puede estar vacío.');
+            return;
+        }
+        if (newName.length > 25) {
+            alert('El nombre de usuario no puede tener más de 25 caracteres.');
+            return;
+        }
+        
+        // Guardar de forma consistente con clave normalizada y legacy por compatibilidad
+        localStorage.setItem('nexus_username_' + email, newName);
+        if (rawEmail && rawEmail !== email) {
+            localStorage.setItem('nexus_username_' + rawEmail, newName);
+        }
+        
+        // Actualizar interfaz local
+        updateUserProfileUI(email);
 
-            // Retransmitir presencia global con el nuevo nombre
-            if (supabaseReady && supabase) {
-                startGlobalPresence(newName);
-            }
+        // Retransmitir presencia global con el nuevo nombre
+        if (supabaseReady && supabase) {
+            startGlobalPresence(newName);
+        }
 
-            // Si está en sala de voz, actualizar la presencia en la sala de voz también
-            if (state.activeVoiceChannel) {
-                import('./voice.js').then(({ presenceChannel, peer, OP_EMAIL }) => {
-                    if (presenceChannel && peer) {
-                        const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
-                        const savedStyle = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
-                        const isOp = email.toLowerCase() === 'sniderquiros5@gmail.com';
+        // Si está en sala de voz, actualizar la presencia en la sala de voz también
+        if (state.activeVoiceChannel) {
+            import('./voice.js').then(({ presenceChannel, peer, OP_EMAIL }) => {
+                if (presenceChannel && peer) {
+                    const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
+                    const savedStyle = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
+                    const isOp = email === 'sniderquiros5@gmail.com';
 
-                        presenceChannel.track({
-                            name: newName,
-                            email: email.toLowerCase(),
-                            peerId: peer.id,
-                            isMuted: state.isMuted,
-                            isOp: isOp,
-                            avatar: savedAvatar,
-                            avatarStyle: savedStyle,
-                            joinedAt: Date.now()
-                        }).catch(() => {});
-                    }
-                });
-            }
+                    presenceChannel.track({
+                        name: newName,
+                        email: email,
+                        peerId: peer.id,
+                        isMuted: state.isMuted,
+                        isOp: isOp,
+                        avatar: savedAvatar,
+                        avatarStyle: savedStyle,
+                        joinedAt: Date.now()
+                    }).catch(() => {});
+                }
+            });
+        }
 
-            // Notificación visual de guardado exitoso
+        // Notificación visual de guardado exitoso
+        if (saveProfileBtn) {
             saveProfileBtn.textContent = '✅ Perfil Guardado';
             saveProfileBtn.style.background = 'var(--accent-green)';
             setTimeout(() => {
                 saveProfileBtn.textContent = '💾 Guardar Perfil';
                 saveProfileBtn.style.background = '';
             }, 2000);
+        }
+    }
+
+    if (saveProfileBtn) {
+        saveProfileBtn.addEventListener('click', handleSaveProfile);
+    }
+    if (profileNameInput) {
+        profileNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSaveProfile();
+            }
         });
     }
 

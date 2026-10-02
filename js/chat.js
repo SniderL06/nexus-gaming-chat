@@ -640,9 +640,10 @@ function renderMessages(channelId) {
 }
 
 export function getLocalUserName() {
-    const email = localStorage.getItem('nexus_user_email') || '';
-    if (!email) return 'Usuario Nexus';
-    const customName = localStorage.getItem('nexus_username_' + email);
+    const rawEmail = localStorage.getItem('nexus_user_email') || '';
+    if (!rawEmail) return 'Usuario Nexus';
+    const email = rawEmail.trim().toLowerCase();
+    const customName = localStorage.getItem('nexus_username_' + email) || localStorage.getItem('nexus_username_' + rawEmail);
     if (customName) return customName;
     const base = email.split('@')[0];
     return base.charAt(0).toUpperCase() + base.slice(1);
