@@ -1396,7 +1396,7 @@ async function joinSupabasePresence(channelId, myName, peerId) {
                 console.log(`[Presence] ${presence.name} confirmado fuera del canal. Eliminando audio.`);
                 removeRemoteAudio(presence.peerId);
                 removeMemberFromRoom(presence.name);
-            }, 3000);
+            }, 5000);
         });
     });
 
