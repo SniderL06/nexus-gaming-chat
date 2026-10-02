@@ -4,6 +4,8 @@ import { state, updateRenderLatency } from './app.js';
 import { isUserOp } from './voice.js';
 import { playMusicCommand, skipMusicCommand, stopMusic } from './music.js';
 import { supabase, supabaseReady } from './supabase-client.js';
+import { notifyMention, notifyDM } from './pwa.js';
+
 
 // ─────────────────────────────────────────────────────────────
 // UTILIDAD DE TIMESTAMPS EN TIEMPO REAL
@@ -544,7 +546,19 @@ function subscribeToChannel(channelId) {
                     scrollToBottom();
                     showIncomingMessageIndicator(msg.author);
                 }
+
+                // ── Notificación de @mención ──────────────────────────────
+                const myName = getLocalUserName();
+                const msgText = msg.text || '';
+                if (myName) {
+                    const safeMyName = myName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const mentionMe = new RegExp(`@${safeMyName}\\b`, 'i');
+                    if (mentionMe.test(msgText) || /@everyone|@aqui|@todos/i.test(msgText)) {
+                        notifyMention(msg.author, msgText, channelId);
+                    }
+                }
             } else if (payload.eventType === 'DELETE') {
+
                 const deletedId = payload.old.id;
                 if (currentMessages[channelId]) {
                     currentMessages[channelId] = currentMessages[channelId].filter(m => m.id !== deletedId);

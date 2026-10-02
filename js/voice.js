@@ -2,6 +2,8 @@
 
 import { state, updateRenderLatency } from './app.js';
 import { supabase, supabaseReady } from './supabase-client.js';
+import { notifyVoiceJoin } from './pwa.js';
+
 
 // ─────────────────────────────────────────────────────────────
 // PEERJS MULTIPLAYER VOICE STATE
@@ -1373,6 +1375,8 @@ async function joinSupabasePresence(channelId, myName, peerId) {
             if (presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
                 console.log(`[Presence] ${presence.name} se unió. Llamando...`);
                 callPeer(presence.peerId, presence.name);
+                // Notificar si la app está en background
+                notifyVoiceJoin(presence.name, state.activeVoiceChannel || 'voz');
             }
         });
     });

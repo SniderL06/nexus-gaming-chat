@@ -10,6 +10,8 @@ import { isUserOp, isCurrentUserOp } from './voice.js';
 import { initSupabaseSetup, supabase, supabaseReady, startGlobalPresence, stopGlobalPresence } from './supabase-client.js';
 import { initCamera, stopCamera } from './camera.js';
 import { initDM } from './dm.js';
+import { initPWA, requestNotificationPermission, notifyMention, notifyVoiceJoin, notifyDM } from './pwa.js';
+
 
 // Estado global de la aplicación (Single Source of Truth)
 export const state = {
@@ -116,9 +118,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initCamera();
     initThemePanel();
     initDM();
-    
+
+    // ── PWA: registrar Service Worker y preparar notificaciones ──
+    initPWA();
+
     // Iniciar loop de rendimiento
     runPerformanceLoop();
+
 
     // Control del Menú Móvil Deslizable (Drawer Sidebar)
     const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
@@ -503,6 +509,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 loginOverlay.classList.add('fade-out');
                 setTimeout(() => {
                     loginOverlay.style.display = 'none';
+                    // Pedir permiso de notificaciones tras el login (con pequeño delay para no solaparse con el overlay)
+                    setTimeout(() => requestNotificationPermission(), 1500);
                 }, 400);
             }
         }, 800);
