@@ -1473,7 +1473,14 @@ function syncVoiceRoomFromPresence(presenceState, myName) {
         }
     });
 
+    // Preservar el bot de música si estaba activo antes de la sincronización
+    const botEntries = activeMembersInRoom.filter(m => m.isMusicBot);
     activeMembersInRoom = realMembers;
+    botEntries.forEach(bot => {
+        if (!activeMembersInRoom.find(m => m.isMusicBot)) {
+            activeMembersInRoom.push(bot);
+        }
+    });
     renderVoiceMembers();
 
     const countBadge = document.getElementById(`voice-count-${state.activeVoiceChannel}`);
@@ -1551,6 +1558,29 @@ function callPeer(remotePeerId, remoteName) {
             if (peerObj) peerObj.videoCall = videoCall;
         }
     }).catch(err => console.warn('[PeerJS] Fallo al importar stream de pantalla:', err));
+
+    // Si la cámara está activa, enviarla también al nuevo peer
+    import('./camera.js').then(({ getCameraStream, isCameraActive, getMicrophoneStream: _getM }) => {
+        if (!isCameraActive()) return;
+        const camStream = getCameraStream();
+        if (!camStream) return;
+        const micStream = processedStream || microphoneStream;
+        let streamToSend = camStream;
+        if (micStream && micStream.getAudioTracks().length > 0) {
+            streamToSend = new MediaStream([
+                ...camStream.getVideoTracks(),
+                ...micStream.getAudioTracks()
+            ]);
+        }
+        try {
+            const cameraCall = peer.call(remotePeerId, streamToSend, { metadata: { type: 'camera' } });
+            const peerObj = activePeers.get(remotePeerId);
+            if (peerObj) peerObj.cameraCall = cameraCall;
+            console.log(`[Camera] Cámara enviada a nuevo participante: ${remoteName}`);
+        } catch (e) {
+            console.warn('[Camera] Error enviando cámara a nuevo peer:', e);
+        }
+    }).catch(() => {});
 }
 
 function playRemoteStream(peerId, remoteStream) {
@@ -1827,8 +1857,9 @@ async function startAudioEngine() {
         // El stream procesado es el que sale por WebRTC
         processedStream = audioDestNode.stream;
 
-        // Si el usuario está muteado o ensordecido inicialmente, apagamos las pistas
-        if (state.isMuted || state.isDeafened) {
+        // Si el usuario está muteado inicialmente, apagamos las pistas
+        // (Ensordecer NO afecta el micrófono saliente — solo el audio entrante)
+        if (state.isMuted) {
             toggleMicStreamTracks(false);
         }
 
@@ -2133,6 +2164,13 @@ function renderVoiceMembers() {
                 <input type="range" class="user-volume-slider" min="0" max="100" value="100"
                     title="Volumen de ${member.name}" aria-label="Volumen de ${member.name}">
                </div>`;
+        } else if (member.isMusicBot) {
+            volumeSliderHtml = `<div class="user-volume-row" title="Volumen de la música">
+                <span class="user-vol-icon">🎵</span>
+                <input type="range" class="music-bot-volume-slider" min="0" max="100" value="80"
+                    title="Volumen de la música" aria-label="Volumen de la música"
+                    oninput="(function(v){ import('./music.js').then(m => m.updateMusicVolume(v/100)).catch(()=>{}); })(this.value)">
+               </div>`;
         } else if (isUser) {
             const currentMicVol = Math.round(audioInputVolume * 100);
             volumeSliderHtml = `<div class="user-volume-row" title="Tu Volumen de Micrófono (Ganancia)">
@@ -2370,8 +2408,9 @@ function toggleDeafen() {
     // Actualizar volumen general (muteará la salida de audio/música en caliente)
     applyOutputVolumeGlobal();
 
-    // Silenciar el propio micrófono si estamos ensordecidos
-    toggleMicStreamTracks(!state.isMuted && !state.isDeafened);
+    // ENSORDECER = solo silencia lo que ESCUCHAS, NO tu micrófono.
+    // Los demás te siguen escuchando aunque estés ensordecido.
+    // (El micrófono solo se corta con el botón de mutear)
 
     // CRÍTICO: aplicar el silenciado/desilenciado inmediatamente a todos los
     // elementos <audio> de los peers WebRTC que ya están reproduciéndose
@@ -2582,20 +2621,34 @@ function applyLocalSpeakingGlow(speaking) {
     }
 }
 
+// Buffers reutilizables del visualizador (evitan GC pressure en cada frame)
+let _vizDataArray = null;
+let _vizGradient = null;
+let _vizLastFrame = 0;
+const VIZ_TARGET_FPS = 30; // 30 fps es suficiente para el visualizador, ahorra ~50% CPU
+const VIZ_FRAME_MS  = 1000 / VIZ_TARGET_FPS;
+
 // Loop de dibujo del analizador de frecuencia WebRTC en Canvas
 function drawVisualizer() {
     if (!analyser || !canvasCtx || !canvas) return;
 
     visualizerAnimationId = requestAnimationFrame(drawVisualizer);
 
+    // Throttle a 30fps
+    const now = performance.now();
+    if (now - _vizLastFrame < VIZ_FRAME_MS) return;
+    _vizLastFrame = now;
+
     const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+
+    // Reusar el buffer (sin new Uint8Array cada frame)
+    if (!_vizDataArray || _vizDataArray.length !== bufferLength) {
+        _vizDataArray = new Uint8Array(bufferLength);
+    }
+    const dataArray = _vizDataArray;
 
     if (state.isMuted) {
-        // Si está silenciado, dibuja una línea plana hermosa con un micro-ruido para simular paz
-        for (let i = 0; i < bufferLength; i++) {
-            dataArray[i] = 0;
-        }
+        dataArray.fill(0);
     } else {
         analyser.getByteFrequencyData(dataArray);
         
@@ -2604,7 +2657,6 @@ function drawVisualizer() {
             const anyoneSpeaking = activeMembersInRoom.some(m => !m.isLocalUser && m.activeSpeaker);
             if (anyoneSpeaking) {
                 for (let i = 0; i < bufferLength; i++) {
-                    // Genera ondas oscilantes aleatorias
                     dataArray[i] = Math.max(dataArray[i], Math.sin(Date.now() * 0.005 + i * 0.3) * 35 + 40);
                 }
             }
@@ -2623,11 +2675,13 @@ function drawVisualizer() {
     let barHeight;
     let x = 0;
 
-    // Crear un gradiente de neon fluido
-    const gradient = canvasCtx.createLinearGradient(0, height, width, 0);
-    gradient.addColorStop(0, 'hsl(271, 91%, 65%)'); // Eléctrico Púrpura
-    gradient.addColorStop(0.5, 'hsl(186, 100%, 48%)'); // Cyber Cyan
-    gradient.addColorStop(1, 'hsl(271, 91%, 65%)');
+    // Reusar gradiente (solo recrear si cambió el tamaño del canvas)
+    if (!_vizGradient) {
+        _vizGradient = canvasCtx.createLinearGradient(0, height, width, 0);
+        _vizGradient.addColorStop(0, 'hsl(271, 91%, 65%)');
+        _vizGradient.addColorStop(0.5, 'hsl(186, 100%, 48%)');
+        _vizGradient.addColorStop(1, 'hsl(271, 91%, 65%)');
+    }
 
     canvasCtx.beginPath();
     
@@ -2641,7 +2695,7 @@ function drawVisualizer() {
         }
 
         // Renderizado del visualizador estilo espectrograma de barras redondeadas
-        canvasCtx.fillStyle = gradient;
+        canvasCtx.fillStyle = _vizGradient;
         
         // Dibujamos rectángulos estilizados con bordes curvos
         const roundedHeight = Math.max(barHeight, 4);

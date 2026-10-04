@@ -115,9 +115,30 @@ function initializeYoutubePlayer() {
                     ytPlayer.setVolume(globalOutVol * 100);
                 },
                 'onStateChange': (event) => {
-                    // Si el video termina (ENDED === 0)
+                    // ENDED (0) en video individual → saltar al siguiente preset
                     if (event.data === 0) {
-                        skipTrack();
+                        // Si es una playlist de YouTube, el player avanza solo; solo saltar si no es playlist
+                        if (musicState.currentTrack && !musicState.currentTrack.youtubeListId) {
+                            skipTrack();
+                        }
+                    }
+                    // PLAYING (1) → actualizar título e info de la pista actual (necesario para playlists)
+                    if (event.data === 1 && ytPlayer && typeof ytPlayer.getVideoData === 'function') {
+                        try {
+                            const videoData = ytPlayer.getVideoData();
+                            if (videoData && videoData.title) {
+                                if (musicState.currentTrack) {
+                                    musicState.currentTrack.title = `▶ ${videoData.title}`;
+                                }
+                                const titleEl = document.getElementById('music-track-title');
+                                if (titleEl) titleEl.textContent = `▶ ${videoData.title}`;
+                            }
+                            const dur = ytPlayer.getDuration();
+                            if (dur && dur > 0 && musicState.currentTrack) {
+                                musicState.currentTrack.duration = Math.floor(dur);
+                                musicState.currentTime = 0;
+                            }
+                        } catch (e) {}
                     }
                 }
             }
@@ -303,7 +324,44 @@ function startTrack(preset) {
                             preset.duration = Math.floor(dur);
                         }
                     }
-                }, 1200);
+
+                    // Capturar el audio del iframe de YouTube y enrutarlo al stream WebRTC
+                    // El audio de YouTube reproduce por el elemento <video> oculto del iframe,
+                    // NO pasa por el WebAudio graph → necesitamos captureStream().
+                    try {
+                        const iframe = ytPlayer.getIframe();
+                        const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
+                        const videoEl = iframeDoc?.querySelector('video');
+                        if (videoEl && typeof videoEl.captureStream === 'function') {
+                            const ytStream = videoEl.captureStream();
+                            const ytAudioTracks = ytStream.getAudioTracks();
+                            if (ytAudioTracks.length > 0) {
+                                // Crear nodo WebAudio desde el stream capturado
+                                const ytSourceNode = audioCtx.createMediaStreamSource(ytStream);
+                                const ytGain = audioCtx.createGain();
+                                ytGain.gain.value = globalOutVol;
+                                ytSourceNode.connect(ytGain);
+                                // Mezclar en el stream WebRTC para que los peers escuchen
+                                import('./voice.js').then(m => m.mixMusicTrackIntoStream(ytGain)).catch(() => {});
+                                // También conectar al destino local para que el host escuche
+                                ytGain.connect(audioCtx.destination);
+                                // Guardar referencia para actualizar volumen después
+                                window._nexusMusicYtGain = ytGain;
+                                console.log('[Music Bot] Audio de YouTube capturado y mezclado en WebRTC.');
+                            } else {
+                                console.warn('[Music Bot] captureStream sin pistas de audio, usando synthGain.');
+                                import('./voice.js').then(m => m.mixMusicTrackIntoStream(synthGain)).catch(() => {});
+                            }
+                        } else {
+                            // Fallback: sin acceso al iframe (cross-origin), usar synthGain
+                            console.warn('[Music Bot] No se pudo acceder al video del iframe (cross-origin). Los peers no escucharán YouTube.');
+                            import('./voice.js').then(m => m.mixMusicTrackIntoStream(synthGain)).catch(() => {});
+                        }
+                    } catch (captureErr) {
+                        console.warn('[Music Bot] Error al capturar stream de YouTube:', captureErr);
+                        import('./voice.js').then(m => m.mixMusicTrackIntoStream(synthGain)).catch(() => {});
+                    }
+                }, 1500);
             } catch (e) {
                 console.warn('[Music Bot] Fallo al cargar video de YouTube:', e);
                 // Fallback: usar sintetizador sonoro si falla la API
@@ -327,8 +385,11 @@ function startTrack(preset) {
         playSynthStep(preset);
     }, intervalMs);
 
-    // Mezclar audio del bot en el stream WebRTC para que todos los peers escuchen
-    mixMusicTrackIntoStream(synthGain);
+    // Para presets de sintetizador (sin YouTube): mezclar directamente en WebRTC.
+    // Para YouTube: el mixing se hace en el setTimeout de captureStream (arriba).
+    if (!preset.youtubeId && !preset.youtubeListId) {
+        mixMusicTrackIntoStream(synthGain);
+    }
 
     // Iniciar temporizador de la barra de progreso
     if (timeProgressInterval) clearInterval(timeProgressInterval);
@@ -546,14 +607,20 @@ function stopSynthesizer() {
             ytPlayer.stopVideo();
         } catch (e) {}
     }
+    // Limpiar referencia al nodo de captura de YouTube
+    window._nexusMusicYtGain = null;
 }
 
 // Ajusta el volumen del bot en tiempo real desde el slider de salida
 export function updateMusicVolume(vol) {
     if (synthGain && audioCtx) {
-        const isYoutube = musicState.currentTrack && musicState.currentTrack.youtubeId;
+        const isYoutube = musicState.currentTrack && (musicState.currentTrack.youtubeId || musicState.currentTrack.youtubeListId);
         const targetVol = isYoutube ? 0.001 : 0.08 * vol;
         synthGain.gain.setValueAtTime(targetVol, audioCtx.currentTime);
+    }
+    // Ajustar volumen del nodo de captura de YouTube (para que el slider del bot funcione)
+    if (window._nexusMusicYtGain && audioCtx) {
+        window._nexusMusicYtGain.gain.setValueAtTime(vol, audioCtx.currentTime);
     }
     if (ytPlayer && ytPlayerReady) {
         try {
@@ -566,7 +633,8 @@ export function updateMusicVolume(vol) {
 function updateProgressBar() {
     if (!musicState.isPlaying || !musicState.currentTrack) return;
 
-    if (musicState.currentTrack.youtubeId && ytPlayer && ytPlayerReady) {
+    // Para pistas de YouTube (video individual o playlist), consultar el player directamente
+    if ((musicState.currentTrack.youtubeId || musicState.currentTrack.youtubeListId) && ytPlayer && ytPlayerReady) {
         try {
             const curTime = ytPlayer.getCurrentTime();
             const dur = ytPlayer.getDuration();
@@ -580,11 +648,13 @@ function updateProgressBar() {
             musicState.currentTime++;
         }
     } else {
+        // Sintetizador incorporado: incrementar manualmente
         musicState.currentTime++;
     }
-    
-    if (musicState.currentTime >= musicState.currentTrack.duration) {
-        // Canción terminada
+
+    // Para playlists de YouTube el avance de pista lo gestiona el player + onStateChange.
+    // Solo forzar skipTrack si es un preset normal (no YouTube) y supera la duración.
+    if (!musicState.currentTrack.youtubeListId && musicState.currentTime >= musicState.currentTrack.duration) {
         skipTrack();
         return;
     }
@@ -594,8 +664,10 @@ function updateProgressBar() {
     const timeDisplay = document.getElementById('music-time-display');
 
     if (fill) {
-        const pct = (musicState.currentTime / musicState.currentTrack.duration) * 100;
-        fill.style.width = `${pct}%`;
+        const pct = musicState.currentTrack.duration > 0
+            ? (musicState.currentTime / musicState.currentTrack.duration) * 100
+            : 0;
+        fill.style.width = `${Math.min(pct, 100)}%`;
     }
 
     if (timeDisplay) {

@@ -506,6 +506,8 @@ export function applyHighQualityVideoBitrate(mediaConnection, targetQuality = '1
         '4k': 14_000_000      // 14 Mbps
     };
     const maxBitrate = bitrateMap[targetQuality] || 5_500_000;
+    // Bitrate mínimo para prevenir que el encoder baje demasiado en momentos de poca actividad
+    const minBitrate = Math.floor(maxBitrate * 0.35);
 
     const configureSender = (pc) => {
         if (!pc || typeof pc.getSenders !== 'function') return;
@@ -520,13 +522,14 @@ export function applyHighQualityVideoBitrate(mediaConnection, targetQuality = '1
                     
                     // Configuración equilibrada: alta tasa de refresco sin bufferbloat ni tirones
                     params.encodings[0].maxBitrate = maxBitrate;
+                    params.encodings[0].minBitrate = minBitrate;
                     params.encodings[0].maxFramerate = targetFps;
                     params.encodings[0].networkPriority = 'high';
                     params.encodings[0].priority = 'high';
-                    params.degradationPreference = 'balanced'; // Permite microajustes dinámicos para evitar congelamiento
+                    params.degradationPreference = 'balanced';
 
                     await sender.setParameters(params);
-                    console.log(`[Stream WebRTC] Modo Fluidez Gaming: ${(maxBitrate / 1_000_000).toFixed(1)} Mbps @ ${targetFps} FPS (${params.degradationPreference})`);
+                    console.log(`[Stream WebRTC] Modo Fluidez Gaming: ${(maxBitrate / 1_000_000).toFixed(1)} Mbps @ ${targetFps} FPS`);
                 } catch (e) {
                     console.warn('[Stream WebRTC] No se pudo configurar parámetros de encoder:', e);
                 }
@@ -546,6 +549,7 @@ export function applyHighQualityVideoBitrate(mediaConnection, targetQuality = '1
     };
     setTimeout(tryConfigureLater, 800);
     setTimeout(tryConfigureLater, 2500);
+    setTimeout(tryConfigureLater, 5000); // Retry adicional para conexiones lentas
 }
 
 
