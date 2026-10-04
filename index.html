@@ -596,10 +596,65 @@
             <!-- SECCIÓN: PERFIL DE USUARIO -->
             <div class="theme-section-label">👤 PERFIL DE USUARIO</div>
             <div class="user-profile-settings" style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; border-bottom: var(--border-dark); padding-bottom: 24px;">
+                <!-- Mini preview del perfil -->
+                <div id="profile-mini-preview" style="border-radius: 10px; overflow: hidden; border: 1px solid var(--border-dark); position: relative; margin-bottom: 4px;">
+                    <div id="profile-preview-banner" style="height: 64px; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%); position: relative;">
+                        <label for="profile-banner-img-input" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                            <span style="background: rgba(0,0,0,0.6); color: #fff; font-size: 0.7rem; padding: 4px 10px; border-radius: 20px;">📷 Cambiar banner</span>
+                        </label>
+                        <input type="file" id="profile-banner-img-input" accept="image/*" style="display:none">
+                    </div>
+                    <div style="padding: 8px 12px 10px; background: var(--bg-secondary); display: flex; align-items: center; gap: 10px; position: relative;">
+                        <div id="profile-preview-avatar" style="width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--bg-secondary); background: var(--accent-purple); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; margin-top: -22px; flex-shrink: 0; overflow: hidden;"></div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div id="profile-preview-name" style="font-weight: 700; font-size: 0.85rem; color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Tu nombre</div>
+                            <div id="profile-preview-status" style="font-size: 0.72rem; color: var(--text-muted);">En línea</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nombre de usuario -->
                 <div class="color-picker-group">
                     <label for="profile-display-name">Nombre de Usuario</label>
                     <input type="text" id="profile-display-name" placeholder="Ej. Snide" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.8rem; font-family: inherit;">
                 </div>
+
+                <!-- Estado personalizado -->
+                <div class="color-picker-group">
+                    <label for="profile-status-text">Estado Personalizado</label>
+                    <input type="text" id="profile-status-text" placeholder="Ej. 🎮 Jugando CS2" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.8rem; font-family: inherit;" maxlength="60">
+                </div>
+
+                <!-- Bio -->
+                <div class="color-picker-group">
+                    <label for="profile-bio">Acerca de mí</label>
+                    <textarea id="profile-bio" placeholder="Cuéntales algo a tus amigos..." class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.8rem; font-family: inherit; resize: vertical; min-height: 64px;" maxlength="190"></textarea>
+                    <span id="profile-bio-count" style="font-size: 0.65rem; color: var(--text-muted); text-align: right; display: block; margin-top: 2px;">0/190</span>
+                </div>
+
+                <!-- Color del banner -->
+                <div class="color-picker-group">
+                    <label>Color del Banner</label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%)" title="Nexus Default" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%); border: 2px solid transparent; transition: border 0.15s;"></div>
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #ef4444 0%, #f97316 100%)" title="Fuego" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #ef4444 0%, #f97316 100%); border: 2px solid transparent;"></div>
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #22c55e 0%, #06b6d4 100%)" title="Bosque" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #22c55e 0%, #06b6d4 100%); border: 2px solid transparent;"></div>
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)" title="Rosa" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); border: 2px solid transparent;"></div>
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #0d1117 0%, #161b22 100%)" title="Negro" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 2px solid transparent;"></div>
+                        <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #f59e0b 0%, #eab308 100%)" title="Dorado" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%); border: 2px solid transparent;"></div>
+                    </div>
+                </div>
+
+                <!-- Redes sociales -->
+                <div class="color-picker-group">
+                    <label>Redes Sociales (opcionales)</label>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <input type="text" id="profile-social-twitch" placeholder="🟣 Twitch: usuario" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 8px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.78rem; font-family: inherit;">
+                        <input type="text" id="profile-social-steam" placeholder="🎮 Steam: ID o URL" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 8px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.78rem; font-family: inherit;">
+                        <input type="text" id="profile-social-twitter" placeholder="🐦 X / Twitter: @usuario" class="app-dropdown-select" style="width: 100%; background: var(--bg-tertiary); border: var(--border-dark); padding: 8px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.78rem; font-family: inherit;">
+                    </div>
+                </div>
+
                 <button id="save-profile-btn" class="login-submit-btn" style="width: 100%; margin: 0; padding: 10px; font-size: 0.78rem;">
                     💾 Guardar Perfil
                 </button>

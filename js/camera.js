@@ -1,13 +1,15 @@
 /* NEXUS CAMERA MODULE — WebRTC Webcam Capture & PiP Preview */
 
 import { state } from './app.js';
-import { peer, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream } from './voice.js';
+import { peer, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream, localPeerId, getLocalUserName } from './voice.js';
 
 // ─── State ───────────────────────────────────────────
 let cameraStream = null;        // MediaStream from getUserMedia (video)
 let isCameraOn   = false;
 let pipContainer = null;
 let pipVideo     = null;
+// Map of remotePeerId -> { stream, name } for re-attachment after DOM rebuild
+export const remoteCameraStreams = new Map();
 
 // ─── Init ─────────────────────────────────────────────
 export function initCamera() {
@@ -157,13 +159,9 @@ export function stopCamera() {
 }
 
 // ─── Attach camera video to local user's voice card ──
-function attachLocalCameraToCard() {
+export function attachLocalCameraToCard() {
     const myEmail = localStorage.getItem('nexus_user_email') || '';
-    let myName = 'Usuario Nexus';
-    if (myEmail) {
-        const base = myEmail.split('@')[0];
-        myName = base.charAt(0).toUpperCase() + base.slice(1);
-    }
+    const myName = getLocalUserName();
     const cardId = `voice-member-${myName.replace(/\s+/g, '-')}`;
     const card = document.getElementById(cardId);
     if (!card || !cameraStream) return;
@@ -244,8 +242,12 @@ export function attachRemoteCameraToCard(peerId, stream, remoteName) {
         card.appendChild(badge);
     }
 
+    // Store stream for re-attachment after DOM rebuild
+    remoteCameraStreams.set(peerId, { stream, name: remoteName });
+
     // Clean up when the remote track ends
     stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        remoteCameraStreams.delete(peerId);
         detachRemoteCameraFromCard(remoteName);
     });
 }
@@ -265,25 +267,33 @@ export function detachRemoteCameraFromCard(remoteName) {
 function broadcastCameraState(on) {
     if (!presenceChannel || !peer) return;
     const myEmail = localStorage.getItem('nexus_user_email') || '';
-    let myName = 'Usuario Nexus';
-    if (myEmail) {
-        const base = myEmail.split('@')[0];
-        myName = base.charAt(0).toUpperCase() + base.slice(1);
-    }
+    const myName = getLocalUserName();
     const myAvatar = myEmail ? (localStorage.getItem('nexus_user_avatar_' + myEmail) || '') : '';
     const myAvatarStyle = myEmail ? (localStorage.getItem('nexus_user_avatar_style_' + myEmail) || 'circle') : 'circle';
-    const isOp = (localStorage.getItem('nexus_user_email') || '') === 'sniderquiros5@gmail.com';
+    const isOp = myEmail.toLowerCase() === 'sniderquiros5@gmail.com';
+    const usePeerId = localPeerId || peer.id;
+
+    // Preserve the original joinedAt so Supabase does NOT fire a leave+rejoin event.
+    // If we pass a new Date.now() every time, Supabase treats this as a new presence
+    // entry, which causes peers to see a disconnect.
+    let originalJoinedAt = null;
+    try {
+        const ps = presenceChannel.presenceState();
+        Object.values(ps).forEach(list => list.forEach(p => {
+            if (p.email === myEmail.toLowerCase()) originalJoinedAt = p.joinedAt ?? null;
+        }));
+    } catch (_) {}
 
     presenceChannel.track({
         name: myName,
         email: myEmail.toLowerCase(),
-        peerId: peer.id,
+        peerId: usePeerId,                           // FIX: use localPeerId, not peer.id
         avatar: myAvatar,
         avatarStyle: myAvatarStyle,
-        isMuted: false,
+        isMuted: state.isMuted || state.isDeafened,  // FIX: real mute state, not hardcoded false
         isOp: isOp,
         isCameraOn: on,
-        joinedAt: Date.now()
+        ...(originalJoinedAt !== null ? { joinedAt: originalJoinedAt } : {})  // FIX: preserve joinedAt
     }).catch(() => {});
 }
 

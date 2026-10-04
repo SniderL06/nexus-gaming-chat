@@ -11,7 +11,7 @@ import { notifyVoiceJoin } from './pwa.js';
 export let peer = null;                    // Local PeerJS instance
 export let presenceChannel = null;         // Supabase Presence channel for the voice room
 export let activePeers = new Map();        // peerId -> { name, call, audioEl }
-let localPeerId = null;             // Our PeerJS ID
+export let localPeerId = null;             // Our PeerJS ID
 export let isMultiplayerMode = false;      // True when Supabase is configured
 
 let audioCtx = null;
@@ -2284,6 +2284,20 @@ function renderVoiceMembers() {
         });
         grid.appendChild(muteAllBtn);
     }
+
+    // ── Re-adjuntar cámaras después de reconstruir el DOM ──────────────────────
+    // renderVoiceMembers hace grid.innerHTML = '' lo que destruye los elementos
+    // de video. Reimportamos camera.js para re-adjuntar los streams activos.
+    import('./camera.js').then(({ isCameraActive, attachLocalCameraToCard, remoteCameraStreams }) => {
+        if (isCameraActive()) {
+            attachLocalCameraToCard();
+        }
+        remoteCameraStreams.forEach(({ stream, name }, peerId) => {
+            import('./camera.js').then(({ attachRemoteCameraToCard }) => {
+                attachRemoteCameraToCard(peerId, stream, name);
+            }).catch(() => {});
+        });
+    }).catch(() => {});
 } // fin de renderVoiceMembers
 
 // ─── FUNCIONES EXPORTADAS DE ADMIN MUTE ──────────────────────────────────────
@@ -2455,7 +2469,7 @@ function toggleDeafen() {
 }
 
 // Obtener el nombre de display del usuario autenticado
-function getLocalUserName() {
+export function getLocalUserName() {
     const rawEmail = localStorage.getItem('nexus_user_email') || '';
     if (!rawEmail) return 'Usuario Nexus';
     const email = rawEmail.trim().toLowerCase();

@@ -1085,8 +1085,40 @@ async function sendMessage() {
     clearReplyTarget();
 
     if (activeAttachment) {
-        if (activeAttachment.isImage) newMsg.image = activeAttachment.dataUrl;
-        else newMsg.file = { name: activeAttachment.name, size: activeAttachment.size, dataUrl: activeAttachment.dataUrl };
+        if (activeAttachment.isImage) {
+            // Intentar subir a Supabase Storage para que todos puedan ver la imagen sin recargar
+            // Falls back to base64 si el bucket no está configurado o hay error
+            if (isUsingSupabase && supabase) {
+                try {
+                    const base64Data = activeAttachment.dataUrl.split(',')[1];
+                    const mimeType = activeAttachment.type || 'image/png';
+                    const ext = mimeType.split('/')[1] || 'png';
+                    const fileName = `chat/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+                    // Convertir base64 a Blob
+                    const byteChars = atob(base64Data);
+                    const byteArr = new Uint8Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                    const blob = new Blob([byteArr], { type: mimeType });
+                    const { data: uploadData, error: uploadErr } = await supabase.storage
+                        .from('nexus-images')
+                        .upload(fileName, blob, { contentType: mimeType, upsert: false });
+                    if (!uploadErr && uploadData) {
+                        const { data: { publicUrl } } = supabase.storage.from('nexus-images').getPublicUrl(fileName);
+                        newMsg.image = publicUrl;
+                    } else {
+                        console.warn('[Chat] Storage upload falló, usando base64:', uploadErr?.message);
+                        newMsg.image = activeAttachment.dataUrl;
+                    }
+                } catch (storageErr) {
+                    console.warn('[Chat] Error de Storage, usando base64:', storageErr);
+                    newMsg.image = activeAttachment.dataUrl;
+                }
+            } else {
+                newMsg.image = activeAttachment.dataUrl;
+            }
+        } else {
+            newMsg.file = { name: activeAttachment.name, size: activeAttachment.size, dataUrl: activeAttachment.dataUrl };
+        }
         clearAttachment();
     }
 
