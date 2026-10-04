@@ -932,87 +932,195 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Vincular botón para guardar perfil (nombre de usuario)
-    const saveProfileBtn = document.getElementById('save-profile-btn');
-    const profileNameInput = document.getElementById('profile-display-name');
+    // ─── PERFIL EXTENDIDO: banner, bio, estado, redes sociales ───────────────────
+    const saveProfileBtn    = document.getElementById('save-profile-btn');
+    const profileNameInput  = document.getElementById('profile-display-name');
+    const profileStatusInput = document.getElementById('profile-status-text');
+    const profileBioInput   = document.getElementById('profile-bio');
+    const profileBioCount   = document.getElementById('profile-bio-count');
+    const profileBannerEl   = document.getElementById('profile-preview-banner');
+    const profilePreviewName = document.getElementById('profile-preview-name');
+    const profilePreviewStatus = document.getElementById('profile-preview-status');
+    const profilePreviewAvatar = document.getElementById('profile-preview-avatar');
+    const bannerImgInput    = document.getElementById('profile-banner-img-input');
+
+    // ── Helpers de localStorage para perfil extendido ────────────
+    function getProfileKey(email, key) { return `nexus_profile_${key}_${email}`; }
+    function saveProfileField(email, key, value) { localStorage.setItem(getProfileKey(email, key), value); }
+    function loadProfileField(email, key, fallback = '') { return localStorage.getItem(getProfileKey(email, key)) || fallback; }
+
+    // ── Cargar datos guardados en el panel de ajustes ─────────────
+    function loadProfileEditorData() {
+        const rawEmail = localStorage.getItem('nexus_user_email') || '';
+        const email = rawEmail.trim().toLowerCase();
+        if (!email) return;
+
+        const namePart = email.split('@')[0];
+        const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        const savedName = localStorage.getItem('nexus_username_' + email) || defaultName;
+
+        if (profileNameInput) profileNameInput.value = savedName;
+        if (profileStatusInput) profileStatusInput.value = loadProfileField(email, 'status');
+        if (profileBioInput) {
+            profileBioInput.value = loadProfileField(email, 'bio');
+            if (profileBioCount) profileBioCount.textContent = `${profileBioInput.value.length}/190`;
+        }
+        // Redes sociales
+        const twitchEl = document.getElementById('profile-social-twitch');
+        const steamEl  = document.getElementById('profile-social-steam');
+        const twitterEl = document.getElementById('profile-social-twitter');
+        if (twitchEl)  twitchEl.value  = loadProfileField(email, 'social_twitch');
+        if (steamEl)   steamEl.value   = loadProfileField(email, 'social_steam');
+        if (twitterEl) twitterEl.value = loadProfileField(email, 'social_twitter');
+
+        // Banner
+        const savedBannerImg = loadProfileField(email, 'banner_img');
+        const savedBannerGradient = loadProfileField(email, 'banner_gradient',
+            'linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%)');
+        if (profileBannerEl) {
+            if (savedBannerImg) {
+                profileBannerEl.style.background = `url(${savedBannerImg}) center/cover no-repeat`;
+            } else {
+                profileBannerEl.style.background = savedBannerGradient;
+            }
+        }
+        updateMiniPreview();
+    }
+
+    // ── Mini preview en tiempo real ───────────────────────────────
+    function updateMiniPreview() {
+        const rawEmail = localStorage.getItem('nexus_user_email') || '';
+        const email = rawEmail.trim().toLowerCase();
+        if (!email) return;
+
+        const namePart = email.split('@')[0];
+        const defaultName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        const currentName = profileNameInput?.value.trim() || localStorage.getItem('nexus_username_' + email) || defaultName;
+        const currentStatus = profileStatusInput?.value.trim() || 'En línea';
+
+        if (profilePreviewName) profilePreviewName.textContent = currentName;
+        if (profilePreviewStatus) profilePreviewStatus.textContent = currentStatus || 'En línea';
+
+        // Avatar en el mini preview
+        if (profilePreviewAvatar) {
+            const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email);
+            const savedStyle  = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
+            if (savedAvatar) {
+                profilePreviewAvatar.style.backgroundImage = `url(${savedAvatar})`;
+                profilePreviewAvatar.style.backgroundSize = 'cover';
+                profilePreviewAvatar.style.backgroundPosition = 'center';
+                profilePreviewAvatar.style.borderRadius = savedStyle === 'circle' ? '50%' : '10px';
+                profilePreviewAvatar.textContent = '';
+            } else {
+                profilePreviewAvatar.style.backgroundImage = '';
+                profilePreviewAvatar.style.borderRadius = '50%';
+                profilePreviewAvatar.textContent = currentName.charAt(0).toUpperCase();
+            }
+        }
+    }
+
+    // ── Bio contador ──────────────────────────────────────────────
+    if (profileBioInput && profileBioCount) {
+        profileBioInput.addEventListener('input', () => {
+            profileBioCount.textContent = `${profileBioInput.value.length}/190`;
+        });
+    }
+
+    // ── Live preview al escribir ──────────────────────────────────
+    profileNameInput?.addEventListener('input', updateMiniPreview);
+    profileStatusInput?.addEventListener('input', updateMiniPreview);
+
+    // ── Swatches de color del banner ──────────────────────────────
+    document.querySelectorAll('.banner-color-swatch').forEach(swatch => {
+        swatch.addEventListener('click', () => {
+            const gradient = swatch.dataset.gradient;
+            if (profileBannerEl) profileBannerEl.style.background = gradient;
+            // Marcar swatch activo
+            document.querySelectorAll('.banner-color-swatch').forEach(s => s.style.border = '2px solid transparent');
+            swatch.style.border = '2px solid #fff';
+            // Guardar inmediatamente
+            const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+            if (email) {
+                saveProfileField(email, 'banner_gradient', gradient);
+                saveProfileField(email, 'banner_img', ''); // limpiar imagen si había
+            }
+        });
+    });
+
+    // ── Subir imagen de banner ────────────────────────────────────
+    if (bannerImgInput) {
+        bannerImgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) { alert('El banner no puede superar 5 MB.'); return; }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const dataUrl = ev.target.result;
+                if (profileBannerEl) profileBannerEl.style.background = `url(${dataUrl}) center/cover no-repeat`;
+                const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+                if (email) saveProfileField(email, 'banner_img', dataUrl);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ── Guardar perfil completo ───────────────────────────────────
     function handleSaveProfile() {
         const rawEmail = localStorage.getItem('nexus_user_email') || '';
         const email = rawEmail.trim().toLowerCase();
-        if (!email) {
-            alert('Debes iniciar sesión para cambiar tu nombre.');
-            return;
-        }
-        const newName = profileNameInput.value.trim();
-        if (!newName) {
-            alert('El nombre de usuario no puede estar vacío.');
-            return;
-        }
-        if (newName.length > 25) {
-            alert('El nombre de usuario no puede tener más de 25 caracteres.');
-            return;
-        }
-        
-        // Guardar de forma consistente con clave normalizada y legacy por compatibilidad
+        if (!email) { alert('Debes iniciar sesión para cambiar tu perfil.'); return; }
+
+        const newName = profileNameInput?.value.trim() || '';
+        if (!newName) { alert('El nombre de usuario no puede estar vacío.'); return; }
+        if (newName.length > 25) { alert('El nombre no puede tener más de 25 caracteres.'); return; }
+
+        // Nombre
         localStorage.setItem('nexus_username_' + email, newName);
-        if (rawEmail && rawEmail !== email) {
-            localStorage.setItem('nexus_username_' + rawEmail, newName);
-        }
-        
-        // Actualizar interfaz local
+        if (rawEmail && rawEmail !== email) localStorage.setItem('nexus_username_' + rawEmail, newName);
+
+        // Bio, estado, redes
+        saveProfileField(email, 'status',         profileStatusInput?.value.trim() || '');
+        saveProfileField(email, 'bio',            profileBioInput?.value.trim() || '');
+        saveProfileField(email, 'social_twitch',  document.getElementById('profile-social-twitch')?.value.trim() || '');
+        saveProfileField(email, 'social_steam',   document.getElementById('profile-social-steam')?.value.trim() || '');
+        saveProfileField(email, 'social_twitter', document.getElementById('profile-social-twitter')?.value.trim() || '');
+
         updateUserProfileUI(email);
 
-        // Retransmitir presencia global con el nuevo nombre
-        if (supabaseReady && supabase) {
-            startGlobalPresence(newName);
-        }
+        if (supabaseReady && supabase) startGlobalPresence(newName);
 
-        // Si está en sala de voz, actualizar la presencia en la sala de voz también
         if (state.activeVoiceChannel) {
-            import('./voice.js').then(({ presenceChannel, peer, OP_EMAIL }) => {
+            import('./voice.js').then(({ presenceChannel, peer }) => {
                 if (presenceChannel && peer) {
-                    const savedAvatar = localStorage.getItem('nexus_user_avatar_' + email) || '';
-                    const savedStyle = localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle';
-                    const isOp = email === 'sniderquiros5@gmail.com';
-
                     presenceChannel.track({
                         name: newName,
                         email: email,
                         peerId: peer.id,
                         isMuted: state.isMuted,
-                        isOp: isOp,
-                        avatar: savedAvatar,
-                        avatarStyle: savedStyle,
+                        isOp: email === 'sniderquiros5@gmail.com',
+                        avatar: localStorage.getItem('nexus_user_avatar_' + email) || '',
+                        avatarStyle: localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle',
                         joinedAt: Date.now()
                     }).catch(() => {});
                 }
             });
         }
 
-        // Notificación visual de guardado exitoso
         if (saveProfileBtn) {
             saveProfileBtn.textContent = '✅ Perfil Guardado';
             saveProfileBtn.style.background = 'var(--accent-green)';
-            setTimeout(() => {
-                saveProfileBtn.textContent = '💾 Guardar Perfil';
-                saveProfileBtn.style.background = '';
-            }, 2000);
+            setTimeout(() => { saveProfileBtn.textContent = '💾 Guardar Perfil'; saveProfileBtn.style.background = ''; }, 2000);
         }
     }
 
-    if (saveProfileBtn) {
-        saveProfileBtn.addEventListener('click', handleSaveProfile);
-    }
-    if (profileNameInput) {
-        profileNameInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSaveProfile();
-            }
-        });
-    }
+    if (saveProfileBtn) saveProfileBtn.addEventListener('click', handleSaveProfile);
+    if (profileNameInput) profileNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveProfile(); } });
 
-    updateAvatarUI(); // Invocar de inmediato
-    applyCropStyleUI(selectedCropStyle); // Inicializar estado visual de botones
+    // Cargar datos al abrir el panel
+    loadProfileEditorData();
+
+    updateAvatarUI();
+    applyCropStyleUI(selectedCropStyle);
 
     // Cargar y Renderizar Servidores
     async function loadAndRenderServers() {

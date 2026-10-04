@@ -1603,29 +1603,43 @@ function playRemoteStream(peerId, remoteStream) {
         const titleEl = document.getElementById('stream-user-title');
         
         if (remoteVideo) {
+            // Evitar AbortError si ya está reproduciendo el mismo stream
+            if (remoteVideo.srcObject === remoteStream && !remoteVideo.paused) {
+                console.log('[Stream] Stream ya en reproducción, ignorando duplicado.');
+                return;
+            }
+
+            // Pausar cualquier reproducción pendiente antes de cambiar la fuente
+            if (!remoteVideo.paused) {
+                try { remoteVideo.pause(); } catch(e) {}
+            }
+
             remoteVideo.srcObject = remoteStream;
             // SIEMPRE empezar muteado para garantizar autoplay en Tauri/WebView.
             // El video con sonido bloquea el autoplay y causa pantalla negra.
-            // El usuario puede reactivar el audio con el botón "Audio On/Off".
+            // El usuario puede activar audio con el botón "Audio On/Off".
             remoteVideo.muted = true;
-            remoteVideo.load(); // Forzar carga del nuevo srcObject
-            const playPromise = remoteVideo.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(err => {
-                    console.warn('[Stream] Autoplay bloqueado, reintentando en interacción del usuario:', err);
-                    // Reintentar al primer clic o tecla
-                    const retryPlay = () => {
-                        remoteVideo.play().catch(() => {});
-                        document.removeEventListener('click', retryPlay);
-                        document.removeEventListener('keydown', retryPlay);
-                        document.removeEventListener('mousedown', retryPlay);
-                    };
-                    document.addEventListener('click', retryPlay, { once: true });
-                    document.addEventListener('keydown', retryPlay, { once: true });
-                    document.addEventListener('mousedown', retryPlay, { once: true });
-                });
-            }
-            // Actualizar texto del botón de audio para reflejar estado muteado inicial
+            // NO llamar load() con srcObject — causa AbortError al interrumpir play() en curso
+
+            // Esperar un tick para que el srcObject quede registrado antes de play()
+            setTimeout(() => {
+                const playPromise = remoteVideo.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(err => {
+                        if (err.name === 'AbortError') {
+                            // AbortError benigno: otra llamada play() llegó antes, ignorar
+                            return;
+                        }
+                        console.warn('[Stream] Autoplay bloqueado, reintentando en interacción:', err);
+                        const retryPlay = () => { remoteVideo.play().catch(() => {}); };
+                        document.addEventListener('click', retryPlay, { once: true });
+                        document.addEventListener('keydown', retryPlay, { once: true });
+                        document.addEventListener('mousedown', retryPlay, { once: true });
+                    });
+                }
+            }, 80);
+
+            // Actualizar botón de audio
             const audioBtn = document.getElementById('stream-mic-toggle');
             if (audioBtn) {
                 audioBtn.textContent = 'Audio Off';

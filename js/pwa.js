@@ -60,11 +60,62 @@ export async function requestNotificationPermission() {
     return result === 'granted';
 }
 
+// ─── TOAST EN-APP (cuando la ventana está visible) ────────────────────────
+export function showInAppToast({ icon = '🔔', title, body, color = 'var(--accent-purple)', duration = 5000 }) {
+    // Crear contenedor persistente si no existe
+    let container = document.getElementById('nexus-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'nexus-toast-container';
+        container.style.cssText = `
+            position: fixed; bottom: 80px; right: 20px; z-index: 999999;
+            display: flex; flex-direction: column-reverse; gap: 8px;
+            pointer-events: none;
+        `;
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        display: flex; align-items: flex-start; gap: 10px;
+        background: var(--bg-secondary); border: 1px solid ${color};
+        border-left: 4px solid ${color}; border-radius: 10px;
+        padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        pointer-events: all; cursor: pointer; max-width: 300px;
+        animation: nexusToastIn 0.3s ease; opacity: 1;
+        transition: opacity 0.3s ease;
+    `;
+    toast.innerHTML = `
+        <span style="font-size: 1.3rem; flex-shrink: 0;">${icon}</span>
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 700; font-size: 0.82rem; color: var(--text-normal); font-family: 'Orbitron', sans-serif; margin-bottom: 2px;">${title}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; word-break: break-word;">${body}</div>
+        </div>
+        <span style="font-size: 0.7rem; color: var(--text-muted); cursor: pointer; flex-shrink: 0; padding: 2px;" onclick="this.closest('div').remove()">✕</span>
+    `;
+    toast.onclick = () => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); };
+
+    container.appendChild(toast);
+
+    // CSS animation si no existe
+    if (!document.getElementById('nexus-toast-css')) {
+        const style = document.createElement('style');
+        style.id = 'nexus-toast-css';
+        style.textContent = `@keyframes nexusToastIn { from { opacity:0; transform: translateX(40px); } to { opacity:1; transform: translateX(0); } }`;
+        document.head.appendChild(style);
+    }
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
 // ─── ENVIAR NOTIFICACIÓN LOCAL (vía SW para que funcione en background) ──
 export function sendLocalNotification({ title, body, icon, tag, url }) {
     if (Notification.permission !== 'granted') return;
 
-    // Si la página está visible, no molestar con notificación
+    // Si la página está visible, usar toast en-app en vez de notificación del sistema
     if (document.visibilityState === 'visible') return;
 
     if (swRegistration?.active) {
@@ -91,6 +142,15 @@ export function sendLocalNotification({ title, body, icon, tag, url }) {
  * @param {string} channelName - Nombre del canal (#general, etc.)
  */
 export function notifyMention(authorName, messageText, channelName) {
+    // Siempre mostrar toast en-app (app visible o no)
+    showInAppToast({
+        icon: '💬',
+        title: `@mención en #${channelName}`,
+        body: `${authorName}: ${messageText.slice(0, 90)}`,
+        color: 'var(--accent-cyan)',
+        duration: 7000
+    });
+    // Notificación del sistema si la app está en background
     sendLocalNotification({
         title: `@mención en #${channelName}`,
         body: `${authorName}: ${messageText.slice(0, 100)}`,
@@ -100,12 +160,16 @@ export function notifyMention(authorName, messageText, channelName) {
 }
 
 // ─── NOTIFICACIÓN DE ALGUIEN SE UNE A VOZ ────────────────────────────
-/**
- * Llama a esta función cuando alguien se une al canal de voz activo.
- * @param {string} memberName - Nombre del miembro que se unió
- * @param {string} channelName - Nombre del canal de voz
- */
 export function notifyVoiceJoin(memberName, channelName) {
+    // Siempre mostrar toast en-app
+    showInAppToast({
+        icon: '🎙️',
+        title: `${memberName} se unió a la llamada`,
+        body: `Canal: ${channelName}`,
+        color: 'var(--accent-green)',
+        duration: 5000
+    });
+    // Notificación del sistema si la app está en background
     sendLocalNotification({
         title: `🎙️ ${memberName} se unió a la llamada`,
         body: `Canal: ${channelName}`,
@@ -115,12 +179,14 @@ export function notifyVoiceJoin(memberName, channelName) {
 }
 
 // ─── NOTIFICACIÓN DE MENSAJE DIRECTO (DM) ────────────────────────────
-/**
- * Notifica cuando llega un DM mientras la app está en background.
- * @param {string} senderName - Nombre del remitente
- * @param {string} messageText - Texto del mensaje
- */
 export function notifyDM(senderName, messageText) {
+    showInAppToast({
+        icon: '📩',
+        title: `DM de ${senderName}`,
+        body: messageText.slice(0, 90),
+        color: '#ec4899',
+        duration: 6000
+    });
     sendLocalNotification({
         title: `💬 Mensaje de ${senderName}`,
         body: messageText.slice(0, 120),

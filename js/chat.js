@@ -1269,71 +1269,130 @@ function setupUserProfileModal() {
     const overlay = document.getElementById('user-profile-overlay');
     const avatarEl = document.getElementById('profile-modal-avatar');
 
+    // Helper para leer campos de perfil extendido
+    const getPField = (email, key, fallback = '') =>
+        localStorage.getItem(`nexus_profile_${key}_${email}`) || fallback;
+
     window.openUserProfile = (authorName, avatarSrc, bgClass) => {
         if (!modal) return;
 
-        const nameEl = document.getElementById('profile-modal-name');
-        const emailEl = document.getElementById('profile-modal-email');
-        const badgeEl = document.getElementById('profile-modal-badge');
-        const aboutEl = document.getElementById('profile-modal-about');
+        const nameEl   = document.getElementById('profile-modal-name');
+        const emailEl  = document.getElementById('profile-modal-email');
+        const badgeEl  = document.getElementById('profile-modal-badge');
+        const aboutEl  = document.getElementById('profile-modal-about');
+        const statusEl = document.getElementById('profile-modal-status');
+        const bannerEl = document.getElementById('profile-modal-banner');
+        const socialsEl = document.getElementById('profile-modal-socials');
 
-        // Llenar datos básicos
+        // ── Nombre ────────────────────────────────────────────────
         if (nameEl) nameEl.textContent = authorName;
-        
-        // Simular o extraer correo electrónico del usuario
-        let userEmail = '';
+
+        // ── Email ─────────────────────────────────────────────────
         const myName = getLocalUserName();
+        let userEmail = '';
         if (authorName === myName) {
-            userEmail = localStorage.getItem('nexus_user_email') || 'sniderquiros5@gmail.com';
+            userEmail = localStorage.getItem('nexus_user_email') || '';
         } else if (authorName === 'Nexus Music Bot') {
             userEmail = 'music-bot@nexus.gg';
         } else {
-            // Generamos un correo simulado basado en el nombre para poblar la vista
             userEmail = `${authorName.toLowerCase().replace(/\s+/g, '')}@nexus.gg`;
         }
+        const cleanEmail = userEmail.trim().toLowerCase();
         if (emailEl) emailEl.textContent = userEmail;
 
-        // Llenar Rango/Badge
+        // ── Estado personalizado ──────────────────────────────────
+        if (statusEl) {
+            const customStatus = getPField(cleanEmail, 'status');
+            statusEl.textContent = customStatus || '';
+            statusEl.style.display = customStatus ? 'block' : 'none';
+        }
+
+        // ── Rango/Badge ────────────────────────────────────────────
         if (badgeEl) {
             const isOp = isUserOp(authorName);
-            if (userEmail.toLowerCase() === 'sniderquiros5@gmail.com') {
-                badgeEl.textContent = 'Global Admin';
+            if (cleanEmail === 'sniderquiros5@gmail.com') {
+                badgeEl.textContent = '👑 Global Admin';
                 badgeEl.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
                 badgeEl.style.color = '#fff';
             } else if (isOp) {
-                badgeEl.textContent = 'Operator (OP)';
+                badgeEl.textContent = '⚡ Operator (OP)';
                 badgeEl.style.background = 'linear-gradient(135deg, var(--accent-purple), #c084fc)';
                 badgeEl.style.color = '#fff';
             } else if (authorName === 'Nexus Music Bot') {
-                badgeEl.textContent = 'System Bot';
+                badgeEl.textContent = '🎵 System Bot';
                 badgeEl.style.background = 'linear-gradient(135deg, #ec4899, #db2777)';
                 badgeEl.style.color = '#fff';
             } else {
-                badgeEl.textContent = 'Miembro';
+                badgeEl.textContent = '🎮 Miembro';
                 badgeEl.style.background = 'var(--bg-tertiary)';
                 badgeEl.style.color = 'var(--text-muted)';
             }
         }
 
-        // Descripción/Acerca de mí
+        // ── Bio / Acerca de mí ────────────────────────────────────
         if (aboutEl) {
+            const bio = getPField(cleanEmail, 'bio');
             if (authorName === 'Nexus Music Bot') {
                 aboutEl.textContent = 'Bot oficial del servidor de Nexus. Reproduzco música en salas de voz.';
-            } else if (userEmail.toLowerCase() === 'sniderquiros5@gmail.com') {
+            } else if (bio) {
+                aboutEl.textContent = bio;
+            } else if (cleanEmail === 'sniderquiros5@gmail.com') {
                 aboutEl.textContent = 'Creador y administrador principal de la red de Nexus Gaming Chat.';
             } else {
                 aboutEl.textContent = '¡Hola! Estoy usando Nexus para comunicarme con mi equipo de gaming.';
             }
         }
 
-        // Renderizar avatar en el modal
+        // ── Banner personalizado ──────────────────────────────────
+        if (bannerEl) {
+            const bannerImg = getPField(cleanEmail, 'banner_img');
+            const bannerGrad = getPField(cleanEmail, 'banner_gradient',
+                'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)');
+            if (bannerImg) {
+                bannerEl.style.background = `url(${bannerImg}) center/cover no-repeat`;
+            } else {
+                bannerEl.style.background = bannerGrad;
+            }
+        }
+
+        // ── Redes sociales ────────────────────────────────────────
+        if (socialsEl) {
+            const twitch  = getPField(cleanEmail, 'social_twitch');
+            const steam   = getPField(cleanEmail, 'social_steam');
+            const twitter = getPField(cleanEmail, 'social_twitter');
+            const hasSocials = twitch || steam || twitter;
+
+            socialsEl.style.display = hasSocials ? 'flex' : 'none';
+            if (hasSocials) {
+                // Limpiar links previos (mantener el label)
+                const labels = socialsEl.querySelectorAll('a.social-link');
+                labels.forEach(l => l.remove());
+
+                const addLink = (icon, text, url) => {
+                    if (!text) return;
+                    const a = document.createElement('a');
+                    a.className = 'social-link';
+                    a.href = url || '#';
+                    if (url) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+                    a.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-normal);background:var(--bg-tertiary);padding:6px 10px;border-radius:6px;text-decoration:none;transition:background 0.15s;';
+                    a.onmouseover = () => a.style.background = 'var(--bg-primary)';
+                    a.onmouseout = () => a.style.background = 'var(--bg-tertiary)';
+                    a.innerHTML = `<span>${icon}</span><span>${text}</span>`;
+                    socialsEl.appendChild(a);
+                };
+                addLink('🟣', twitch, twitch ? `https://twitch.tv/${twitch.replace(/^@/, '')}` : '');
+                addLink('🎮', steam, steam ? (steam.startsWith('http') ? steam : `https://steamcommunity.com/id/${steam}`) : '');
+                addLink('🐦', twitter, twitter ? `https://x.com/${twitter.replace(/^@/, '')}` : '');
+            }
+        }
+
+        // ── Avatar ────────────────────────────────────────────────
         if (avatarEl) {
             avatarEl.innerHTML = '';
             if (avatarSrc) {
                 avatarEl.style.backgroundImage = `url(${avatarSrc})`;
                 avatarEl.style.backgroundSize = 'cover';
                 avatarEl.style.backgroundPosition = 'center';
-                // Al hacer clic en el avatar grande del modal, se abre en Lightbox (zoom completo)
                 avatarEl.onclick = () => window.openLightbox(avatarSrc, authorName);
             } else if (authorName === 'Nexus Music Bot') {
                 avatarEl.style.backgroundImage = 'none';
@@ -1359,6 +1418,7 @@ function setupUserProfileModal() {
     if (overlay) overlay.addEventListener('click', close);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 }
+
 
 
 // ─────────────────────────────────────────────────────────────
