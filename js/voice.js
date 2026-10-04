@@ -1604,10 +1604,36 @@ function playRemoteStream(peerId, remoteStream) {
         
         if (remoteVideo) {
             remoteVideo.srcObject = remoteStream;
-            // Solo reproducir con sonido si la pantalla comparte pistas de audio (ej: audio del juego)
-            const hasAudio = remoteStream.getAudioTracks().length > 0;
-            remoteVideo.muted = !hasAudio;
-            remoteVideo.play().catch(err => console.warn('[Stream] Fallo al reproducir vídeo remoto:', err));
+            // SIEMPRE empezar muteado para garantizar autoplay en Tauri/WebView.
+            // El video con sonido bloquea el autoplay y causa pantalla negra.
+            // El usuario puede reactivar el audio con el botón "Audio On/Off".
+            remoteVideo.muted = true;
+            remoteVideo.load(); // Forzar carga del nuevo srcObject
+            const playPromise = remoteVideo.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    console.warn('[Stream] Autoplay bloqueado, reintentando en interacción del usuario:', err);
+                    // Reintentar al primer clic o tecla
+                    const retryPlay = () => {
+                        remoteVideo.play().catch(() => {});
+                        document.removeEventListener('click', retryPlay);
+                        document.removeEventListener('keydown', retryPlay);
+                        document.removeEventListener('mousedown', retryPlay);
+                    };
+                    document.addEventListener('click', retryPlay, { once: true });
+                    document.addEventListener('keydown', retryPlay, { once: true });
+                    document.addEventListener('mousedown', retryPlay, { once: true });
+                });
+            }
+            // Actualizar texto del botón de audio para reflejar estado muteado inicial
+            const audioBtn = document.getElementById('stream-mic-toggle');
+            if (audioBtn) {
+                audioBtn.textContent = 'Audio Off';
+                audioBtn.onclick = () => {
+                    remoteVideo.muted = !remoteVideo.muted;
+                    audioBtn.textContent = remoteVideo.muted ? 'Audio Off' : 'Audio On';
+                };
+            }
         }
         if (streamContainer) streamContainer.classList.remove('hidden');
         if (placeholder) placeholder.classList.add('hidden');
