@@ -65,12 +65,9 @@ function runPerformanceLoop() {
         lastFrameTime = now;
     }
     
-    // Si el ahorro de CPU está encendido, reducimos el loop de cálculo a 30fps para simular
-    if (state.optimizationCPUSave) {
-        setTimeout(() => requestAnimationFrame(runPerformanceLoop), 33);
-    } else {
-        requestAnimationFrame(runPerformanceLoop);
-    }
+    // Throttle: 4fps en background, 30fps en primer plano — ahorra CPU significativamente
+    const delay = document.hidden ? 250 : 33;
+    setTimeout(() => requestAnimationFrame(runPerformanceLoop), delay);
 }
 
 function updatePerformanceMetrics() {

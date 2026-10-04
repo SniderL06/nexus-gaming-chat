@@ -654,6 +654,14 @@ export function initVoice() {
         canvasCtx = canvas.getContext('2d');
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+
+        // Reanudar visualizador y VAD cuando la ventana vuelve a ser visible
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && state.activeVoiceChannel) {
+                if (!visualizerAnimationId) drawVisualizer();
+                if (!localSpeakingVadId)   startLocalVAD();
+            }
+        });
     }
 
     // Vincular controles de la barra de voz
@@ -2530,11 +2538,24 @@ let vadHoldCounter = 0;
 function startLocalVAD() {
     if (localSpeakingVadId) cancelAnimationFrame(localSpeakingVadId);
 
+    let _vadBuffer = null;
+
     function vadLoop() {
+        // Parar completamente si no hay canal activo — no schedular el siguiente frame
+        if (!state.activeVoiceChannel) {
+            localSpeakingVadId = null;
+            if (isLocalUserSpeaking) {
+                isLocalUserSpeaking = false;
+                applyLocalSpeakingGlow(false);
+            }
+            vadHoldCounter = 0;
+            return;
+        }
+
         localSpeakingVadId = requestAnimationFrame(vadLoop);
 
-        if (!analyser || state.isMuted || !state.activeVoiceChannel) {
-            // Silenciado o fuera de canal: apagar el indicador de inmediato
+        if (!analyser || state.isMuted) {
+            // Silenciado: apagar el indicador de inmediato
             if (isLocalUserSpeaking) {
                 isLocalUserSpeaking = false;
                 applyLocalSpeakingGlow(false);
@@ -2631,6 +2652,16 @@ const VIZ_FRAME_MS  = 1000 / VIZ_TARGET_FPS;
 // Loop de dibujo del analizador de frecuencia WebRTC en Canvas
 function drawVisualizer() {
     if (!analyser || !canvasCtx || !canvas) return;
+
+    // Parar completamente si no hay canal de voz activo o la ventana está oculta
+    if (!state.activeVoiceChannel || document.hidden) {
+        visualizerAnimationId = null;
+        // Limpiar el canvas cuando se para
+        if (canvasCtx && canvas) {
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        return;
+    }
 
     visualizerAnimationId = requestAnimationFrame(drawVisualizer);
 
