@@ -1049,23 +1049,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Subir imagen de banner ────────────────────────────────────
     if (bannerImgInput) {
-        bannerImgInput.addEventListener('change', (e) => {
+        bannerImgInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             if (file.size > 5 * 1024 * 1024) { alert('El banner no puede superar 5 MB.'); return; }
+
+            // Preview inmediato con FileReader
             const reader = new FileReader();
             reader.onload = (ev) => {
                 const dataUrl = ev.target.result;
                 if (profileBannerEl) profileBannerEl.style.background = `url(${dataUrl}) center/cover no-repeat`;
+                // Guardar localmente como cache temporal hasta que se suba a Storage
                 const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
                 if (email) saveProfileField(email, 'banner_img', dataUrl);
             };
             reader.readAsDataURL(file);
+
+            // Subir a Supabase Storage en paralelo
+            const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+            if (email) {
+                const { uploadBannerImage, saveUserProfile } = await import('./supabase-client.js');
+                const publicUrl = await uploadBannerImage(file, email);
+                if (publicUrl) {
+                    saveProfileField(email, 'banner_url', publicUrl);
+                    saveProfileField(email, 'banner_img', ''); // usar URL pública en vez de base64
+                    if (profileBannerEl) profileBannerEl.style.background = `url(${publicUrl}) center/cover no-repeat`;
+                }
+            }
         });
     }
 
-    // ── Guardar perfil completo ───────────────────────────────────
-    function handleSaveProfile() {
+    // ── Guardar perfil completo ───────────────────────────────
+    async function handleSaveProfile() {
         const rawEmail = localStorage.getItem('nexus_user_email') || '';
         const email = rawEmail.trim().toLowerCase();
         if (!email) { alert('Debes iniciar sesión para cambiar tu perfil.'); return; }
@@ -1074,16 +1089,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!newName) { alert('El nombre de usuario no puede estar vacío.'); return; }
         if (newName.length > 25) { alert('El nombre no puede tener más de 25 caracteres.'); return; }
 
-        // Nombre
+        // ── Guardar en localStorage ───────────────────────────
         localStorage.setItem('nexus_username_' + email, newName);
         if (rawEmail && rawEmail !== email) localStorage.setItem('nexus_username_' + rawEmail, newName);
 
-        // Bio, estado, redes
-        saveProfileField(email, 'status',         profileStatusInput?.value.trim() || '');
-        saveProfileField(email, 'bio',            profileBioInput?.value.trim() || '');
-        saveProfileField(email, 'social_twitch',  document.getElementById('profile-social-twitch')?.value.trim() || '');
-        saveProfileField(email, 'social_steam',   document.getElementById('profile-social-steam')?.value.trim() || '');
-        saveProfileField(email, 'social_twitter', document.getElementById('profile-social-twitter')?.value.trim() || '');
+        const bio            = profileBioInput?.value.trim() || '';
+        const status         = profileStatusInput?.value.trim() || '';
+        const social_twitch  = document.getElementById('profile-social-twitch')?.value.trim() || '';
+        const social_steam   = document.getElementById('profile-social-steam')?.value.trim() || '';
+        const social_twitter = document.getElementById('profile-social-twitter')?.value.trim() || '';
+        const banner_url     = loadProfileField(email, 'banner_url');
+        const banner_gradient = loadProfileField(email, 'banner_gradient', 'linear-gradient(135deg,#8b5cf6,#00d4ff)');
+
+        saveProfileField(email, 'status',         status);
+        saveProfileField(email, 'bio',            bio);
+        saveProfileField(email, 'social_twitch',  social_twitch);
+        saveProfileField(email, 'social_steam',   social_steam);
+        saveProfileField(email, 'social_twitter', social_twitter);
+
+        // ── Guardar en Supabase para que todos puedan verlo ──
+        try {
+            const { saveUserProfile } = await import('./supabase-client.js');
+            await saveUserProfile({ email, username: newName, bio, status, banner_url, banner_gradient, social_twitch, social_steam, social_twitter });
+        } catch (e) {
+            console.warn('[Profile] No se pudo sincronizar con Supabase:', e);
+        }
 
         updateUserProfileUI(email);
 

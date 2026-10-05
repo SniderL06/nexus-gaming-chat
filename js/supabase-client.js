@@ -100,6 +100,13 @@ export function startGlobalPresence(userName) {
         .on('presence', { event: 'sync' }, () => {
             const state = globalPresenceChannel.presenceState();
             updateOnlineMembersSidebar(state);
+            // Actualizar mapa nombre→email para que el modal de perfil pueda buscar en Supabase
+            window._nexusEmailByName = window._nexusEmailByName || {};
+            Object.values(state).forEach(presences => {
+                presences.forEach(p => {
+                    if (p.name && p.email) window._nexusEmailByName[p.name] = p.email;
+                });
+            });
         })
         .on('presence', { event: 'join' }, ({ key, newPresences }) => {
             console.log(`[Presencia] ${key} se conectó.`);
@@ -323,5 +330,84 @@ function updateStatusIndicator() {
             text.textContent = 'Sin conexión a base de datos';
             text.style.color = '';
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PERFILES DE USUARIO — lectura/escritura en tabla `profiles`
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Obtiene el perfil de un usuario por email desde Supabase.
+ * Devuelve null si no existe o hay error.
+ * @param {string} email
+ * @returns {Promise<object|null>}
+ */
+export async function fetchUserProfile(email) {
+    if (!supabase || !email) return null;
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('email, username, bio, status, banner_url, banner_gradient, social_twitch, social_steam, social_twitter')
+            .eq('email', email.trim().toLowerCase())
+            .single();
+        if (error || !data) return null;
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Guarda o actualiza el perfil del usuario actual en Supabase.
+ * @param {object} profileData  - { email, username, bio, status, banner_url, banner_gradient, social_twitch, social_steam, social_twitter }
+ * @returns {Promise<boolean>}  - true si se guardó correctamente
+ */
+export async function saveUserProfile(profileData) {
+    if (!supabase || !profileData?.email) return false;
+    try {
+        const { error } = await supabase
+            .from('profiles')
+            .upsert({
+                email:            profileData.email.trim().toLowerCase(),
+                username:         profileData.username         || '',
+                bio:              profileData.bio              || '',
+                status:           profileData.status           || '',
+                banner_url:       profileData.banner_url       || '',
+                banner_gradient:  profileData.banner_gradient  || 'linear-gradient(135deg,#8b5cf6,#00d4ff)',
+                social_twitch:    profileData.social_twitch    || '',
+                social_steam:     profileData.social_steam     || '',
+                social_twitter:   profileData.social_twitter   || '',
+                updated_at:       new Date().toISOString()
+            }, { onConflict: 'email' });
+        if (error) { console.error('[Profile] Error al guardar perfil:', error.message); return false; }
+        return true;
+    } catch (e) {
+        console.error('[Profile] Excepción al guardar perfil:', e);
+        return false;
+    }
+}
+
+/**
+ * Sube un archivo de banner a Supabase Storage y devuelve la URL pública.
+ * Usa el bucket 'nexus-images' que ya existe.
+ * @param {File} file   - Archivo de imagen
+ * @param {string} email - Email del usuario (para nombrar el archivo)
+ * @returns {Promise<string|null>}
+ */
+export async function uploadBannerImage(file, email) {
+    if (!supabase || !file || !email) return null;
+    try {
+        const ext = file.name.split('.').pop().toLowerCase() || 'jpg';
+        const path = `banners/${email.replace(/[@.]/g, '_')}_${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+            .from('nexus-images')
+            .upload(path, file, { upsert: true, contentType: file.type });
+        if (upErr) { console.error('[Banner] Error al subir banner:', upErr.message); return null; }
+        const { data } = supabase.storage.from('nexus-images').getPublicUrl(path);
+        return data?.publicUrl || null;
+    } catch (e) {
+        console.error('[Banner] Excepción al subir banner:', e);
+        return null;
     }
 }

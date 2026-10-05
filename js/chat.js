@@ -1269,25 +1269,94 @@ function setupUserProfileModal() {
     const overlay = document.getElementById('user-profile-overlay');
     const avatarEl = document.getElementById('profile-modal-avatar');
 
-    // Helper para leer campos de perfil extendido
+    // Helper para leer campos de perfil del localStorage (caché local)
     const getPField = (email, key, fallback = '') =>
         localStorage.getItem(`nexus_profile_${key}_${email}`) || fallback;
+
+    // Mapa email→nombre para resolver nombre→email de otros usuarios
+    // Se llena desde la presencia global
+    window._nexusEmailByName = window._nexusEmailByName || {};
+
+    function applyProfileData(data, cleanEmail) {
+        const nameEl    = document.getElementById('profile-modal-name');
+        const aboutEl   = document.getElementById('profile-modal-about');
+        const statusEl  = document.getElementById('profile-modal-status');
+        const bannerEl  = document.getElementById('profile-modal-banner');
+        const socialsEl = document.getElementById('profile-modal-socials');
+
+        // ── Bio ───────────────────────────────────────────────
+        if (aboutEl) {
+            const bio = data?.bio || getPField(cleanEmail, 'bio');
+            if (data?.username === 'Nexus Music Bot') {
+                aboutEl.textContent = 'Bot oficial del servidor de Nexus. Reproduzco música en salas de voz.';
+            } else if (bio) {
+                aboutEl.textContent = bio;
+            } else if (cleanEmail === 'sniderquiros5@gmail.com') {
+                aboutEl.textContent = 'Creador y administrador principal de la red de Nexus Gaming Chat.';
+            } else {
+                aboutEl.textContent = '¡Hola! Estoy usando Nexus para comunicarme con mi equipo de gaming.';
+            }
+        }
+
+        // ── Estado personalizado ──────────────────────────────
+        if (statusEl) {
+            const st = data?.status || getPField(cleanEmail, 'status');
+            statusEl.textContent = st || '';
+            statusEl.style.display = st ? 'block' : 'none';
+        }
+
+        // ── Banner ────────────────────────────────────────────
+        if (bannerEl) {
+            const bannerUrl  = data?.banner_url  || getPField(cleanEmail, 'banner_url');
+            const bannerImg  = getPField(cleanEmail, 'banner_img'); // base64 local cache
+            const bannerGrad = data?.banner_gradient || getPField(cleanEmail, 'banner_gradient',
+                'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)');
+            if (bannerUrl) {
+                bannerEl.style.background = `url(${bannerUrl}) center/cover no-repeat`;
+            } else if (bannerImg) {
+                bannerEl.style.background = `url(${bannerImg}) center/cover no-repeat`;
+            } else {
+                bannerEl.style.background = bannerGrad;
+            }
+        }
+
+        // ── Redes sociales ────────────────────────────────────
+        if (socialsEl) {
+            const twitch  = data?.social_twitch  || getPField(cleanEmail, 'social_twitch');
+            const steam   = data?.social_steam   || getPField(cleanEmail, 'social_steam');
+            const twitter = data?.social_twitter || getPField(cleanEmail, 'social_twitter');
+            const hasSocials = twitch || steam || twitter;
+
+            socialsEl.style.display = hasSocials ? 'flex' : 'none';
+            if (hasSocials) {
+                socialsEl.querySelectorAll('a.social-link').forEach(l => l.remove());
+                const addLink = (icon, text, url) => {
+                    if (!text) return;
+                    const a = document.createElement('a');
+                    a.className = 'social-link';
+                    a.href = url || '#';
+                    if (url) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+                    a.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-normal);background:var(--bg-tertiary);padding:6px 10px;border-radius:6px;text-decoration:none;transition:background 0.15s;';
+                    a.onmouseover = () => a.style.background = 'var(--bg-primary)';
+                    a.onmouseout  = () => a.style.background = 'var(--bg-tertiary)';
+                    a.innerHTML = `<span>${icon}</span><span>${text}</span>`;
+                    socialsEl.appendChild(a);
+                };
+                addLink('🟣', twitch,  twitch  ? `https://twitch.tv/${twitch.replace(/^@/, '')}` : '');
+                addLink('🎮', steam,   steam   ? (steam.startsWith('http') ? steam : `https://steamcommunity.com/id/${steam}`) : '');
+                addLink('🐦', twitter, twitter ? `https://x.com/${twitter.replace(/^@/, '')}` : '');
+            }
+        }
+    }
 
     window.openUserProfile = (authorName, avatarSrc, bgClass) => {
         if (!modal) return;
 
-        const nameEl   = document.getElementById('profile-modal-name');
-        const emailEl  = document.getElementById('profile-modal-email');
-        const badgeEl  = document.getElementById('profile-modal-badge');
-        const aboutEl  = document.getElementById('profile-modal-about');
-        const statusEl = document.getElementById('profile-modal-status');
-        const bannerEl = document.getElementById('profile-modal-banner');
-        const socialsEl = document.getElementById('profile-modal-socials');
+        const nameEl  = document.getElementById('profile-modal-name');
+        const emailEl = document.getElementById('profile-modal-email');
+        const badgeEl = document.getElementById('profile-modal-badge');
 
-        // ── Nombre ────────────────────────────────────────────────
-        if (nameEl) nameEl.textContent = authorName;
-
-        // ── Email ─────────────────────────────────────────────────
+        // ── Determinar email ──────────────────────────────────
         const myName = getLocalUserName();
         let userEmail = '';
         if (authorName === myName) {
@@ -1295,19 +1364,16 @@ function setupUserProfileModal() {
         } else if (authorName === 'Nexus Music Bot') {
             userEmail = 'music-bot@nexus.gg';
         } else {
-            userEmail = `${authorName.toLowerCase().replace(/\s+/g, '')}@nexus.gg`;
+            // Intentar resolver desde la presencia global
+            userEmail = window._nexusEmailByName?.[authorName] || `${authorName.toLowerCase().replace(/\s+/g, '')}@nexus.gg`;
         }
         const cleanEmail = userEmail.trim().toLowerCase();
+
+        // ── Datos básicos (instantáneos) ──────────────────────
+        if (nameEl)  nameEl.textContent  = authorName;
         if (emailEl) emailEl.textContent = userEmail;
 
-        // ── Estado personalizado ──────────────────────────────────
-        if (statusEl) {
-            const customStatus = getPField(cleanEmail, 'status');
-            statusEl.textContent = customStatus || '';
-            statusEl.style.display = customStatus ? 'block' : 'none';
-        }
-
-        // ── Rango/Badge ────────────────────────────────────────────
+        // ── Badge/Rango ───────────────────────────────────────
         if (badgeEl) {
             const isOp = isUserOp(authorName);
             if (cleanEmail === 'sniderquiros5@gmail.com') {
@@ -1329,64 +1395,7 @@ function setupUserProfileModal() {
             }
         }
 
-        // ── Bio / Acerca de mí ────────────────────────────────────
-        if (aboutEl) {
-            const bio = getPField(cleanEmail, 'bio');
-            if (authorName === 'Nexus Music Bot') {
-                aboutEl.textContent = 'Bot oficial del servidor de Nexus. Reproduzco música en salas de voz.';
-            } else if (bio) {
-                aboutEl.textContent = bio;
-            } else if (cleanEmail === 'sniderquiros5@gmail.com') {
-                aboutEl.textContent = 'Creador y administrador principal de la red de Nexus Gaming Chat.';
-            } else {
-                aboutEl.textContent = '¡Hola! Estoy usando Nexus para comunicarme con mi equipo de gaming.';
-            }
-        }
-
-        // ── Banner personalizado ──────────────────────────────────
-        if (bannerEl) {
-            const bannerImg = getPField(cleanEmail, 'banner_img');
-            const bannerGrad = getPField(cleanEmail, 'banner_gradient',
-                'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)');
-            if (bannerImg) {
-                bannerEl.style.background = `url(${bannerImg}) center/cover no-repeat`;
-            } else {
-                bannerEl.style.background = bannerGrad;
-            }
-        }
-
-        // ── Redes sociales ────────────────────────────────────────
-        if (socialsEl) {
-            const twitch  = getPField(cleanEmail, 'social_twitch');
-            const steam   = getPField(cleanEmail, 'social_steam');
-            const twitter = getPField(cleanEmail, 'social_twitter');
-            const hasSocials = twitch || steam || twitter;
-
-            socialsEl.style.display = hasSocials ? 'flex' : 'none';
-            if (hasSocials) {
-                // Limpiar links previos (mantener el label)
-                const labels = socialsEl.querySelectorAll('a.social-link');
-                labels.forEach(l => l.remove());
-
-                const addLink = (icon, text, url) => {
-                    if (!text) return;
-                    const a = document.createElement('a');
-                    a.className = 'social-link';
-                    a.href = url || '#';
-                    if (url) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
-                    a.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-normal);background:var(--bg-tertiary);padding:6px 10px;border-radius:6px;text-decoration:none;transition:background 0.15s;';
-                    a.onmouseover = () => a.style.background = 'var(--bg-primary)';
-                    a.onmouseout = () => a.style.background = 'var(--bg-tertiary)';
-                    a.innerHTML = `<span>${icon}</span><span>${text}</span>`;
-                    socialsEl.appendChild(a);
-                };
-                addLink('🟣', twitch, twitch ? `https://twitch.tv/${twitch.replace(/^@/, '')}` : '');
-                addLink('🎮', steam, steam ? (steam.startsWith('http') ? steam : `https://steamcommunity.com/id/${steam}`) : '');
-                addLink('🐦', twitter, twitter ? `https://x.com/${twitter.replace(/^@/, '')}` : '');
-            }
-        }
-
-        // ── Avatar ────────────────────────────────────────────────
+        // ── Avatar ────────────────────────────────────────────
         if (avatarEl) {
             avatarEl.innerHTML = '';
             if (avatarSrc) {
@@ -1410,12 +1419,33 @@ function setupUserProfileModal() {
             }
         }
 
+        // ── Mostrar modal inmediatamente con datos de caché local ──
+        applyProfileData(null, cleanEmail);
         modal.classList.remove('hidden');
+
+        // ── Cargar desde Supabase en background y actualizar ──────
+        if (authorName !== 'Nexus Music Bot') {
+            import('./supabase-client.js').then(({ fetchUserProfile }) => {
+                fetchUserProfile(cleanEmail).then(remoteData => {
+                    if (remoteData && modal && !modal.classList.contains('hidden')) {
+                        applyProfileData(remoteData, cleanEmail);
+                        // Actualizar caché local con datos frescos
+                        if (remoteData.bio)              localStorage.setItem(`nexus_profile_bio_${cleanEmail}`,              remoteData.bio);
+                        if (remoteData.status)           localStorage.setItem(`nexus_profile_status_${cleanEmail}`,           remoteData.status);
+                        if (remoteData.banner_url)       localStorage.setItem(`nexus_profile_banner_url_${cleanEmail}`,       remoteData.banner_url);
+                        if (remoteData.banner_gradient)  localStorage.setItem(`nexus_profile_banner_gradient_${cleanEmail}`,  remoteData.banner_gradient);
+                        if (remoteData.social_twitch)    localStorage.setItem(`nexus_profile_social_twitch_${cleanEmail}`,    remoteData.social_twitch);
+                        if (remoteData.social_steam)     localStorage.setItem(`nexus_profile_social_steam_${cleanEmail}`,     remoteData.social_steam);
+                        if (remoteData.social_twitter)   localStorage.setItem(`nexus_profile_social_twitter_${cleanEmail}`,   remoteData.social_twitter);
+                    }
+                });
+            });
+        }
     };
 
     const close = () => modal && modal.classList.add('hidden');
     if (closeBtn) closeBtn.addEventListener('click', close);
-    if (overlay) overlay.addEventListener('click', close);
+    if (overlay)  overlay.addEventListener('click', close);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 }
 
