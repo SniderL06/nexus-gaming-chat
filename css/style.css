@@ -457,6 +457,20 @@ body {
     overflow: hidden;
     flex: 1;
     min-width: 0;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 8px;
+    transition: background 0.18s ease;
+}
+
+.user-profile:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.user-profile:hover .user-info::after {
+    content: ' ✏️';
+    font-size: 0.7rem;
+    opacity: 0.6;
 }
 
 .avatar-container {

@@ -167,21 +167,41 @@ document.addEventListener('DOMContentLoaded', () => {
         subscribeToServersAndChannels();
     });
 
-    // Abrir Ajustes & Temas al hacer clic en el nombre de usuario de la barra inferior
+    // Abrir Editor de Perfil al hacer clic en la zona de usuario de la barra inferior
+    const openProfileEditor = () => {
+        const panel = document.getElementById('theme-panel');
+        if (panel) panel.classList.add('open');
+        // Scroll a la sección de perfil dentro del panel de ajustes
+        setTimeout(() => {
+            const profileSection = document.getElementById('profile-display-name');
+            if (profileSection) {
+                profileSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                profileSection.focus();
+                profileSection.select();
+            }
+        }, 120);
+    };
+
+    // Clic en el nombre del usuario
     const userInfo = document.querySelector('.user-panel .user-info');
     if (userInfo) {
-        userInfo.addEventListener('click', () => {
-            const panel = document.getElementById('theme-panel');
-            const profileNameInput = document.getElementById('profile-display-name');
-            if (panel) {
-                panel.classList.add('open');
-            }
-            if (profileNameInput) {
-                profileNameInput.focus();
-                profileNameInput.select();
-            }
+        userInfo.style.cursor = 'pointer';
+        userInfo.addEventListener('click', openProfileEditor);
+    }
+
+    // Clic en el avatar del usuario (área izquierda, no el input de archivo)
+    const userProfile = document.querySelector('.user-panel .user-profile');
+    if (userProfile) {
+        userProfile.style.cursor = 'pointer';
+        userProfile.title = 'Editar perfil';
+        userProfile.addEventListener('click', (e) => {
+            // No interceptar si hicieron clic directo en el input de archivo o en el container del avatar
+            // (ese ya tiene su propio handler para cambiar foto)
+            if (e.target.closest('#user-avatar-container')) return;
+            openProfileEditor();
         });
     }
+
 
     // --- MODAL Y OPCIONES DE APOYO ("Apoyar Servidor": PayPal o Anuncio) ---
     const supportAdBtn = document.getElementById('support-ad-btn');
