@@ -178,10 +178,10 @@ function buildFilterChain(filterName, inputNode) {
             const gateAnalyser = audioCtx.createAnalyser();
             gateAnalyser.fftSize = 256;
             const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
-            // Threshold 18 (en lugar de 32): capta tonos suaves y finales de oraciones
-            const GATE_THRESHOLD = 18;
-            // Hold de 320ms (en lugar de 80ms) para que la voz no se corte entre palabras
-            const GATE_HOLD_MS = 320;
+            // Threshold 10: ultra permisivo para no cortar susurros ni finales de palabras
+            const GATE_THRESHOLD = 10;
+            // Hold de 450ms para que la voz no se corte entre pausas naturales de respiración
+            const GATE_HOLD_MS = 450;
             let gateOpen = false;
             let lastAboveThresholdTime = Date.now();
 
@@ -206,8 +206,8 @@ function buildFilterChain(filterName, inputNode) {
                     }
                 } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
                     gateOpen = false;
-                    // Cierre atenuado a 0.05 en lugar de 0.0 total: evita el efecto "mudo/cortado" entrecortado
-                    try { gateGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.04); } catch(e){}
+                    // Cierre suave a 0.15 en lugar de cortar a 0: evita cortes bruscos de voz
+                    try { gateGain.gain.setTargetAtTime(0.15, audioCtx.currentTime, 0.05); } catch(e){}
                 }
             }, 20); // 50 Hz de polling
 
@@ -1702,8 +1702,17 @@ function playRemoteStream(peerId, remoteStream) {
         audioEl = document.createElement('audio');
         audioEl.id = `remote-audio-${peerId}`;
         audioEl.autoplay = true;
+        audioEl.playsInline = true;
         audioEl.style.display = 'none';
         document.body.appendChild(audioEl);
+
+        // Si el navegador o webview pausa el elemento de audio remotamente, forzar play()
+        audioEl.addEventListener('pause', () => {
+            if (state.activeVoiceChannel && activePeers.has(peerId) && audioEl.srcObject) {
+                console.warn(`[Audio WebRTC] Audio de peer ${peerId} fue pausado por el sistema, reanudando...`);
+                audioEl.play().catch(() => {});
+            }
+        });
     }
     
     audioEl.srcObject = remoteStream;
@@ -1711,17 +1720,21 @@ function playRemoteStream(peerId, remoteStream) {
     const isMutedLocally = locallyMutedPeers.get(peerId) || false;
     audioEl.volume = (state.isDeafened || isMutedLocally) ? 0 : userVol * audioOutputVolume;
 
-    // Asegurar reproducción fluida si el navegador pausa el audio por inactividad
-    audioEl.play().catch(err => {
-        console.warn(`[Audio WebRTC] Autoplay bloqueado para peer ${peerId}, reintentando en interacción:`, err);
-        const resumeOnUserAction = () => {
-            audioEl.play().catch(() => {});
-            document.removeEventListener('click', resumeOnUserAction);
-            document.removeEventListener('keydown', resumeOnUserAction);
-        };
-        document.addEventListener('click', resumeOnUserAction);
-        document.addEventListener('keydown', resumeOnUserAction);
-    });
+    // Asegurar reproducción fluida si el navegador pausa el audio por inactividad o políticas de autoplay
+    const attemptPlay = () => {
+        if (!audioEl.srcObject) return;
+        audioEl.play().catch(err => {
+            console.warn(`[Audio WebRTC] Autoplay bloqueado para peer ${peerId}, reintentando en interacción:`, err);
+            const resumeOnUserAction = () => {
+                audioEl.play().catch(() => {});
+                document.removeEventListener('click', resumeOnUserAction);
+                document.removeEventListener('keydown', resumeOnUserAction);
+            };
+            document.addEventListener('click', resumeOnUserAction);
+            document.addEventListener('keydown', resumeOnUserAction);
+        });
+    };
+    attemptPlay();
 
     if (selectedOutputDeviceId !== 'default' && typeof audioEl.setSinkId === 'function') {
         audioEl.setSinkId(selectedOutputDeviceId).catch(() => {});
