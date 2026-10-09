@@ -1378,13 +1378,24 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         });
     });
 
+    // Set para evitar spam de notificaciones cuando el usuario envía heartbeats
+    const recentNotifiedJoins = new Map();
+
     presenceChannel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
         newPresences.forEach(presence => {
             if (presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
                 console.log(`[Presence] ${presence.name} se unió. Llamando...`);
                 callPeer(presence.peerId, presence.name);
-                // Notificar si la app está en background
-                notifyVoiceJoin(presence.name, state.activeVoiceChannel || 'voz');
+
+                // Solo notificar si no está ya en la sala y han pasado al menos 60s desde la última notificación
+                const now = Date.now();
+                const lastNotified = recentNotifiedJoins.get(presence.name) || 0;
+                const alreadyInRoom = activeMembersInRoom.some(m => m.name === presence.name);
+                
+                if (!alreadyInRoom && (now - lastNotified > 60000)) {
+                    recentNotifiedJoins.set(presence.name, now);
+                    notifyVoiceJoin(presence.name, state.activeVoiceChannel || 'voz');
+                }
             }
         });
     });
