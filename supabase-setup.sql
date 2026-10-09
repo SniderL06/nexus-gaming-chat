@@ -128,16 +128,20 @@ create index if not exists messages_channel_id_idx on messages(channel_id);
 create index if not exists messages_created_at_idx on messages(created_at);
 
 -- ─────────────────────────────────────────────────────────────
--- 7. TABLA DE PERFILES DE USUARIO (OPCIONAL / RECOMENDADO)
--- Permite búsqueda global persistente de usuarios para el DM Hub
+-- 7. TABLA DE PERFILES DE USUARIO (CON BANNERS Y BIO)
 -- ─────────────────────────────────────────────────────────────
 create table if not exists profiles (
   email text primary key,
-  username text not null,
-  avatar text,
-  status text default 'offline',
-  last_seen timestamp with time zone default timezone('utc'::text, now()) not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  username text not null default '',
+  bio text default '',
+  status text default '',
+  banner_url text default '',
+  banner_gradient text default 'linear-gradient(135deg,#8b5cf6,#00d4ff)',
+  social_twitch text default '',
+  social_steam text default '',
+  social_twitter text default '',
+  avatar text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table profiles enable row level security;
@@ -145,6 +149,15 @@ drop policy if exists "Todos pueden leer perfiles" on profiles;
 drop policy if exists "Todos pueden upsert su perfil" on profiles;
 create policy "Todos pueden leer perfiles" on profiles for select using (true);
 create policy "Todos pueden upsert su perfil" on profiles for all using (true);
+
+-- Añadir tabla profiles a la publicación de realtime
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table profiles;
+  exception when others then null;
+  end;
+end $$;
 
 -- ─────────────────────────────────────────────────────────────
 -- 8. TABLA DE MENSAJES DIRECTOS PERSISTENTES (HISTORIAL)
