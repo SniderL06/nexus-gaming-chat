@@ -10,6 +10,28 @@ let installPromptEvent = null; // BeforeInstallPromptEvent guardado
 
 // ─── REGISTRO DEL SERVICE WORKER ─────────────────────────────────────
 export async function initPWA() {
+    // Si estamos en la app de escritorio de Tauri, desregistrar SW y limpiar cachés
+    // para evitar que WebView2 sirva HTML/JS desactualizado en lugar de los archivos compilados
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (isTauri) {
+        if ('serviceWorker' in navigator) {
+            try {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                for (const reg of regs) {
+                    await reg.unregister();
+                }
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    for (const key of keys) {
+                        await caches.delete(key);
+                    }
+                }
+                console.log('[PWA] Ejecutando en Tauri nativo: Service Worker y cachés locales purgados.');
+            } catch (e) {}
+        }
+        return;
+    }
+
     if (!('serviceWorker' in navigator)) {
         console.warn('[PWA] Service Worker no soportado en este navegador.');
         return;
