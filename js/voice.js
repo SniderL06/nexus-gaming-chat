@@ -1603,41 +1603,51 @@ function playRemoteStream(peerId, remoteStream) {
         const titleEl = document.getElementById('stream-user-title');
         
         if (remoteVideo) {
-            // Evitar AbortError si ya está reproduciendo el mismo stream
+            // Si el stream recibido ya es el srcObject activo y no está pausado, no hacer nada
             if (remoteVideo.srcObject === remoteStream && !remoteVideo.paused) {
-                console.log('[Stream] Stream ya en reproducción, ignorando duplicado.');
+                console.log('[Stream] Stream ya en reproducción, ignorando llamada duplicada.');
                 return;
             }
 
-            // Pausar cualquier reproducción pendiente antes de cambiar la fuente
+            // Registrar identificador de token para cancelar reproducciones obsoletas concurrentes
+            const currentToken = (remoteVideo._playSessionToken || 0) + 1;
+            remoteVideo._playSessionToken = currentToken;
+
+            // Pausar de forma segura sin disparar uncaught error
             if (!remoteVideo.paused) {
                 try { remoteVideo.pause(); } catch(e) {}
             }
 
             remoteVideo.srcObject = remoteStream;
             // SIEMPRE empezar muteado para garantizar autoplay en Tauri/WebView.
-            // El video con sonido bloquea el autoplay y causa pantalla negra.
-            // El usuario puede activar audio con el botón "Audio On/Off".
             remoteVideo.muted = true;
-            // NO llamar load() con srcObject — causa AbortError al interrumpir play() en curso
 
-            // Esperar un tick para que el srcObject quede registrado antes de play()
-            setTimeout(() => {
+            const executeSafePlay = () => {
+                if (remoteVideo._playSessionToken !== currentToken) return;
                 const playPromise = remoteVideo.play();
                 if (playPromise !== undefined) {
-                    playPromise.catch(err => {
+                    playPromise.then(() => {
+                        console.log('[Stream] Vídeo remoto iniciado con éxito.');
+                    }).catch(err => {
                         if (err.name === 'AbortError') {
-                            // AbortError benigno: otra llamada play() llegó antes, ignorar
+                            // Ignorar AbortError provocado por nueva asignación o play() concurrente
                             return;
                         }
-                        console.warn('[Stream] Autoplay bloqueado, reintentando en interacción:', err);
-                        const retryPlay = () => { remoteVideo.play().catch(() => {}); };
+                        console.warn('[Stream] Autoplay bloqueado por el navegador, reintentando tras interacción:', err);
+                        const retryPlay = () => {
+                            if (remoteVideo._playSessionToken === currentToken) {
+                                remoteVideo.play().catch(() => {});
+                            }
+                        };
                         document.addEventListener('click', retryPlay, { once: true });
                         document.addEventListener('keydown', retryPlay, { once: true });
                         document.addEventListener('mousedown', retryPlay, { once: true });
                     });
                 }
-            }, 80);
+            };
+
+            // Pequeña espera para asentar el MediaStream y evitar colisión con llamadas anteriores
+            setTimeout(executeSafePlay, 100);
 
             // Actualizar botón de audio
             const audioBtn = document.getElementById('stream-mic-toggle');

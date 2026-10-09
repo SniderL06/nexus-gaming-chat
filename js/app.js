@@ -168,9 +168,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Abrir Editor de Perfil al hacer clic en la zona de usuario de la barra inferior
-    const openProfileEditor = () => {
+    window.openProfileEditor = (e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         const panel = document.getElementById('theme-panel');
-        if (panel) panel.classList.add('open');
+        if (panel) {
+            panel.classList.add('open');
+            // Cargar datos frescos en los campos
+            if (typeof loadProfileEditorData === 'function') {
+                loadProfileEditorData();
+            }
+        }
         // Scroll a la sección de perfil dentro del panel de ajustes
         setTimeout(() => {
             const profileSection = document.getElementById('profile-display-name');
@@ -182,23 +192,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 120);
     };
 
-    // Clic en el nombre del usuario
+    // Vincular clics en el nombre y correo del usuario
     const userInfo = document.querySelector('.user-panel .user-info');
     if (userInfo) {
         userInfo.style.cursor = 'pointer';
-        userInfo.addEventListener('click', openProfileEditor);
+        userInfo.addEventListener('click', (e) => window.openProfileEditor(e));
     }
 
-    // Clic en el avatar del usuario (área izquierda, no el input de archivo)
+    const userNameEl = document.getElementById('user-display-name');
+    if (userNameEl) {
+        userNameEl.style.cursor = 'pointer';
+        userNameEl.addEventListener('click', (e) => window.openProfileEditor(e));
+    }
+
+    const userEmailEl = document.getElementById('user-display-email');
+    if (userEmailEl) {
+        userEmailEl.style.cursor = 'pointer';
+        userEmailEl.addEventListener('click', (e) => window.openProfileEditor(e));
+    }
+
+    // Vincular clic en la tarjeta de perfil
     const userProfile = document.querySelector('.user-panel .user-profile');
     if (userProfile) {
         userProfile.style.cursor = 'pointer';
-        userProfile.title = 'Editar perfil';
+        userProfile.title = 'Editar perfil (banner, bio, estado y nombre)';
         userProfile.addEventListener('click', (e) => {
-            // No interceptar si hicieron clic directo en el input de archivo o en el container del avatar
-            // (ese ya tiene su propio handler para cambiar foto)
-            if (e.target.closest('#user-avatar-container')) return;
-            openProfileEditor();
+            // Si el clic es directo en el input de subida de archivo del avatar, no abrir ajustes
+            if (e.target && e.target.id === 'avatar-upload-input') return;
+            window.openProfileEditor(e);
         });
     }
 
@@ -249,6 +270,55 @@ document.addEventListener('DOMContentLoaded', () => {
         if (videoAdCloseBtn) videoAdCloseBtn.addEventListener('click', closeVideoAdModal);
         if (videoAdFinishBtn) videoAdFinishBtn.addEventListener('click', closeVideoAdModal);
     }
+
+    // ─── RECARGA AUTOMÁTICA DE ANUNCIOS (CADA 5 A 10 MINUTOS) ───
+    function setupSidebarAdAutoReload() {
+        const adWrapper = document.getElementById('sidebar-ad-wrapper');
+        if (!adWrapper) return;
+
+        const reloadAd = () => {
+            // Solo recargar si la ventana está activa/visible para optimizar datos y recursos
+            if (document.hidden) {
+                scheduleNextReload();
+                return;
+            }
+
+            console.log('[Anuncios] Renovando bloque de anuncio patrocinado...');
+            try {
+                // Crear nuevo contenedor limpio para re-ejecutar el script de ProfitableRateCPM
+                adWrapper.innerHTML = '';
+                const containerDiv = document.createElement('div');
+                containerDiv.id = 'container-c9a8a020d51acf922166ae36bc735892';
+
+                const script = document.createElement('script');
+                script.async = true;
+                script.dataset.cfasync = 'false';
+                // Añadir un timestamp para evitar cache estático del navegador
+                script.src = `https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js?t=${Date.now()}`;
+
+                adWrapper.appendChild(script);
+                adWrapper.appendChild(containerDiv);
+            } catch (err) {
+                console.warn('[Anuncios] Error al recargar anuncio:', err);
+            }
+
+            scheduleNextReload();
+        };
+
+        const scheduleNextReload = () => {
+            // Tiempo aleatorio entre 5 y 10 minutos (300,000ms a 600,000ms)
+            const minMs = 5 * 60 * 1000;
+            const maxMs = 10 * 60 * 1000;
+            const randomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+            const minutes = (randomDelay / 60000).toFixed(1);
+            console.log(`[Anuncios] Próxima recarga programada en ~${minutes} minutos.`);
+            setTimeout(reloadAd, randomDelay);
+        };
+
+        // Iniciar el ciclo de refresco automático
+        scheduleNextReload();
+    }
+    setupSidebarAdAutoReload();
 
     // Control de transmisiones
     const goLiveBtn = document.getElementById('go-live-btn');

@@ -1419,6 +1419,20 @@ function setupUserProfileModal() {
             }
         }
 
+        // ── Botón Editar Perfil (solo para el usuario propio) ──────
+        const editBtn = document.getElementById('profile-modal-edit-btn');
+        if (editBtn) {
+            const isMe = authorName === myName || cleanEmail === (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+            editBtn.style.display = isMe ? 'inline-flex' : 'none';
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                close();
+                if (window.openProfileEditor) {
+                    window.openProfileEditor(e);
+                }
+            };
+        }
+
         // ── Mostrar modal inmediatamente con datos de caché local ──
         applyProfileData(null, cleanEmail);
         modal.classList.remove('hidden');

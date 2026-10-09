@@ -202,11 +202,14 @@ export function initThemePanel() {
         closeBtn.addEventListener('click', () => panel.classList.remove('open'));
     }
 
-    // Cerrar al hacer clic afuera
+    // Cerrar al hacer clic afuera (ignorando clics en el botón de tema y en la zona de perfil de usuario)
     document.addEventListener('click', (e) => {
-        if (panel && panel.classList.contains('open') && !panel.contains(e.target) && e.target.id !== 'theme-panel-toggle') {
-            panel.classList.remove('open');
-        }
+        if (!panel || !panel.classList.contains('open')) return;
+        if (panel.contains(e.target)) return;
+        if (e.target.closest('#theme-panel-toggle')) return;
+        if (e.target.closest('.user-panel')) return;
+        if (e.target.closest('#voice-settings-quick-btn')) return;
+        panel.classList.remove('open');
     });
 
     // Tarjetas de preset

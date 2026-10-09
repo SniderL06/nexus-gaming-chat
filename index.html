@@ -205,12 +205,16 @@
                         </div>
                         <span class="user-status online"></span>
                     </div>
-                    <div class="user-info" title="Editar perfil (Cambiar nombre de usuario)">
+                    <div class="user-info" id="user-info-clickable" title="Editar perfil (Nombre, Banner, Bio, Estado)" style="cursor: pointer;" onclick="if(window.openProfileEditor) window.openProfileEditor(event);">
                         <span class="username" id="user-display-name">Usuario Nexus</span>
                         <span class="usertag" id="user-display-email">usuario@nexus.com</span>
                     </div>
                 </div>
                 <div class="user-panel-actions">
+                    <button class="panel-btn" id="edit-profile-quick-btn" title="Editar Perfil y Ajustes" data-tip="Ajustes" onclick="if(window.openProfileEditor) window.openProfileEditor(event);">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <span>Ajustes</span>
+                    </button>
                     <button class="panel-btn" id="go-live-btn" title="Transmitir Pantalla" data-tip="Emitir">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                         <span>Emitir</span>
@@ -570,10 +574,12 @@
             </div>
 
             <!-- ANUNCIO PATROCINADO — ProfitableRateCPM -->
-            <div class="adsense-sidebar-slot" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+            <div id="sidebar-ads-slot" class="adsense-sidebar-slot" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
                 <span style="font-size: 0.65rem; color: #8e9297; display: block; margin-bottom: 6px; letter-spacing: 0.5px;">ANUNCIO PATROCINADO</span>
-                <script async="async" data-cfasync="false" src="https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
-                <div id="container-c9a8a020d51acf922166ae36bc735892"></div>
+                <div id="sidebar-ad-wrapper">
+                    <script async="async" data-cfasync="false" src="https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
+                    <div id="container-c9a8a020d51acf922166ae36bc735892"></div>
+                </div>
             </div>
 
         </aside>
@@ -1240,6 +1246,9 @@
         <div class="channel-modal-card" style="width: 420px; padding: 0; overflow: hidden; border-radius: 14px; border: var(--border-glow); box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-height: 90vh; display: flex; flex-direction: column;">
             <!-- Encabezado/Banner personalizado -->
             <div id="profile-modal-banner" style="height: 110px; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%); position: relative; flex-shrink: 0; background-size: cover; background-position: center;">
+                <button id="profile-modal-edit-btn" style="position: absolute; top: 12px; right: 48px; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border-radius: 20px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-size: 0.72rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; transition: background 0.2s;" title="Editar mi perfil, banner y biografía">
+                    ✏️ Editar Perfil
+                </button>
                 <button class="channel-modal-close" id="profile-modal-close-btn" style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.4); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem; border: none; cursor: pointer; transition: background 0.2s;">✕</button>
             </div>
 
