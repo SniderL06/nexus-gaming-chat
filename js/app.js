@@ -273,11 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── RECARGA AUTOMÁTICA DE ANUNCIOS (CADA 5 A 10 MINUTOS) ───
     function setupSidebarAdAutoReload() {
-        const adWrapper = document.getElementById('sidebar-ad-wrapper');
-        if (!adWrapper) return;
+        const iframe = document.getElementById('adsterra-iframe');
+        if (!iframe) return;
 
         const reloadAd = () => {
-            // Solo recargar si la ventana está activa/visible para optimizar datos y recursos
+            // Solo recargar si la ventana está activa/visible para optimizar recursos
             if (document.hidden) {
                 scheduleNextReload();
                 return;
@@ -285,21 +285,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log('[Anuncios] Renovando bloque de anuncio patrocinado...');
             try {
-                // Crear nuevo contenedor limpio para re-ejecutar el script de ProfitableRateCPM
-                adWrapper.innerHTML = '';
-                const containerDiv = document.createElement('div');
-                containerDiv.id = 'container-c9a8a020d51acf922166ae36bc735892';
+                const adHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: transparent; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <script async="async" data-cfasync="false" src="https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
+  <div id="container-c9a8a020d51acf922166ae36bc735892"></div>
+</body>
+</html>`;
 
-                const script = document.createElement('script');
-                script.async = true;
-                script.dataset.cfasync = 'false';
-                // Añadir un timestamp para evitar cache estático del navegador
-                script.src = `https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js?t=${Date.now()}`;
-
-                adWrapper.appendChild(script);
-                adWrapper.appendChild(containerDiv);
+                iframe.srcdoc = adHtml;
             } catch (err) {
-                console.warn('[Anuncios] Error al recargar anuncio:', err);
+                console.warn('[Anuncios] Error al recargar anuncio en iframe:', err);
             }
 
             scheduleNextReload();
@@ -315,8 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(reloadAd, randomDelay);
         };
 
-        // Iniciar el ciclo de refresco automático
-        scheduleNextReload();
+        // Primera carga inmediata del anuncio
+        reloadAd();
     }
     setupSidebarAdAutoReload();
 
