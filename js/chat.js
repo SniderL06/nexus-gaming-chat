@@ -1307,15 +1307,20 @@ function setupUserProfileModal() {
 
         // ── Banner ────────────────────────────────────────────
         if (bannerEl) {
-            const bannerUrl  = data?.banner_url  || getPField(cleanEmail, 'banner_url');
-            const bannerImg  = getPField(cleanEmail, 'banner_img'); // base64 local cache
-            const bannerGrad = data?.banner_gradient || getPField(cleanEmail, 'banner_gradient',
+            const rawBannerUrl  = data?.banner_url  || getPField(cleanEmail, 'banner_url');
+            const rawBannerImg  = getPField(cleanEmail, 'banner_img'); // base64 local cache
+            const bannerGrad    = data?.banner_gradient || getPField(cleanEmail, 'banner_gradient',
                 'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)');
-            if (bannerUrl) {
-                bannerEl.style.background = `url(${bannerUrl}) center/cover no-repeat`;
-            } else if (bannerImg) {
-                bannerEl.style.background = `url(${bannerImg}) center/cover no-repeat`;
+            
+            const activeImage = rawBannerUrl || rawBannerImg;
+            if (activeImage) {
+                const cleanImg = activeImage.trim();
+                bannerEl.style.backgroundImage = `url("${cleanImg}")`;
+                bannerEl.style.backgroundPosition = 'center';
+                bannerEl.style.backgroundSize = 'cover';
+                bannerEl.style.backgroundRepeat = 'no-repeat';
             } else {
+                bannerEl.style.backgroundImage = 'none';
                 bannerEl.style.background = bannerGrad;
             }
         }

@@ -219,6 +219,15 @@ export function notifyDM(senderName, messageText) {
 
 // ─── BOTÓN DE INSTALACIÓN ─────────────────────────────────────────────
 function showInstallButton() {
+    // 1. Botón en la cabecera para móviles / web
+    const headerBtn = document.getElementById('mobile-install-app-btn');
+    if (headerBtn) {
+        headerBtn.style.display = 'inline-flex';
+        headerBtn.classList.remove('hidden');
+        headerBtn.onclick = triggerInstall;
+    }
+
+    // 2. Botón en el sidebar de servidores
     let btn = document.getElementById('pwa-install-btn');
     if (btn) { btn.style.display = ''; return; }
 
@@ -229,7 +238,7 @@ function showInstallButton() {
         <span class="pwa-install-icon">📲</span>
         <span class="pwa-install-text">Instalar Nexus</span>
     `;
-    btn.title = 'Instalar Nexus como aplicación';
+    btn.title = 'Instalar Nexus como aplicación en tu móvil o PC';
     btn.addEventListener('click', triggerInstall);
 
     // Insertar en el sidebar de servidores (esquina inferior izquierda)
@@ -240,10 +249,19 @@ function showInstallButton() {
 function hideInstallButton() {
     const btn = document.getElementById('pwa-install-btn');
     if (btn) btn.style.display = 'none';
+    const headerBtn = document.getElementById('mobile-install-app-btn');
+    if (headerBtn) {
+        headerBtn.style.display = 'none';
+        headerBtn.classList.add('hidden');
+    }
 }
 
 async function triggerInstall() {
-    if (!installPromptEvent) return;
+    if (!installPromptEvent) {
+        // Si el navegador no permite el prompt automático (ej. iOS o Chrome ya instalado)
+        alert('Para instalar Nexus en tu celular Android:\nToca el menú de 3 puntos en Chrome (⋮) y selecciona "Instalar aplicación" o "Agregar a la pantalla principal".');
+        return;
+    }
     installPromptEvent.prompt();
     const { outcome } = await installPromptEvent.userChoice;
     console.log('[PWA] Resultado instalación:', outcome);

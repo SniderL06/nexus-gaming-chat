@@ -246,6 +246,10 @@
                     <span class="channel-description" id="active-channel-desc">Canal general de chat y discusiones.</span>
                 </div>
                 <div class="header-right">
+                    <!-- Botón para instalar app en celular o navegador -->
+                    <button class="header-action-btn hidden" id="mobile-install-app-btn" title="Instalar Nexus en tu teléfono / PC" style="background: rgba(0,212,255,0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: none; align-items: center; gap: 5px;">
+                        📲 Instalar App
+                    </button>
                     <!-- Botón opcional de Apoyar Servidor / Ver Anuncio de Video -->
                     <button class="support-ad-btn" id="support-ad-btn" title="Apoyar a Nexus viendo un anuncio corto voluntario">
                         <span>🎁 Apoyar Servidor</span>
@@ -637,16 +641,22 @@
                     <span id="profile-bio-count" style="font-size: 0.65rem; color: var(--text-muted); text-align: right; display: block; margin-top: 2px;">0/190</span>
                 </div>
 
-                <!-- Color del banner -->
+                <!-- Banner del perfil -->
                 <div class="color-picker-group">
-                    <label>Color del Banner</label>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <label>Banner del Perfil</label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;">
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%)" title="Nexus Default" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%); border: 2px solid transparent; transition: border 0.15s;"></div>
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #ef4444 0%, #f97316 100%)" title="Fuego" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #ef4444 0%, #f97316 100%); border: 2px solid transparent;"></div>
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #22c55e 0%, #06b6d4 100%)" title="Bosque" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #22c55e 0%, #06b6d4 100%); border: 2px solid transparent;"></div>
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)" title="Rosa" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); border: 2px solid transparent;"></div>
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #0d1117 0%, #161b22 100%)" title="Negro" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 2px solid transparent;"></div>
                         <div class="banner-color-swatch" data-gradient="linear-gradient(135deg, #f59e0b 0%, #eab308 100%)" title="Dorado" style="width: 28px; height: 28px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%); border: 2px solid transparent;"></div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <label for="profile-banner-img-input" class="theme-reset-btn" style="margin: 0; padding: 6px 12px; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                            📁 Subir imagen
+                        </label>
+                        <input type="text" id="profile-banner-url-input" placeholder="O pega enlace de imagen..." class="app-dropdown-select" style="flex: 1; background: var(--bg-tertiary); border: var(--border-dark); padding: 7px 10px; color: var(--text-normal); border-radius: 6px; outline: none; font-size: 0.75rem; font-family: inherit;">
                     </div>
                 </div>
 

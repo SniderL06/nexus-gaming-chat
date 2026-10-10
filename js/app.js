@@ -1035,6 +1035,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const profilePreviewStatus = document.getElementById('profile-preview-status');
     const profilePreviewAvatar = document.getElementById('profile-preview-avatar');
     const bannerImgInput    = document.getElementById('profile-banner-img-input');
+    const bannerUrlInput    = document.getElementById('profile-banner-url-input');
+
+    // ── Helper para comprimir y redimensionar banners antes de guardar ──
+    async function compressBannerImage(file) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                const maxWidth = 960;
+                const maxHeight = 360;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+                if (height > maxHeight) {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                // Calidad WebP/JPEG optimizada para carga instantánea
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                resolve(dataUrl);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(null);
+            };
+            img.src = url;
+        });
+    }
 
     // ── Helpers de localStorage para perfil extendido ────────────
     function getProfileKey(email, key) { return `nexus_profile_${key}_${email}`; }
@@ -1066,11 +1105,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (twitterEl) twitterEl.value = loadProfileField(email, 'social_twitter');
 
         // Banner
+        const savedBannerUrl = loadProfileField(email, 'banner_url');
         const savedBannerImg = loadProfileField(email, 'banner_img');
         const savedBannerGradient = loadProfileField(email, 'banner_gradient',
             'linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%)');
+        
+        if (bannerUrlInput) bannerUrlInput.value = savedBannerUrl || '';
+
         if (profileBannerEl) {
-            if (savedBannerImg) {
+            if (savedBannerUrl) {
+                profileBannerEl.style.background = `url(${savedBannerUrl}) center/cover no-repeat`;
+            } else if (savedBannerImg) {
                 profileBannerEl.style.background = `url(${savedBannerImg}) center/cover no-repeat`;
             } else {
                 profileBannerEl.style.background = savedBannerGradient;
@@ -1130,42 +1175,72 @@ document.addEventListener('DOMContentLoaded', () => {
             // Marcar swatch activo
             document.querySelectorAll('.banner-color-swatch').forEach(s => s.style.border = '2px solid transparent');
             swatch.style.border = '2px solid #fff';
+            if (bannerUrlInput) bannerUrlInput.value = '';
             // Guardar inmediatamente
             const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
             if (email) {
                 saveProfileField(email, 'banner_gradient', gradient);
-                saveProfileField(email, 'banner_img', ''); // limpiar imagen si había
+                saveProfileField(email, 'banner_url', '');
+                saveProfileField(email, 'banner_img', '');
             }
         });
     });
 
-    // ── Subir imagen de banner ────────────────────────────────────
+    // ── Enlace URL de banner personalizado ─────────────────────────
+    if (bannerUrlInput) {
+        bannerUrlInput.addEventListener('input', () => {
+            const url = bannerUrlInput.value.trim();
+            const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+            if (url) {
+                if (profileBannerEl) profileBannerEl.style.background = `url(${url}) center/cover no-repeat`;
+                if (email) {
+                    saveProfileField(email, 'banner_url', url);
+                    saveProfileField(email, 'banner_img', '');
+                }
+            } else {
+                const grad = loadProfileField(email, 'banner_gradient', 'linear-gradient(135deg, #8b5cf6 0%, #00d4ff 100%)');
+                if (profileBannerEl) profileBannerEl.style.background = grad;
+                if (email) saveProfileField(email, 'banner_url', '');
+            }
+        });
+    }
+
+    // ── Subir imagen de banner con compresión ──────────────────────
     if (bannerImgInput) {
         bannerImgInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            if (file.size > 5 * 1024 * 1024) { alert('El banner no puede superar 5 MB.'); return; }
+            if (file.size > 10 * 1024 * 1024) { alert('El banner no puede superar 10 MB.'); return; }
 
-            // Preview inmediato con FileReader
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const dataUrl = ev.target.result;
-                if (profileBannerEl) profileBannerEl.style.background = `url(${dataUrl}) center/cover no-repeat`;
-                // Guardar localmente como cache temporal hasta que se suba a Storage
-                const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
-                if (email) saveProfileField(email, 'banner_img', dataUrl);
-            };
-            reader.readAsDataURL(file);
-
-            // Subir a Supabase Storage en paralelo
             const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+            
+            // Comprimir y redimensionar imagen para evitar saturar almacenamiento
+            const compressedDataUrl = await compressBannerImage(file);
+            if (!compressedDataUrl) {
+                alert('No se pudo procesar la imagen seleccionada.');
+                return;
+            }
+
+            if (profileBannerEl) profileBannerEl.style.background = `url(${compressedDataUrl}) center/cover no-repeat`;
+            if (bannerUrlInput) bannerUrlInput.value = '';
+
+            // Guardar en cache local como base64 optimizado
             if (email) {
-                const { uploadBannerImage, saveUserProfile } = await import('./supabase-client.js');
-                const publicUrl = await uploadBannerImage(file, email);
-                if (publicUrl) {
-                    saveProfileField(email, 'banner_url', publicUrl);
-                    saveProfileField(email, 'banner_img', ''); // usar URL pública en vez de base64
-                    if (profileBannerEl) profileBannerEl.style.background = `url(${publicUrl}) center/cover no-repeat`;
+                saveProfileField(email, 'banner_img', compressedDataUrl);
+                saveProfileField(email, 'banner_url', '');
+            }
+
+            // Subir a Supabase Storage si está disponible
+            if (email) {
+                try {
+                    const { uploadBannerImage } = await import('./supabase-client.js');
+                    const publicUrl = await uploadBannerImage(file, email);
+                    if (publicUrl) {
+                        saveProfileField(email, 'banner_url', publicUrl);
+                        if (bannerUrlInput) bannerUrlInput.value = publicUrl;
+                    }
+                } catch (upErr) {
+                    console.warn('[Banner] Subida remota omitida, usando imagen comprimida local:', upErr);
                 }
             }
         });
@@ -1190,14 +1265,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const social_twitch  = document.getElementById('profile-social-twitch')?.value.trim() || '';
         const social_steam   = document.getElementById('profile-social-steam')?.value.trim() || '';
         const social_twitter = document.getElementById('profile-social-twitter')?.value.trim() || '';
-        const banner_url     = loadProfileField(email, 'banner_url');
+        
+        let banner_url       = bannerUrlInput?.value.trim() || loadProfileField(email, 'banner_url') || '';
+        const banner_img     = loadProfileField(email, 'banner_img') || '';
         const banner_gradient = loadProfileField(email, 'banner_gradient', 'linear-gradient(135deg,#8b5cf6,#00d4ff)');
+
+        // Si tenemos banner_img base64 optimizado y no hay banner_url externo, usar banner_img para sincronizar
+        if (!banner_url && banner_img && banner_img.length < 200000) {
+            banner_url = banner_img;
+        }
 
         saveProfileField(email, 'status',         status);
         saveProfileField(email, 'bio',            bio);
         saveProfileField(email, 'social_twitch',  social_twitch);
         saveProfileField(email, 'social_steam',   social_steam);
         saveProfileField(email, 'social_twitter', social_twitter);
+        if (banner_url) saveProfileField(email, 'banner_url', banner_url);
 
         // ── Guardar en Supabase para que todos puedan verlo ──
         try {
