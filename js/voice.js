@@ -124,61 +124,68 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // ─── CADENA DE SUPRESIÓN DE RUIDO INTELIGENTE (v3: ANTI-TECLADO & ANTI-RESPIRACIÓN) ───
-            // 1. High-pass 140Hz: Elimina golpes de respiración directa (plosivas) y retumbos en el escritorio
+            // ─── CADENA DE SUPRESIÓN DE RUIDO INTELIGENTE (v4: CERO TECLADO & CERO RESPIRACIÓN) ───
+            // 1. High-pass 160Hz: Corta de raíz el aire de respiración, golpes de viento y retumbos
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 140;
-            hp.Q.value = 1.0;
+            hp.frequency.value = 160;
+            hp.Q.value = 1.2;
 
-            // 2. Notch 50Hz/60Hz: Elimina zumbidos de red eléctrica
+            // 2. Filtro notch doble para zumbido de red
             const notch60 = audioCtx.createBiquadFilter();
             notch60.type = 'notch';
             notch60.frequency.value = 60;
             notch60.Q.value = 30;
 
-            // 3. Notch resonante en clics de teclado mecánico (2800Hz - 3600Hz)
-            const keyboardDampener = audioCtx.createBiquadFilter();
-            keyboardDampener.type = 'peaking';
-            keyboardDampener.frequency.value = 3200;
-            keyboardDampener.Q.value = 1.8;
-            keyboardDampener.gain.value = -6.0; // Atenúa en -6dB los picos secos de switch azul/rojo
+            // 3. Atenuador agresivo de clics de switches de teclado mecánico (2500Hz - 4500Hz)
+            const keyboardDampener1 = audioCtx.createBiquadFilter();
+            keyboardDampener1.type = 'peaking';
+            keyboardDampener1.frequency.value = 3100;
+            keyboardDampener1.Q.value = 1.5;
+            keyboardDampener1.gain.value = -9.0; // Atenúa en -9dB el impacto de switch mecánico
 
-            // 4. Boost de presencia vocal limpia (1200Hz)
+            const keyboardDampener2 = audioCtx.createBiquadFilter();
+            keyboardDampener2.type = 'peaking';
+            keyboardDampener2.frequency.value = 4200;
+            keyboardDampener2.Q.value = 2.0;
+            keyboardDampener2.gain.value = -8.0; // Atenúa el chasquido agudo del rebote de tecla
+
+            // 4. Boost de presencia vocal limpia (800Hz - 1500Hz)
             const voiceBoost = audioCtx.createBiquadFilter();
             voiceBoost.type = 'peaking';
-            voiceBoost.frequency.value = 1200;
+            voiceBoost.frequency.value = 1100;
             voiceBoost.Q.value = 1.0;
-            voiceBoost.gain.value = 2.5;
+            voiceBoost.gain.value = 2.0;
 
-            // 5. Low-pass 7000Hz: Suprime siseo de ventilador y rozaduras de aire
+            // 5. Low-pass 6500Hz: Elimina siseo agudo y ruidos de fricción
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 7000;
+            lp.frequency.value = 6500;
             lp.Q.value = 0.8;
 
-            // 6. Compresor dinámico musical: nivela la voz sin levantar ruidos de fondo
+            // 6. Compresor dinámico: mantiene la voz en un rango controlado sin amplificar el silencio
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -32;
-            comp.knee.value = 6;
-            comp.ratio.value = 5;
+            comp.threshold.value = -30;
+            comp.knee.value = 4;
+            comp.ratio.value = 6;
             comp.attack.value = 0.002;
-            comp.release.value = 0.12;
+            comp.release.value = 0.10;
 
-            // 7. Puerta de ruido (Noise Gate) con análisis espectral de banda vocal (300Hz-3000Hz)
-            // No abre con ruidos impulsivos secos (clicks de teclas) ni con respiración baja
+            // 7. Puerta de ruido (Noise Gate) con detector de relación Vocal vs Ruido Impulsivo
+            // Los clics de teclado tienen mucha energía >3.5kHz y casi nula en formantes vocales (300-1500Hz).
+            // La respiración tiene energía difusa baja (< -55dBFS).
             const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 0.0; // Inicia cerrada para silencio absoluto
+            gateGain.gain.value = 0.0001; // Silencio absoluto de base
 
             const gateAnalyser = audioCtx.createAnalyser();
             gateAnalyser.fftSize = 512;
-            gateAnalyser.smoothingTimeConstant = 0.1;
+            gateAnalyser.smoothingTimeConstant = 0.08;
             const freqBuffer = new Float32Array(gateAnalyser.frequencyBinCount);
 
-            // Umbral calibrado: la respiración suave genera ~ -65dBFS a -70dBFS.
-            // La voz humana proyectada supera -52dBFS en las frecuencias 300Hz-3000Hz.
-            const VOICE_THRESHOLD_DB = -52;
-            const GATE_HOLD_MS = 280; // Hold suficiente para pausas entre sílabas sin dejar que la respiración se cuele
+            // Umbral estricto: la respiración suave queda bajo -47dBFS.
+            // Para abrir la puerta se requiere presencia genuina en formantes vocales.
+            const VOICE_THRESHOLD_DB = -47;
+            const GATE_HOLD_MS = 220; // Cierra rápido para no dejar pasar el clic de tecla al terminar de hablar
             let lastAboveThresholdTime = Date.now();
             let gateOpen = false;
 
@@ -190,45 +197,57 @@ function buildFilterChain(filterName, inputNode) {
                 gateAnalyser.getFloatFrequencyData(freqBuffer);
                 const sampleRate = audioCtx.sampleRate || 48000;
                 
-                // Calcular energía exclusivamente en la banda formante vocal humana (300Hz a 3000Hz)
-                const binStart = Math.max(1, Math.floor((300 * 512) / sampleRate));
-                const binEnd = Math.min(freqBuffer.length - 1, Math.floor((3000 * 512) / sampleRate));
+                // Banda de formantes vocales centrales (300Hz a 2200Hz)
+                const vStart = Math.max(1, Math.floor((300 * 512) / sampleRate));
+                const vEnd = Math.min(freqBuffer.length - 1, Math.floor((2200 * 512) / sampleRate));
 
-                let sumPower = 0;
-                let binCount = 0;
-                for (let i = binStart; i <= binEnd; i++) {
+                // Banda de chasquido de teclado (3200Hz a 8000Hz)
+                const kStart = Math.max(1, Math.floor((3200 * 512) / sampleRate));
+                const kEnd = Math.min(freqBuffer.length - 1, Math.floor((8000 * 512) / sampleRate));
+
+                let sumVocal = 0, countVocal = 0;
+                for (let i = vStart; i <= vEnd; i++) {
                     const db = freqBuffer[i];
-                    if (db > -120) {
-                        sumPower += db;
-                        binCount++;
-                    }
+                    if (db > -110) { sumVocal += db; countVocal++; }
                 }
-                const avgVocalDb = binCount > 0 ? (sumPower / binCount) : -100;
-                const now = Date.now();
+                const avgVocalDb = countVocal > 0 ? (sumVocal / countVocal) : -100;
 
-                if (avgVocalDb > VOICE_THRESHOLD_DB) {
+                let sumKey = 0, countKey = 0;
+                for (let i = kStart; i <= kEnd; i++) {
+                    const db = freqBuffer[i];
+                    if (db > -110) { sumKey += db; countKey++; }
+                }
+                const avgKeyDb = countKey > 0 ? (sumKey / countKey) : -100;
+
+                const now = Date.now();
+                // Si la energía aguda supera a los formantes vocales, es un clic de teclado o ruido seco, NO voz
+                const isImpulsiveNoise = avgKeyDb > (avgVocalDb + 4);
+                const isVocalDetected = (avgVocalDb > VOICE_THRESHOLD_DB) && !isImpulsiveNoise;
+
+                if (isVocalDetected) {
                     lastAboveThresholdTime = now;
                     if (!gateOpen) {
                         gateOpen = true;
-                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.006); } catch(e){}
+                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.005); } catch(e){}
                     }
                 } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
                     gateOpen = false;
-                    // Silenciar por completo cuando no hay voz (0.0001) para que el teclado y la respiración no pasen
-                    try { gateGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.035); } catch(e){}
+                    // Silencio absoluto inmediato
+                    try { gateGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.025); } catch(e){}
                 }
-            }, 15);
+            }, 12);
 
             // 8. Makeup gain
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.5;
+            makeup.gain.value = 1.4;
 
-            // Encadenar: input → hp → notch60 → keyboardDampener → voiceBoost → lp
+            // Encadenar: input → hp → notch60 → keyboardDampener1 → keyboardDampener2 → voiceBoost → lp
             //            → comp → gateAnalyser → gateGain → makeup
             inputNode.connect(hp);
             hp.connect(notch60);
-            notch60.connect(keyboardDampener);
-            keyboardDampener.connect(voiceBoost);
+            notch60.connect(keyboardDampener1);
+            keyboardDampener1.connect(keyboardDampener2);
+            keyboardDampener2.connect(voiceBoost);
             voiceBoost.connect(lp);
             lp.connect(comp);
             comp.connect(gateAnalyser);
@@ -238,9 +257,10 @@ function buildFilterChain(filterName, inputNode) {
             filterCleanupFns.push(() => {
                 clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); notch60.disconnect(); keyboardDampener.disconnect();
-                    voiceBoost.disconnect(); lp.disconnect(); comp.disconnect();
-                    gateAnalyser.disconnect(); gateGain.disconnect(); makeup.disconnect();
+                    hp.disconnect(); notch60.disconnect(); keyboardDampener1.disconnect();
+                    keyboardDampener2.disconnect(); voiceBoost.disconnect(); lp.disconnect();
+                    comp.disconnect(); gateAnalyser.disconnect(); gateGain.disconnect();
+                    makeup.disconnect();
                 } catch(e){}
             });
             return makeup;

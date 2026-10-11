@@ -1260,18 +1260,18 @@
                     ✏️ Editar Perfil
                 </button>
                 <button class="channel-modal-close" id="profile-modal-close-btn" style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.4); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem; border: none; cursor: pointer; transition: background 0.2s;">✕</button>
+                
+                <!-- Avatar posicionado anclado al banner (sin ser cortado por overflow del contenedor) -->
+                <div style="position: absolute; bottom: -44px; left: 24px; z-index: 10;">
+                    <div id="profile-modal-avatar" class="avatar-container" style="width: 88px; height: 88px; aspect-ratio: 1/1; min-width: 88px; min-height: 88px; flex-shrink: 0; border-radius: 50%; border: 4px solid var(--bg-secondary); background-size: cover; background-position: center; background-repeat: no-repeat; background-color: var(--bg-tertiary); box-shadow: 0 8px 24px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; overflow: hidden;" title="Click para hacer zoom" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 8px 24px var(--accent-purple-glow)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.5)'">
+                        <!-- Se llena con JS -->
+                    </div>
+                </div>
             </div>
 
             <div style="overflow-y: auto; flex: 1;">
-                <div style="padding: 24px; position: relative; background: var(--bg-secondary);">
-                    <!-- Avatar sobrepuesto al banner (centrado y sin deformación) -->
-                    <div style="position: absolute; top: -52px; left: 24px; display: inline-block;">
-                        <div id="profile-modal-avatar" class="avatar-container" style="width: 96px; height: 96px; aspect-ratio: 1/1; min-width: 96px; min-height: 96px; flex-shrink: 0; border-radius: 50%; border: 5px solid var(--bg-secondary); background-size: cover; background-position: center; background-repeat: no-repeat; background-color: var(--bg-tertiary); box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; overflow: hidden;" title="Click para hacer zoom" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 8px 24px var(--accent-purple-glow)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.4)'">
-                            <!-- Se llena con JS -->
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 52px;">
+                <div style="padding: 16px 24px 24px; position: relative; background: var(--bg-secondary);">
+                    <div style="margin-top: 48px;">
                         <h3 id="profile-modal-name" style="font-family: 'Orbitron', sans-serif; font-size: 1.3rem; color: var(--text-normal); font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 8px;">Nombre de Usuario</h3>
                         <!-- Estado personalizado -->
                         <div id="profile-modal-status" style="font-size: 0.8rem; color: var(--accent-cyan); margin-bottom: 4px; font-style: italic;"></div>
