@@ -15,14 +15,19 @@ export function initStream() {
     streamContainer = document.getElementById('stream-container');
     goLiveBtn = document.getElementById('go-live-btn');
 
-    // Botones del stream
     const stopStreamBtn = document.getElementById('stop-stream-btn');
+    const hidePreviewBtn = document.getElementById('stream-hide-preview-btn');
     const fullscreenBtn = document.getElementById('stream-fullscreen-btn');
     const micToggleBtn = document.getElementById('stream-mic-toggle');
     const compactBtn = document.getElementById('stream-compact-btn');
 
     if (stopStreamBtn) {
         stopStreamBtn.addEventListener('click', handleStopStreamClick);
+    }
+    if (hidePreviewBtn) {
+        hidePreviewBtn.addEventListener('click', () => {
+            if (streamContainer) streamContainer.classList.add('hidden');
+        });
     }
     if (fullscreenBtn) {
         fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -36,7 +41,7 @@ export function initStream() {
             if (streamContainer) {
                 const isCompact = streamContainer.classList.toggle('compact-mode');
                 compactBtn.textContent = isCompact ? '🗖 Expandir' : '🗗 Reducir';
-                compactBtn.title = isCompact ? 'Modo normal (pantalla completa o grande)' : 'Modo compacto (para ver el chat)';
+                compactBtn.title = isCompact ? 'Modo normal' : 'Modo compacto (para ver y escribir en el chat)';
             }
         });
     }
@@ -322,7 +327,9 @@ export function stopLocalStream() {
 // Acción del botón de cerrar stream (funciona para emisor y para espectador)
 export function handleStopStreamClick() {
     if (state.isStreaming) {
-        stopLocalStream();
+        if (confirm('¿Deseas finalizar la transmisión en vivo para todos los espectadores? (Si solo quieres ocultar tu vista, presiona "Ocultar Visor")')) {
+            stopLocalStream();
+        }
     } else {
         stopWatchingRemoteStream();
     }

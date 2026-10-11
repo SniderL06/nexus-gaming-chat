@@ -124,104 +124,111 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // ─── CADENA DE SUPRESIÓN DE RUIDO MEJORADA (v2) ───────────────
-            // 1. High-pass 100Hz: elimina zumbido eléctrico (60Hz/50Hz)
+            // ─── CADENA DE SUPRESIÓN DE RUIDO INTELIGENTE (v3: ANTI-TECLADO & ANTI-RESPIRACIÓN) ───
+            // 1. High-pass 140Hz: Elimina golpes de respiración directa (plosivas) y retumbos en el escritorio
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 100;
-            hp.Q.value = 0.9;
+            hp.frequency.value = 140;
+            hp.Q.value = 1.0;
 
-            // 2. Notch 50Hz — zumbido de red eléctrica (Europa/Latinoamérica)
-            const notch50 = audioCtx.createBiquadFilter();
-            notch50.type = 'notch';
-            notch50.frequency.value = 50;
-            notch50.Q.value = 35;
-
-            // 3. Notch 60Hz — red eléctrica norteamericana
+            // 2. Notch 50Hz/60Hz: Elimina zumbidos de red eléctrica
             const notch60 = audioCtx.createBiquadFilter();
             notch60.type = 'notch';
             notch60.frequency.value = 60;
-            notch60.Q.value = 35;
+            notch60.Q.value = 30;
 
-            // 4. Notch 120Hz — segundo armónico de la red (muy común en PCs con PSU baratas)
-            const notch120 = audioCtx.createBiquadFilter();
-            notch120.type = 'notch';
-            notch120.frequency.value = 120;
-            notch120.Q.value = 25;
+            // 3. Notch resonante en clics de teclado mecánico (2800Hz - 3600Hz)
+            const keyboardDampener = audioCtx.createBiquadFilter();
+            keyboardDampener.type = 'peaking';
+            keyboardDampener.frequency.value = 3200;
+            keyboardDampener.Q.value = 1.8;
+            keyboardDampener.gain.value = -6.0; // Atenúa en -6dB los picos secos de switch azul/rojo
 
-            // 5. Boost de presencia vocal (300Hz–3500Hz) — mantiene claridad de voz
+            // 4. Boost de presencia vocal limpia (1200Hz)
             const voiceBoost = audioCtx.createBiquadFilter();
             voiceBoost.type = 'peaking';
-            voiceBoost.frequency.value = 1800;
-            voiceBoost.Q.value = 0.6;
-            voiceBoost.gain.value = 3; // +3dB en zona de inteligibilidad
+            voiceBoost.frequency.value = 1200;
+            voiceBoost.Q.value = 1.0;
+            voiceBoost.gain.value = 2.5;
 
-            // 6. Low-pass 8000Hz: corta siseo de ventiladores y ruido de alta frecuencia
+            // 5. Low-pass 7000Hz: Suprime siseo de ventilador y rozaduras de aire
             const lp = audioCtx.createBiquadFilter();
             lp.type = 'lowpass';
-            lp.frequency.value = 8000;
-            lp.Q.value = 0.7;
+            lp.frequency.value = 7000;
+            lp.Q.value = 0.8;
 
-            // 7. Compresor dinámico musical: balanceado para nivelar voz sin recortar el final de palabras
+            // 6. Compresor dinámico musical: nivela la voz sin levantar ruidos de fondo
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -36;  // dB — nivel natural para voz
-            comp.knee.value = 6;         // transición suave
-            comp.ratio.value = 4;        // 4:1 — compresión controlada y transparente
-            comp.attack.value = 0.003;   // 3ms
-            comp.release.value = 0.15;   // 150ms — suelta suavemente para no entrecortar
+            comp.threshold.value = -32;
+            comp.knee.value = 6;
+            comp.ratio.value = 5;
+            comp.attack.value = 0.002;
+            comp.release.value = 0.12;
 
-            // 8. Noise Gate dinámico (umbral de energía no destructivo)
-            // Atenúa el ruido de fondo sin silenciar abruptamente la voz
+            // 7. Puerta de ruido (Noise Gate) con análisis espectral de banda vocal (300Hz-3000Hz)
+            // No abre con ruidos impulsivos secos (clicks de teclas) ni con respiración baja
             const gateGain = audioCtx.createGain();
-            gateGain.gain.value = 1.0;
+            gateGain.gain.value = 0.0; // Inicia cerrada para silencio absoluto
 
             const gateAnalyser = audioCtx.createAnalyser();
-            gateAnalyser.fftSize = 256;
-            const gateBuffer = new Uint8Array(gateAnalyser.frequencyBinCount);
-            // Threshold 10: ultra permisivo para no cortar susurros ni finales de palabras
-            const GATE_THRESHOLD = 10;
-            // Hold de 450ms para que la voz no se corte entre pausas naturales de respiración
-            const GATE_HOLD_MS = 450;
-            let gateOpen = false;
+            gateAnalyser.fftSize = 512;
+            gateAnalyser.smoothingTimeConstant = 0.1;
+            const freqBuffer = new Float32Array(gateAnalyser.frequencyBinCount);
+
+            // Umbral calibrado: la respiración suave genera ~ -65dBFS a -70dBFS.
+            // La voz humana proyectada supera -52dBFS en las frecuencias 300Hz-3000Hz.
+            const VOICE_THRESHOLD_DB = -52;
+            const GATE_HOLD_MS = 280; // Hold suficiente para pausas entre sílabas sin dejar que la respiración se cuele
             let lastAboveThresholdTime = Date.now();
+            let gateOpen = false;
 
             const gateInterval = setInterval(() => {
                 if (!audioCtx || audioCtx.state === 'closed') {
                     clearInterval(gateInterval);
                     return;
                 }
-                gateAnalyser.getByteTimeDomainData(gateBuffer);
-                let sum = 0;
-                for (let i = 0; i < gateBuffer.length; i++) {
-                    const v = (gateBuffer[i] - 128) / 128;
-                    sum += v * v;
+                gateAnalyser.getFloatFrequencyData(freqBuffer);
+                const sampleRate = audioCtx.sampleRate || 48000;
+                
+                // Calcular energía exclusivamente en la banda formante vocal humana (300Hz a 3000Hz)
+                const binStart = Math.max(1, Math.floor((300 * 512) / sampleRate));
+                const binEnd = Math.min(freqBuffer.length - 1, Math.floor((3000 * 512) / sampleRate));
+
+                let sumPower = 0;
+                let binCount = 0;
+                for (let i = binStart; i <= binEnd; i++) {
+                    const db = freqBuffer[i];
+                    if (db > -120) {
+                        sumPower += db;
+                        binCount++;
+                    }
                 }
-                const rms = Math.sqrt(sum / gateBuffer.length) * 255;
+                const avgVocalDb = binCount > 0 ? (sumPower / binCount) : -100;
                 const now = Date.now();
-                if (rms > GATE_THRESHOLD) {
+
+                if (avgVocalDb > VOICE_THRESHOLD_DB) {
                     lastAboveThresholdTime = now;
                     if (!gateOpen) {
                         gateOpen = true;
-                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.005); } catch(e){}
+                        try { gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.006); } catch(e){}
                     }
                 } else if (gateOpen && (now - lastAboveThresholdTime) > GATE_HOLD_MS) {
                     gateOpen = false;
-                    // Cierre suave a 0.15 en lugar de cortar a 0: evita cortes bruscos de voz
-                    try { gateGain.gain.setTargetAtTime(0.15, audioCtx.currentTime, 0.05); } catch(e){}
+                    // Silenciar por completo cuando no hay voz (0.0001) para que el teclado y la respiración no pasen
+                    try { gateGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.035); } catch(e){}
                 }
-            }, 20); // 50 Hz de polling
+            }, 15);
 
-            // 9. Makeup gain de compensación
+            // 8. Makeup gain
             const makeup = audioCtx.createGain();
-            makeup.gain.value = 1.6; // +4dB aprox para compensar gate + compresor
+            makeup.gain.value = 1.5;
 
-            // Encadenar: input → hp → notch50 → notch60 → notch120 → voiceBoost → lp
+            // Encadenar: input → hp → notch60 → keyboardDampener → voiceBoost → lp
             //            → comp → gateAnalyser → gateGain → makeup
             inputNode.connect(hp);
-            hp.connect(notch50);
-            notch50.connect(notch60);
-            notch60.connect(notch120);
-            notch120.connect(voiceBoost);
+            hp.connect(notch60);
+            notch60.connect(keyboardDampener);
+            keyboardDampener.connect(voiceBoost);
             voiceBoost.connect(lp);
             lp.connect(comp);
             comp.connect(gateAnalyser);
@@ -231,10 +238,9 @@ function buildFilterChain(filterName, inputNode) {
             filterCleanupFns.push(() => {
                 clearInterval(gateInterval);
                 try {
-                    hp.disconnect(); notch50.disconnect(); notch60.disconnect();
-                    notch120.disconnect(); voiceBoost.disconnect(); lp.disconnect();
-                    comp.disconnect(); gateAnalyser.disconnect(); gateGain.disconnect();
-                    makeup.disconnect();
+                    hp.disconnect(); notch60.disconnect(); keyboardDampener.disconnect();
+                    voiceBoost.disconnect(); lp.disconnect(); comp.disconnect();
+                    gateAnalyser.disconnect(); gateGain.disconnect(); makeup.disconnect();
                 } catch(e){}
             });
             return makeup;
@@ -638,6 +644,8 @@ let audioOutputVolume = 1.0; // 0.0 a 1.0 (volumen global)
 
 // Mapa de volumen personal por peerId (solo local, no afecta a otros)
 const perUserVolume = new Map(); // peerId -> number (0.0 a 1.0, default 1.0)
+// Set para evitar spam de notificaciones cuando el usuario envía heartbeats
+const recentNotifiedJoins = new Map(); // user identifier -> timestamp
 let isTestingMic = false;
 let micTestAnalyser = null;
 let micTestStream = null;
@@ -1378,22 +1386,20 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         });
     });
 
-    // Set para evitar spam de notificaciones cuando el usuario envía heartbeats
-    const recentNotifiedJoins = new Map();
-
     presenceChannel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
         newPresences.forEach(presence => {
             if (presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
                 console.log(`[Presence] ${presence.name} se unió. Llamando...`);
                 callPeer(presence.peerId, presence.name);
 
-                // Solo notificar si no está ya en la sala y han pasado al menos 60s desde la última notificación
+                // Solo notificar si no está ya en la sala y han pasado al menos 120s desde la última notificación
                 const now = Date.now();
-                const lastNotified = recentNotifiedJoins.get(presence.name) || 0;
-                const alreadyInRoom = activeMembersInRoom.some(m => m.name === presence.name);
+                const notifyKey = (presence.email || presence.name || presence.peerId).toLowerCase();
+                const lastNotified = recentNotifiedJoins.get(notifyKey) || 0;
+                const alreadyInRoom = activeMembersInRoom.some(m => (m.email && m.email === presence.email) || m.peerId === presence.peerId);
                 
-                if (!alreadyInRoom && (now - lastNotified > 60000)) {
-                    recentNotifiedJoins.set(presence.name, now);
+                if (!alreadyInRoom && (now - lastNotified > 120000)) {
+                    recentNotifiedJoins.set(notifyKey, now);
                     notifyVoiceJoin(presence.name, state.activeVoiceChannel || 'voz');
                 }
             }
@@ -2161,6 +2167,12 @@ function renderVoiceMembers() {
     const grid = document.getElementById('voice-grid');
     if (!grid) return;
 
+    // Si el usuario está actualmente arrastrando un slider de volumen, posponer re-render para no resetear el foco o causar saltos
+    const activeSlider = document.activeElement;
+    if (activeSlider && (activeSlider.classList.contains('user-volume-slider') || activeSlider.classList.contains('local-mic-volume-slider') || activeSlider.classList.contains('music-bot-volume-slider'))) {
+        return;
+    }
+
     grid.innerHTML = '';
 
     // Avatar del usuario local (email-specific)
@@ -2176,9 +2188,10 @@ function renderVoiceMembers() {
             member.activeSpeaker = false;
         }
 
+        const memberKey = member.peerId || (member.email ? member.email.replace(/[@.]/g, '_') : member.name.replace(/\s+/g, '-'));
         const card = document.createElement('div');
         card.className = `voice-member-card ${member.activeSpeaker ? 'speaking' : ''} ${isUser ? 'is-local-user-card' : ''}`;
-        card.id = `voice-member-${member.name.replace(/\s+/g, '-')}`;
+        card.id = `voice-member-${memberKey}`;
         if (isUser) card.setAttribute('data-is-local', 'true');
 
         let statusIcons = '';
@@ -2314,8 +2327,9 @@ function renderVoiceMembers() {
         if (!isUser && !member.isMusicBot && member.peerId) {
             const slider = card.querySelector('.user-volume-slider');
             if (slider) {
-                // Recuperar volumen por nombre persistido en localStorage
-                const userKey = 'nexus_user_vol_' + member.name.toLowerCase().replace(/\s+/g, '_');
+                // Recuperar volumen por clave única (peerId o email) para evitar colisión si comparten nombre
+                const uniqueKey = member.email ? member.email.toLowerCase() : member.peerId;
+                const userKey = 'nexus_user_vol_' + uniqueKey.replace(/[^a-zA-Z0-9]/g, '_');
                 const storedVol = localStorage.getItem(userKey);
                 const savedVol = storedVol !== null ? parseFloat(storedVol) : (perUserVolume.get(member.peerId) ?? 1.0);
                 

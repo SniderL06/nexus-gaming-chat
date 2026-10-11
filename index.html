@@ -279,8 +279,9 @@
                             <span class="stream-title" id="stream-user-title">Transmisión de Usuario Nexus</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <button class="stream-action-header-btn" id="stream-compact-btn" title="Modo compacto / Expandir (para ver el chat)">🗗 Reducir</button>
-                            <button class="stream-close" id="stop-stream-btn" title="Cerrar / Salir del directo">✕</button>
+                            <button class="stream-action-header-btn" id="stream-compact-btn" title="Modo compacto / Expandir (para ver y escribir en el chat)">🗗 Reducir</button>
+                            <button class="stream-action-header-btn" id="stream-hide-preview-btn" title="Ocultar visor de video (la transmisión continúa en segundo plano)">👁️ Ocultar Visor</button>
+                            <button class="stream-close" id="stop-stream-btn" title="Detener Transmisión / Salir">✕</button>
                         </div>
                     </div>
                     <div class="stream-viewport" id="stream-viewport">
@@ -1253,8 +1254,8 @@
     <div class="channel-modal hidden" id="user-profile-modal">
         <div class="channel-modal-overlay" id="user-profile-overlay"></div>
         <div class="channel-modal-card" style="width: 420px; padding: 0; overflow: hidden; border-radius: 14px; border: var(--border-glow); box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-height: 90vh; display: flex; flex-direction: column;">
-            <!-- Encabezado/Banner personalizado -->
-            <div id="profile-modal-banner" style="height: 110px; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%); position: relative; flex-shrink: 0; background-size: cover; background-position: center;">
+            <!-- Encabezado/Banner personalizado con altura óptima y background-size cover -->
+            <div id="profile-modal-banner" style="height: 140px; min-height: 140px; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%); position: relative; flex-shrink: 0; background-size: cover; background-position: center; background-repeat: no-repeat;">
                 <button id="profile-modal-edit-btn" style="position: absolute; top: 12px; right: 48px; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border-radius: 20px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-size: 0.72rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; transition: background 0.2s;" title="Editar mi perfil, banner y biografía">
                     ✏️ Editar Perfil
                 </button>
@@ -1263,9 +1264,9 @@
 
             <div style="overflow-y: auto; flex: 1;">
                 <div style="padding: 24px; position: relative; background: var(--bg-secondary);">
-                    <!-- Avatar sobrepuesto al banner -->
-                    <div style="position: absolute; top: -56px; left: 24px; display: inline-block;">
-                        <div id="profile-modal-avatar" class="avatar-container" style="width: 96px; height: 96px; border-radius: 50%; border: 6px solid var(--bg-secondary); background-size: cover; background-position: center; background-color: var(--bg-tertiary); box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" title="Click para hacer zoom" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 8px 24px var(--accent-purple-glow)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.4)'">
+                    <!-- Avatar sobrepuesto al banner (centrado y sin deformación) -->
+                    <div style="position: absolute; top: -52px; left: 24px; display: inline-block;">
+                        <div id="profile-modal-avatar" class="avatar-container" style="width: 96px; height: 96px; aspect-ratio: 1/1; min-width: 96px; min-height: 96px; flex-shrink: 0; border-radius: 50%; border: 5px solid var(--bg-secondary); background-size: cover; background-position: center; background-repeat: no-repeat; background-color: var(--bg-tertiary); box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; overflow: hidden;" title="Click para hacer zoom" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 8px 24px var(--accent-purple-glow)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.4)'">
                             <!-- Se llena con JS -->
                         </div>
                     </div>

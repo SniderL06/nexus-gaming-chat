@@ -1401,13 +1401,26 @@ function setupUserProfileModal() {
         }
 
         // ── Avatar ────────────────────────────────────────────
+        let effectiveAvatarSrc = avatarSrc;
+        // Si no viene avatarSrc pero el usuario está en la lista global de usuarios en línea o en la presencia
+        if (!effectiveAvatarSrc && window.nexusOnlineUsers) {
+            const foundUser = window.nexusOnlineUsers.find(u => u.name === authorName || (cleanEmail && u.email === cleanEmail));
+            if (foundUser && foundUser.avatar && foundUser.avatar.startsWith('data:image/')) {
+                effectiveAvatarSrc = foundUser.avatar;
+            }
+        }
+        if (!effectiveAvatarSrc && cleanEmail) {
+            effectiveAvatarSrc = localStorage.getItem('nexus_user_avatar_' + cleanEmail) || '';
+        }
+
         if (avatarEl) {
             avatarEl.innerHTML = '';
-            if (avatarSrc) {
-                avatarEl.style.backgroundImage = `url(${avatarSrc})`;
+            if (effectiveAvatarSrc) {
+                avatarEl.style.backgroundImage = `url("${effectiveAvatarSrc}")`;
                 avatarEl.style.backgroundSize = 'cover';
                 avatarEl.style.backgroundPosition = 'center';
-                avatarEl.onclick = () => window.openLightbox(avatarSrc, authorName);
+                avatarEl.style.backgroundRepeat = 'no-repeat';
+                avatarEl.onclick = () => window.openLightbox(effectiveAvatarSrc, authorName);
             } else if (authorName === 'Nexus Music Bot') {
                 avatarEl.style.backgroundImage = 'none';
                 avatarEl.innerHTML = `<span style="font-size: 2.2rem;">🎵</span>`;
@@ -1448,6 +1461,16 @@ function setupUserProfileModal() {
                 fetchUserProfile(cleanEmail).then(remoteData => {
                     if (remoteData && modal && !modal.classList.contains('hidden')) {
                         applyProfileData(remoteData, cleanEmail);
+                        // Si remoteData trae banner_url válido o avatar, actualizar UI
+                        if (remoteData.banner_url) {
+                            const bEl = document.getElementById('profile-modal-banner');
+                            if (bEl) {
+                                bEl.style.backgroundImage = `url("${remoteData.banner_url.trim()}")`;
+                                bEl.style.backgroundSize = 'cover';
+                                bEl.style.backgroundPosition = 'center';
+                                bEl.style.backgroundRepeat = 'no-repeat';
+                            }
+                        }
                         // Actualizar caché local con datos frescos
                         if (remoteData.bio)              localStorage.setItem(`nexus_profile_bio_${cleanEmail}`,              remoteData.bio);
                         if (remoteData.status)           localStorage.setItem(`nexus_profile_status_${cleanEmail}`,           remoteData.status);

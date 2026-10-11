@@ -477,16 +477,25 @@ body {
     position: relative;
     width: 34px;
     height: 34px;
+    aspect-ratio: 1 / 1;
+    min-width: 34px;
+    min-height: 34px;
+    flex-shrink: 0;
 }
 
 .avatar-container.small {
     width: 30px;
     height: 30px;
+    aspect-ratio: 1 / 1;
+    min-width: 30px;
+    min-height: 30px;
+    flex-shrink: 0;
 }
 
 .avatar {
     width: 100%;
     height: 100%;
+    aspect-ratio: 1 / 1;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
     display: flex;
@@ -497,6 +506,10 @@ body {
     font-size: 0.95rem;
     font-family: 'Orbitron', sans-serif;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    flex-shrink: 0;
 }
 
 .avatar.bg-blue { background: linear-gradient(135deg, #1e3c72, #2a5298); }
@@ -733,17 +746,17 @@ body {
     transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
-/* Modo compacto: deja libre el 85% de la pantalla para el chat y lista */
+/* Modo compacto: deja libre el 90% de la pantalla para el chat y lista */
 .stream-container.compact-mode {
-    max-height: 180px;
+    max-height: 90px;
 }
 
 .stream-container.compact-mode .stream-viewport {
-    max-height: 100px;
+    max-height: 50px;
 }
 
 .stream-container.compact-mode .stream-controls {
-    height: 38px;
+    height: 32px;
     padding: 0 10px;
 }
 
@@ -1142,6 +1155,10 @@ body {
 .voice-member-avatar {
     width: 48px;
     height: 48px;
+    aspect-ratio: 1 / 1;
+    min-width: 48px;
+    min-height: 48px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
     display: flex;
@@ -1151,6 +1168,10 @@ body {
     font-family: 'Orbitron', sans-serif;
     color: white;
     font-weight: 700;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    overflow: hidden;
 }
 
 .voice-member-name {
