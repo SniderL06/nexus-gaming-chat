@@ -395,17 +395,20 @@ export async function saveUserProfile(profileData) {
  * @param {string} email - Email del usuario (para nombrar el archivo)
  * @returns {Promise<string|null>}
  */
-export async function uploadBannerImage(file, email) {
-    if (!supabase || !file || !email) return null;
+export async function uploadBannerImage(fileOrBlob, email) {
+    if (!supabase || !fileOrBlob || !email) return null;
     try {
-        const ext = file.name.split('.').pop().toLowerCase() || 'jpg';
+        const ext = fileOrBlob.name ? (fileOrBlob.name.split('.').pop().toLowerCase() || 'jpg') : 'jpg';
+        const contentType = fileOrBlob.type || 'image/jpeg';
         const path = `banners/${email.replace(/[@.]/g, '_')}_${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage
             .from('nexus-images')
-            .upload(path, file, { upsert: true, contentType: file.type });
+            .upload(path, fileOrBlob, { upsert: true, contentType });
         if (upErr) { console.error('[Banner] Error al subir banner:', upErr.message); return null; }
         const { data } = supabase.storage.from('nexus-images').getPublicUrl(path);
-        return data?.publicUrl || null;
+        const publicUrl = data?.publicUrl || null;
+        console.log('[Banner] Banner subido exitosamente a Supabase Storage:', publicUrl);
+        return publicUrl;
     } catch (e) {
         console.error('[Banner] Excepción al subir banner:', e);
         return null;
