@@ -1,7 +1,7 @@
 /* NEXUS REAL-TIME WEBRTC VOICE ENGINE & FREQUENCY ANALYSER (ES MODULE) */
 
 import { state, updateRenderLatency } from './app.js';
-import { supabase, supabaseReady } from './supabase-client.js';
+import { supabase, supabaseReady, updateGlobalPresenceVoiceChannel } from './supabase-client.js';
 import { notifyVoiceJoin } from './pwa.js';
 
 
@@ -666,6 +666,7 @@ let audioOutputVolume = 1.0; // 0.0 a 1.0 (volumen global)
 const perUserVolume = new Map(); // peerId -> number (0.0 a 1.0, default 1.0)
 // Set para evitar spam de notificaciones cuando el usuario envía heartbeats
 const recentNotifiedJoins = new Map(); // user identifier -> timestamp
+let voiceJoinedAt = 0; // Timestamp fijo al entrar a voz — NO cambiar en heartbeats
 let isTestingMic = false;
 let micTestAnalyser = null;
 let micTestStream = null;
@@ -914,36 +915,44 @@ async function enumerateAudioDevices(inputSelect, outputSelect) {
     if (!inputSelect || !outputSelect) return;
 
     try {
-        // Solicitar permisos rápidos para que se enlisten nombres reales y no vacíos
+        console.log('[Audio Devices] Solicitando permiso de micrófono y enumerando dispositivos...');
         try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('[Audio Devices] Permiso de audio concedido con éxito.');
+            stream.getTracks().forEach(t => t.stop());
         } catch (permissionErr) {
-            console.warn('[Audio Devices] Permiso de micrófono denegado para enlistar nombres reales:', permissionErr);
+            console.warn('[Audio Devices] Permiso de micrófono falló o fue denegado:', permissionErr);
         }
         
         const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('[Audio Devices] Dispositivos detectados:', devices);
 
         inputSelect.innerHTML = '';
         outputSelect.innerHTML = '';
 
-        // Añadir una opción por defecto para evitar listas vacías
+        // Dispositivo por defecto
         const defaultInputOpt = document.createElement('option');
         defaultInputOpt.value = 'default';
-        defaultInputOpt.textContent = 'Micrófono por Defecto';
+        defaultInputOpt.textContent = 'Micrófono por Defecto (Sistema)';
+        defaultInputOpt.style.backgroundColor = '#121520';
+        defaultInputOpt.style.color = '#ffffff';
         inputSelect.appendChild(defaultInputOpt);
         
         const defaultOutputOpt = document.createElement('option');
         defaultOutputOpt.value = 'default';
-        defaultOutputOpt.textContent = 'Altavoz por Defecto';
+        defaultOutputOpt.textContent = 'Altavoz por Defecto (Sistema)';
+        defaultOutputOpt.style.backgroundColor = '#121520';
+        defaultOutputOpt.style.color = '#ffffff';
         outputSelect.appendChild(defaultOutputOpt);
 
         devices.forEach(device => {
-            // Ignorar los dispositivos con ID 'default' si ya los pusimos manualmente, o agruparlos
             if (device.deviceId === 'default' || !device.deviceId) return;
 
             const opt = document.createElement('option');
             opt.value = device.deviceId;
-            opt.textContent = device.label || `${device.kind === 'audioinput' ? 'Micrófono' : 'Altavoz/Auricular'} (${device.deviceId.slice(0, 5)})`;
+            opt.textContent = device.label || `${device.kind === 'audioinput' ? 'Micrófono' : 'Altavoz'} (${device.deviceId.slice(0, 5)})`;
+            opt.style.backgroundColor = '#121520';
+            opt.style.color = '#ffffff';
 
             if (device.kind === 'audioinput') {
                 inputSelect.appendChild(opt);
@@ -1154,6 +1163,8 @@ export async function joinVoiceChannel(channelId, channelName) {
         isMultiplayerMode = true;
         activeMembersInRoom = []; // Sólo miembros reales
         renderVoiceMembers();
+        // Notificar a TODOS que este usuario se unió a voz (actualiza sidebar de quienes no están en sala)
+        updateGlobalPresenceVoiceChannel(channelId);
         await joinMultiplayerVoice(channelId);
     } else {
         isMultiplayerMode = false;
@@ -1242,7 +1253,7 @@ async function joinMultiplayerVoice(channelId) {
                 avatarStyle: myAvatarStyle,
                 isMuted: state.isMuted || state.isDeafened,
                 isOp: (localStorage.getItem('nexus_user_email') || '') === OP_EMAIL,
-                joinedAt: Date.now()
+                joinedAt: voiceJoinedAt  // ← usar el timestamp fijo de entrada
             });
         }
 
@@ -1361,6 +1372,10 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         presenceChannel = null;
     }
 
+    // Fijar el timestamp de entrada UNA SOLA VEZ para que los heartbeats no
+    // cambien el payload y no disparen eventos leave+join falsos de Supabase
+    voiceJoinedAt = Date.now();
+
     presenceChannel = supabase.channel(roomChannel, {
         config: { presence: { key: userKey } }
     });
@@ -1379,7 +1394,7 @@ async function joinSupabasePresence(channelId, myName, peerId) {
                 avatarStyle: myAvatarStyle,
                 isMuted: state.isMuted || state.isDeafened,
                 isOp: email.toLowerCase() === OP_EMAIL.toLowerCase(),
-                joinedAt: Date.now()
+                joinedAt: voiceJoinedAt  // ← FIJO, nunca cambia tras el primer track
             });
         } catch (e) {
             console.warn('[Presence] Error actualizando presencia en sala de voz:', e);
@@ -1873,6 +1888,10 @@ export function disconnectVoiceChannel(triggerUI = true) {
         }
         isMultiplayerMode = false;
     }
+
+    // Notificar a TODOS que este usuario salió de voz (borra su nombre del sidebar de canales)
+    updateGlobalPresenceVoiceChannel(null);
+    voiceJoinedAt = 0; // Reset para el próximo join
 
     // Limpiar árbol de miembros en la barra lateral
     if (prevChannel) {
@@ -2504,7 +2523,7 @@ function toggleMute() {
             avatarStyle: myAvatarStyle,
             isMuted: state.isMuted || state.isDeafened,
             isOp: email === OP_EMAIL,
-            joinedAt: Date.now()
+            joinedAt: voiceJoinedAt  // ← timestamp fijo de entrada
         }).catch(() => {});
     }
 
@@ -2568,7 +2587,7 @@ function toggleDeafen() {
             avatarStyle: myAvatarStyle,
             isMuted: state.isMuted || state.isDeafened,
             isOp: email === OP_EMAIL,
-            joinedAt: Date.now()
+            joinedAt: voiceJoinedAt  // ← timestamp fijo de entrada
         }).catch(() => {});
     }
 

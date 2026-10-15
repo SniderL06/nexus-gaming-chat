@@ -12,6 +12,9 @@ export let supabaseReady = false;
 // ─── Canal de presencia global (quién está en línea) ─────────
 let globalPresenceChannel = null;
 
+// ─── Canal de voz activo del usuario local (null si no está en voz) ──────────
+let _localVoiceChannel = null;
+
 // Inicializar cliente automáticamente con las credenciales hardcodeadas
 function tryInitClient(url, key) {
     if (url && key && window.supabase) {
@@ -61,6 +64,7 @@ export function startGlobalPresence(userName) {
             email: email,
             avatar: userAvatar || '',
             avatarStyle: userAvatarStyle,
+            voiceChannel: _localVoiceChannel,
             online_at: new Date().toISOString()
         }).catch(err => console.warn('[Presencia] Error al re-trackear:', err));
         return; // ← NO destruir el canal
@@ -89,6 +93,7 @@ export function startGlobalPresence(userName) {
                 email: email,          // identificador seguro para DMs y unicidad
                 avatar: userAvatar || '',
                 avatarStyle: userAvatarStyle,
+                voiceChannel: _localVoiceChannel,
                 online_at: new Date().toISOString()
             });
         } catch (err) {
@@ -149,6 +154,32 @@ export function stopGlobalPresence() {
         try { supabase.removeChannel(globalPresenceChannel); } catch(e){}
         globalPresenceChannel = null;
     }
+}
+
+/**
+ * Llamar desde voice.js cuando el usuario entra o sale de un canal de voz.
+ * Actualiza el campo voiceChannel en la presencia global para que TODOS los
+ * usuarios (incluso los que no están en voz) vean quién está en cada canal.
+ * @param {string|null} channelId - ID del canal de voz, o null si salió
+ */
+export function updateGlobalPresenceVoiceChannel(channelId) {
+    _localVoiceChannel = channelId || null;
+    if (!globalPresenceChannel) return;
+    // Leer datos frescos del usuario para que el payload sea completo
+    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    const rawName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0]) : '';
+    const userName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'Usuario';
+    const userAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
+    const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
+    // Re-trackear con el nuevo voiceChannel — dispara sync en todos los clientes
+    globalPresenceChannel.track({
+        name: userName,
+        email: email,
+        avatar: userAvatar,
+        avatarStyle: userAvatarStyle,
+        voiceChannel: _localVoiceChannel,
+        online_at: new Date().toISOString()
+    }).catch(e => console.warn('[Presencia] Error al actualizar voiceChannel:', e));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -273,7 +304,46 @@ function updateOnlineMembersSidebar(presenceState) {
     if (onlineUsers.length === 0 && onlineCountEl) {
         onlineCountEl.textContent = '0';
     }
+
+    // ── Actualizar canales de voz en el sidebar para TODOS los usuarios ───────
+    // Agrupa los usuarios de la presencia global por su campo voiceChannel
+    // y actualiza los contenedores voice-users-{id} y voice-count-{id}.
+    // Esto permite que usuarios fuera de voz vean quién está en cada canal.
+    const voiceByChannel = {};
+    Object.values(presenceState).forEach(presences => {
+        presences.forEach(p => {
+            if (p && p.voiceChannel && p.name) {
+                if (!voiceByChannel[p.voiceChannel]) voiceByChannel[p.voiceChannel] = [];
+                // Deduplicar por email o nombre
+                const key = (p.email || p.name).toLowerCase();
+                if (!voiceByChannel[p.voiceChannel].some(x => (x.email || x.name).toLowerCase() === key)) {
+                    voiceByChannel[p.voiceChannel].push({ name: p.name, email: p.email || '' });
+                }
+            }
+        });
+    });
+
+    // Actualizar todos los contenedores de voz visibles en el sidebar
+    document.querySelectorAll('[id^="voice-users-"]').forEach(container => {
+        const chId = container.id.replace('voice-users-', '');
+        const members = voiceByChannel[chId] || [];
+        const countBadge = document.getElementById('voice-count-' + chId);
+        if (countBadge) countBadge.textContent = members.length;
+        // Solo redibujar el sidebar-voice-users si el usuario NO está dentro de esa sala
+        // (si está dentro, voice.js → syncVoiceRoomFromPresence ya lo actualiza).
+        const statusPanel = document.getElementById('voice-status-panel');
+        const isInsideVoice = statusPanel && !statusPanel.classList.contains('hidden');
+        if (!isInsideVoice) {
+            container.innerHTML = members.map(m => `
+                <div class="sidebar-voice-user" title="${escapeHTMLPresence(m.name)}">
+                    <div class="sidebar-user-avatar bg-blue">${m.name.charAt(0).toUpperCase()}</div>
+                    <span class="sidebar-user-name">${escapeHTMLPresence(m.name)}</span>
+                </div>
+            `).join('');
+        }
+    });
 }
+
 
 function escapeHTMLPresence(str) {
     if (typeof str !== 'string') return '';
