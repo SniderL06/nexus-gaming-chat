@@ -5,7 +5,7 @@ echo    NEXUS - COMPILADOR DE ESCRITORIO CON AUTO-UPDATER
 echo ======================================================
 echo.
 
-set PATH=%USERPROFILE%\.cargo\bin;%PATH%
+set PATH=%LOCALAPPDATA%\Programs\nodejs;%USERPROFILE%\.cargo\bin;%PATH%
 
 rem ── Deteccion de clave de firma para el auto-actualizador ──
 if exist "%USERPROFILE%\.tauri\nexus.key" (
