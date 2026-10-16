@@ -11,6 +11,7 @@ import { initSupabaseSetup, supabase, supabaseReady, startGlobalPresence, stopGl
 import { initCamera, stopCamera } from './camera.js';
 import { initDM } from './dm.js';
 import { initPWA, requestNotificationPermission, notifyMention, notifyVoiceJoin, notifyDM } from './pwa.js';
+import { initDesktopUpdater } from './desktop-updater.js';
 
 
 // Estado global de la aplicación (Single Source of Truth)
@@ -118,6 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── PWA: registrar Service Worker y preparar notificaciones ──
     initPWA();
+    // ── Tauri Desktop Auto-Updater: escuchar eventos de actualización ──
+    initDesktopUpdater();
 
     // Iniciar loop de rendimiento
     runPerformanceLoop();

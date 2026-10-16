@@ -1,13 +1,24 @@
 @echo off
-title Compilando Nexus para Windows...
+title Compilando Nexus para Windows con Auto-Actualizador...
 echo ======================================================
-echo    NEXUS - COMPILADOR AUTOMATICO DE APP DE ESCRITORIO
+echo    NEXUS - COMPILADOR DE ESCRITORIO CON AUTO-UPDATER
 echo ======================================================
 echo.
 
 set PATH=%USERPROFILE%\.cargo\bin;%PATH%
 
-echo [1/2] Sincronizando archivos web a /dist...
+rem ── Deteccion de clave de firma para el auto-actualizador ──
+if exist "%USERPROFILE%\.tauri\nexus.key" (
+    echo [Updater] Clave privada detectada en %USERPROFILE%\.tauri\nexus.key
+    set "TAURI_SIGNING_PRIVATE_KEY=%USERPROFILE%\.tauri\nexus.key"
+) else (
+    echo [Updater Aviso] No se encontro "%USERPROFILE%\.tauri\nexus.key".
+    echo Si deseas que el instalador genere firmas (.sig) para auto-actualizarse,
+    echo ejecuta primero el archivo "generar-claves-updater.bat".
+)
+
+echo.
+echo [1/3] Sincronizando archivos web a /dist...
 node scripts/prepare-dist.js
 if %errorlevel% neq 0 (
     echo Error al sincronizar archivos web.
@@ -16,7 +27,7 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/2] Compilando instalador optimizado de Nexus...
+echo [2/3] Compilando instalador y generando firmas (.sig)...
 npx --yes @tauri-apps/cli build
 if %errorlevel% neq 0 (
     echo Error durante la compilacion de Tauri.
@@ -25,14 +36,18 @@ if %errorlevel% neq 0 (
 )
 
 echo.
+echo [3/3] Generando manifest de actualizacion (latest.json)...
+node scripts/generate-latest-json.js
+
+echo.
 echo ======================================================
-echo    COMPILACION COMPLETADA CON EXITO!
+echo    COMPILACION Y FIRMA COMPLETADA CON EXITO!
 echo ======================================================
 echo.
-echo Tu nuevo instalador listo para usar esta en:
-echo src-tauri\target\release\bundle\nsis\Nexus_1.0.0_x64-setup.exe
+echo Archivos generados en:
+echo src-tauri\target\release\bundle\nsis\
 echo.
-echo O el ejecutable directo en:
-echo src-tauri\target\release\nexus.exe
+echo Para que los usuarios de Windows se actualicen solos:
+echo 1. Sube a GitHub Releases el instalador .exe, el .sig y latest.json.
 echo.
 pause

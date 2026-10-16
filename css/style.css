@@ -5478,3 +5478,105 @@ body.theme-light .theme-panel {
         padding: 8px 14px;
     }
 }
+
+/* ── Banner de Actualización de Escritorio Nexus (Estilo Discord) ── */
+.nexus-update-banner {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #0d0d1a 0%, #151528 100%);
+    border: 1px solid #10b981;
+    border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(16, 185, 129, 0.3), 0 0 20px rgba(0, 0, 0, 0.8);
+    z-index: 9999999;
+    animation: nexusBannerPopIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.3s ease;
+    max-width: 90vw;
+}
+
+.update-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.update-banner-icon {
+    font-size: 1.6rem;
+    animation: nexusGlowPulse 2s infinite ease-in-out;
+}
+
+.update-banner-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.update-banner-info strong {
+    color: #10b981;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+}
+
+.update-banner-info span {
+    color: #cbd5e1;
+    font-size: 0.8rem;
+}
+
+.update-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.update-banner-btn-restart {
+    background: #10b981;
+    color: #052e16;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    white-space: nowrap;
+}
+
+.update-banner-btn-restart:hover {
+    background: #34d399;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.6);
+}
+
+.update-banner-btn-dismiss {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    transition: color 0.2s ease;
+}
+
+.update-banner-btn-dismiss:hover {
+    color: #f87171;
+}
+
+@keyframes nexusBannerPopIn {
+    from { opacity: 0; transform: translate(-50%, 30px) scale(0.95); }
+    to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+@keyframes nexusGlowPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4)); }
+    50%      { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.8)); }
+}
+
