@@ -41,7 +41,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "RWRdqZWHRFz6TAnotgJz98iZrJnBRBiEU0N6qbsxSLKnlgDM32UsHtQm",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0QTZEM0FGQjYyRTM3NEIKUldSTE55NjJyOU9tUkZoTFNtV0FVUG5wdzFFdjdwbkg2eWpna0R5RGZvWUg1OGhTdld5VDc3cFMK",
       "endpoints": [
         "https://github.com/SniderL06/nexus-gaming-chat/releases/latest/download/latest.json"
       ]
