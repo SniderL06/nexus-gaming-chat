@@ -1243,16 +1243,13 @@ async function joinMultiplayerVoice(channelId) {
         // Actualizar presencia con el ID real de PeerJS
         if (presenceChannel) {
             const email = localStorage.getItem('nexus_user_email') || '';
-            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
-            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             await presenceChannel.track({
                 name: myName,
-                email: (localStorage.getItem('nexus_user_email') || '').toLowerCase(),
+                email: email.toLowerCase(),
                 peerId: realId,
-                avatar: myAvatar,
-                avatarStyle: myAvatarStyle,
+                // avatar eliminado del payload — reduce egress drásticamente
                 isMuted: state.isMuted || state.isDeafened,
-                isOp: (localStorage.getItem('nexus_user_email') || '') === OP_EMAIL,
+                isOp: email === OP_EMAIL,
                 joinedAt: voiceJoinedAt  // ← usar el timestamp fijo de entrada
             });
         }
@@ -1384,14 +1381,11 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         if (!presenceChannel) return;
         try {
             const email = localStorage.getItem('nexus_user_email') || '';
-            const myAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
-            const myAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
             await presenceChannel.track({
                 name: myName,
                 email: email.toLowerCase(),
                 peerId: localPeerId || peerId,
-                avatar: myAvatar,
-                avatarStyle: myAvatarStyle,
+                // avatar eliminado — vive en localStorage, no en Supabase
                 isMuted: state.isMuted || state.isDeafened,
                 isOp: email.toLowerCase() === OP_EMAIL.toLowerCase(),
                 joinedAt: voiceJoinedAt  // ← FIJO, nunca cambia tras el primer track
@@ -2519,8 +2513,7 @@ function toggleMute() {
         presenceChannel.track({
             name: myName,
             peerId: localPeerId,
-            avatar: myAvatar,
-            avatarStyle: myAvatarStyle,
+            // avatar eliminado — reduce egress de Supabase
             isMuted: state.isMuted || state.isDeafened,
             isOp: email === OP_EMAIL,
             joinedAt: voiceJoinedAt  // ← timestamp fijo de entrada
@@ -2583,8 +2576,7 @@ function toggleDeafen() {
         presenceChannel.track({
             name: myName,
             peerId: localPeerId,
-            avatar: myAvatar,
-            avatarStyle: myAvatarStyle,
+            // avatar eliminado — reduce egress de Supabase
             isMuted: state.isMuted || state.isDeafened,
             isOp: email === OP_EMAIL,
             joinedAt: voiceJoinedAt  // ← timestamp fijo de entrada

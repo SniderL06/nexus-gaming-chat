@@ -2,7 +2,7 @@
    NEXUS SERVICE WORKER — PWA offline + Notificaciones push
    ═══════════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'nexus-v1.2.20';
+const CACHE_NAME = 'nexus-v1.2.23';
 
 // Archivos esenciales para funcionar sin conexión (shell de la app)
 const PRECACHE_ASSETS = [

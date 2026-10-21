@@ -1,8 +1,8 @@
 /* NEXUS SUPABASE CLIENT MODULE (ES MODULE) */
 
 // ─── Credenciales hardcodeadas — los usuarios no necesitan configurar nada ───
-const NEXUS_SUPABASE_URL = 'https://vnirjmrawgijbnifmgkk.supabase.co';
-const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuaXJqbXJhd2dpamJuaWZtZ2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NDk4MjAsImV4cCI6MjEwNzEyNTgyMH0.63AuwVJNErGG2FRLxn7zgo3bo4iYbG_y02Brqr8gagQ';
+const NEXUS_SUPABASE_URL = 'https://hibtszckdsbopvijpjuj.supabase.co';
+const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpYnRzeGNrZHNib3B2aWpwanVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTYwNTIsImV4cCI6MjEwODE3MjA1Mn0.oqEuxxkcBQvJo66Puh6Tyh38oOrCapvgroY4dE7e_uM';
 
 export let supabase = null;
 export let supabaseUrl = NEXUS_SUPABASE_URL;
@@ -62,8 +62,8 @@ export function startGlobalPresence(userName) {
         globalPresenceChannel.track({
             name: userName,
             email: email,
-            avatar: userAvatar || '',
-            avatarStyle: userAvatarStyle,
+            // avatar NO se envía por presencia — vive en localStorage de cada cliente
+            // Eliminado para reducir el egress de Supabase drásticamente
             voiceChannel: _localVoiceChannel,
             online_at: new Date().toISOString()
         }).catch(err => console.warn('[Presencia] Error al re-trackear:', err));
@@ -91,8 +91,7 @@ export function startGlobalPresence(userName) {
             await globalPresenceChannel.track({
                 name: userName,
                 email: email,          // identificador seguro para DMs y unicidad
-                avatar: userAvatar || '',
-                avatarStyle: userAvatarStyle,
+                // avatar eliminado del payload — vive en localStorage, no en Supabase Realtime
                 voiceChannel: _localVoiceChannel,
                 online_at: new Date().toISOString()
             });
@@ -165,18 +164,14 @@ export function stopGlobalPresence() {
 export function updateGlobalPresenceVoiceChannel(channelId) {
     _localVoiceChannel = channelId || null;
     if (!globalPresenceChannel) return;
-    // Leer datos frescos del usuario para que el payload sea completo
     const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
     const rawName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0]) : '';
     const userName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'Usuario';
-    const userAvatar = email ? (localStorage.getItem('nexus_user_avatar_' + email) || '') : '';
-    const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
-    // Re-trackear con el nuevo voiceChannel — dispara sync en todos los clientes
+    // Re-trackear con el nuevo voiceChannel — sin avatar para minimizar egress
     globalPresenceChannel.track({
         name: userName,
         email: email,
-        avatar: userAvatar,
-        avatarStyle: userAvatarStyle,
+        // avatar eliminado — vive en localStorage de cada cliente
         voiceChannel: _localVoiceChannel,
         online_at: new Date().toISOString()
     }).catch(e => console.warn('[Presencia] Error al actualizar voiceChannel:', e));
