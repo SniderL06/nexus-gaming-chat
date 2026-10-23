@@ -1,481 +1,674 @@
-/* NEXUS SUPABASE CLIENT MODULE (ES MODULE) */
+/* NEXUS FIREBASE CLIENT MODULE (ES MODULE) */
+/* Reemplazo de Supabase con Firebase — misma interfaz pública para toda la app */
 
-// ─── Credenciales hardcodeadas — los usuarios no necesitan configurar nada ───
-const NEXUS_SUPABASE_URL = 'https://qlydbigebfqrlttjtdal.supabase.co';
-const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFseWRiaWdlZmJxcmx0dGp0ZGFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NzYwMjYsImV4cCI6MjEwODM1MjAyNn0.khvh1RauNtixUOMQ_G-dPrdv0tYQMHq6qPm0Sw7BCIU';
+// ─── Firebase Config ───────────────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+    apiKey:            'AIzaSyDD7efmFKTreslwqu3pjDKClZ98DQAjao4',
+    authDomain:        'nexus-916b0.firebaseapp.com',
+    databaseURL:       'https://nexus-916b0-default-rtdb.firebaseio.com',
+    projectId:         'nexus-916b0',
+    storageBucket:     'nexus-916b0.firebasestorage.app',
+    messagingSenderId: '816556998793',
+    appId:             '1:816556998793:web:bb2f63407014d0c7a5c658',
+    measurementId:     'G-PJHEPN41VR'
+};
 
-export let supabase = null;
-export let supabaseUrl = NEXUS_SUPABASE_URL;
-export let supabaseKey = NEXUS_SUPABASE_KEY;
+// ─── Referencias internas ──────────────────────────────────────────────────
+let _db      = null;   // Firestore
+let _rtdb    = null;   // Realtime Database (presencia)
+let _storage = null;   // Storage (imágenes/banners)
+
+// ─── Exports públicos (compatibles con el resto de la app) ─────────────────
+export let supabase      = null;
+export let supabaseUrl   = 'firebase://nexus-916b0';
+export let supabaseKey   = FIREBASE_CONFIG.apiKey;
 export let supabaseReady = false;
 
-// ─── Canal de presencia global (quién está en línea) ─────────
-let globalPresenceChannel = null;
+// ─── Estado de presencia ───────────────────────────────────────────────────
+let _localVoiceChannel    = null;
+let _globalPresChannel    = null;  // FirebaseChannel activo
+let _globalPresHeartbeat  = null;
 
-// ─── Canal de voz activo del usuario local (null si no está en voz) ──────────
-let _localVoiceChannel = null;
+// ══════════════════════════════════════════════════════════════════════════
+// INICIALIZACIÓN
+// ══════════════════════════════════════════════════════════════════════════
+function initFirebase() {
+    if (!window.firebase) return false;
+    try {
+        // Reutilizar app si ya fue inicializada (hot-reload, etc.)
+        let app;
+        try { app = firebase.app(); } catch (_) { app = firebase.initializeApp(FIREBASE_CONFIG); }
 
-// Inicializar cliente automáticamente con las credenciales hardcodeadas
-function tryInitClient(url, key) {
-    if (url && key && window.supabase) {
-        try {
-            const client = window.supabase.createClient(url, key, {
-                realtime: {
-                    params: { eventsPerSecond: 30 }
-                }
-            });
-            supabase = client;
-            supabaseReady = true;
-            console.log('[Supabase] Cliente inicializado correctamente con 30 ev/s.');
-            setTimeout(updateStatusIndicator, 500);
-            return true;
-        } catch (e) {
-            console.error('[Supabase] Error al inicializar cliente:', e);
-            return false;
-        }
+        _db      = firebase.firestore();
+        _rtdb    = firebase.database();
+        _storage = firebase.storage();
+
+        // Opcional: habilitar persistencia offline de Firestore
+        _db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+        supabase      = _createShim();
+        supabaseReady = true;
+        console.log('[Nexus] Firebase inicializado correctamente.');
+        _seedDefaultData();
+        setTimeout(updateStatusIndicator, 300);
+        return true;
+    } catch (e) {
+        console.error('[Nexus] Error al inicializar Firebase:', e);
+        return false;
     }
-    return false;
 }
 
-tryInitClient(NEXUS_SUPABASE_URL, NEXUS_SUPABASE_KEY);
+// Datos iniciales por defecto (servidor y canales si no existen)
+async function _seedDefaultData() {
+    try {
+        const serverDoc = _db.collection('servers').doc('nexus-default');
+        const snap = await serverDoc.get();
+        if (!snap.exists) {
+            const now = new Date().toISOString();
+            await serverDoc.set({ id: 'nexus-default', name: 'Nexus Global', icon: '🌌', created_at: now });
 
-// ─────────────────────────────────────────────────────────────
-// PRESENCIA GLOBAL: quién está conectado en tiempo real
-// Llama a esta función desde app.js tras el login del usuario.
-// ─────────────────────────────────────────────────────────────
-let globalPresenceHeartbeat = null;
+            const channels = _db.collection('channels');
+            const defaultChannels = [
+                { id: 'general',        name: 'general',        type: 'text',  server_id: 'nexus-default' },
+                { id: 'lounge',         name: 'lounge',         type: 'text',  server_id: 'nexus-default' },
+                { id: 'clips-and-memes',name: 'clips-and-memes',type: 'text',  server_id: 'nexus-default' },
+                { id: 'estrategia',     name: 'estrategia',     type: 'text',  server_id: 'nexus-default' },
+                { id: 'general-voice',  name: 'General Voice',  type: 'voice', server_id: 'nexus-default' },
+                { id: 'squad-1',        name: 'Squad Alpha',    type: 'voice', server_id: 'nexus-default' },
+            ];
+            await Promise.all(defaultChannels.map(ch => channels.doc(ch.id).set({ ...ch, created_at: now })));
+            console.log('[Nexus] Datos por defecto sembrados en Firebase.');
+        }
+    } catch (e) {
+        // Sin conexión o ya existían — ignorar
+    }
+}
 
+// Intentar inicializar; el SDK de Firebase puede no haber cargado aún
+if (!initFirebase()) {
+    const _initInterval = setInterval(() => {
+        if (initFirebase()) clearInterval(_initInterval);
+    }, 80);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// QUERY BUILDER — imita la API fluente de Supabase (.from().select()...)
+// ══════════════════════════════════════════════════════════════════════════
+class _Query {
+    constructor(table) {
+        this._t    = table;
+        this._cond = [];
+        this._ord  = null;
+        this._lim  = null;
+        this._op   = 'select';
+        this._payload = null;
+        this._upsertOpts = null;
+        this._isSingle = false;
+    }
+
+    // ── Operaciones ───────────────────────────────────────────────────────
+    select()          { this._op = 'select'; return this; }
+    insert(data)      { this._op = 'insert'; this._payload = data; return this; }
+    upsert(data, opt) { this._op = 'upsert'; this._payload = data; this._upsertOpts = opt; return this; }
+    delete()          { this._op = 'delete'; return this; }
+
+    // ── Filtros ───────────────────────────────────────────────────────────
+    eq(col, val) { this._cond.push({ op: '==', col, val }); return this; }
+    lt(col, val) { this._cond.push({ op: '<',  col, val }); return this; }
+
+    // ── Modificadores ─────────────────────────────────────────────────────
+    order(col, { ascending = true } = {}) { this._ord = { col, dir: ascending ? 'asc' : 'desc' }; return this; }
+    limit(n)  { this._lim = n; return this._exec(); }
+    single()  { this._isSingle = true; return this._exec(); }
+
+    // ── Thenable: permite usar `await supabase.from(...).select()...` ─────
+    then(res, rej) { return this._exec().then(res, rej); }
+
+    // ── Ejecución ─────────────────────────────────────────────────────────
+    _exec() {
+        if (this._op === 'select') return this._select();
+        if (this._op === 'insert') return this._insert();
+        if (this._op === 'upsert') return this._upsert();
+        if (this._op === 'delete') return this._delete();
+        return Promise.resolve({ data: null, error: { message: 'op desconocida' } });
+    }
+
+    async _select() {
+        try {
+            let q = _db.collection(this._t);
+            this._cond.forEach(c => { q = q.where(c.col, c.op, c.val); });
+            if (this._ord) q = q.orderBy(this._ord.col, this._ord.dir);
+            if (this._lim) q = q.limit(this._lim);
+
+            const snap = await q.get();
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            if (this._isSingle) {
+                return data[0]
+                    ? { data: data[0], error: null }
+                    : { data: null, error: { message: 'Not found', code: 'PGRST116' } };
+            }
+            return { data, error: null };
+        } catch (e) {
+            console.error(`[FB] select(${this._t}):`, e.message);
+            return { data: null, error: { message: e.message } };
+        }
+    }
+
+    async _insert() {
+        try {
+            const now = new Date().toISOString();
+            const col = _db.collection(this._t);
+            const items = Array.isArray(this._payload) ? this._payload : [this._payload];
+            const results = [];
+
+            for (const item of items) {
+                const rec = { ...item, created_at: item.created_at || now };
+                // Servidores y canales tienen ID propio (text)
+                if (rec.id && (this._t === 'servers' || this._t === 'channels')) {
+                    await col.doc(String(rec.id)).set(rec, { merge: true });
+                    results.push({ id: rec.id });
+                } else {
+                    const ref = await col.add(rec);
+                    results.push({ id: ref.id });
+                }
+            }
+            const out = Array.isArray(this._payload) ? results : results[0];
+            return { data: out, error: null };
+        } catch (e) {
+            console.error(`[FB] insert(${this._t}):`, e.message);
+            return { data: null, error: { message: e.message } };
+        }
+    }
+
+    async _upsert() {
+        try {
+            const now = new Date().toISOString();
+            const col = _db.collection(this._t);
+            const data = this._payload;
+            const conflict = this._upsertOpts?.onConflict;
+
+            // Perfiles usan email como document ID (sanitizado)
+            if (this._t === 'profiles' && data.email) {
+                const docId = data.email.replace(/[^a-zA-Z0-9]/g, '_');
+                await col.doc(docId).set(
+                    { ...data, _email: data.email, updated_at: data.updated_at || now },
+                    { merge: true }
+                );
+                return { data: { id: docId }, error: null };
+            }
+
+            // Buscar documento existente por campo de conflicto
+            if (conflict && data[conflict]) {
+                const snap = await col.where(conflict, '==', data[conflict]).limit(1).get();
+                if (!snap.empty) {
+                    await snap.docs[0].ref.update({ ...data, updated_at: now });
+                    return { data: { id: snap.docs[0].id }, error: null };
+                }
+            }
+
+            // No existe → crear
+            const ref = await col.add({ ...data, created_at: now });
+            return { data: { id: ref.id }, error: null };
+        } catch (e) {
+            console.error(`[FB] upsert(${this._t}):`, e.message);
+            return { data: null, error: { message: e.message } };
+        }
+    }
+
+    async _delete() {
+        try {
+            let q = _db.collection(this._t);
+            this._cond.forEach(c => { q = q.where(c.col, c.op, c.val); });
+
+            const snap = await q.get();
+            if (snap.empty) return { data: null, error: null };
+
+            // Borrar en batch (máx 500 docs por batch — suficiente para cleanup de mensajes)
+            const batch = _db.batch();
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            return { data: null, error: null };
+        } catch (e) {
+            console.error(`[FB] delete(${this._t}):`, e.message);
+            return { data: null, error: { message: e.message } };
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CHANNEL — imita canales Realtime de Supabase (postgres_changes + presence)
+// ══════════════════════════════════════════════════════════════════════════
+class _Channel {
+    constructor(name, options) {
+        this.name       = name;
+        this._opts      = options || {};
+        this._pgHandlers  = [];   // { filter, cb }
+        this._presHandlers = {};  // { sync:[], join:[], leave:[] }
+        this._unsubs    = [];     // funciones de cleanup
+        this._presKey   = options?.config?.presence?.key || ('u_' + Math.random().toString(36).slice(2, 8));
+        this._presState = {};
+        this._rtdbRef   = null;
+    }
+
+    on(type, filterOrOpts, cb) {
+        if (type === 'postgres_changes') {
+            this._pgHandlers.push({ filter: filterOrOpts, cb });
+        } else if (type === 'presence') {
+            const ev = filterOrOpts?.event || 'sync';
+            if (!this._presHandlers[ev]) this._presHandlers[ev] = [];
+            this._presHandlers[ev].push(cb);
+        }
+        return this;
+    }
+
+    subscribe(statusCb) {
+        // ── Firestore realtime (postgres_changes) ─────────────────────────
+        this._pgHandlers.forEach(({ filter, cb }) => {
+            const table = filter?.table;
+            if (!table) return;
+
+            let q = _db.collection(table);
+
+            // Parsear filtro tipo "channel_id=eq.general"
+            const fs = filter.filter || '';
+            const m = fs.match(/^(\w+)=eq\.(.+)$/);
+            if (m) q = q.where(m[1], '==', m[2]);
+
+            // Saltar la carga inicial (solo nuevos docs)
+            let firstSnap = true;
+            const unsub = q.onSnapshot({ includeMetadataChanges: false }, snap => {
+                if (firstSnap) { firstSnap = false; return; }
+                snap.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        cb({ new: { id: change.doc.id, ...change.doc.data() }, old: null });
+                    } else if (change.type === 'removed') {
+                        cb({ new: null, old: { id: change.doc.id } });
+                    }
+                });
+            }, err => console.warn(`[FB] onSnapshot(${table}):`, err.message));
+
+            this._unsubs.push(unsub);
+        });
+
+        // ── RTDB presencia ────────────────────────────────────────────────
+        if (Object.keys(this._presHandlers).length > 0) {
+            this._startPresence();
+        }
+
+        if (statusCb) setTimeout(() => statusCb('SUBSCRIBED'), 150);
+        return this;
+    }
+
+    _startPresence() {
+        const safeName = this.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        this._rtdbRef = _rtdb.ref(`presence/${safeName}`);
+
+        const handler = this._rtdbRef.on('value', snap => {
+            const newState = {};
+            snap.forEach(child => {
+                const v = child.val();
+                if (v) newState[child.key] = [v];
+            });
+
+            // Detectar joins/leaves
+            const oldKeys = Object.keys(this._presState);
+            const newKeys = Object.keys(newState);
+            newKeys.forEach(k => {
+                if (!this._presState[k])
+                    this._presHandlers['join']?.forEach(cb => cb({ key: k, newPresences: newState[k] }));
+            });
+            oldKeys.forEach(k => {
+                if (!newState[k])
+                    this._presHandlers['leave']?.forEach(cb => cb({ key: k, leftPresences: this._presState[k] }));
+            });
+
+            this._presState = newState;
+            this._presHandlers['sync']?.forEach(cb => cb());
+        });
+
+        this._unsubs.push(() => this._rtdbRef.off('value', handler));
+    }
+
+    /** Equivalente a supabaseChannel.track(data) */
+    track(data) {
+        if (!_rtdb) return Promise.resolve({ error: null });
+        const safeName = this.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const ref = _rtdb.ref(`presence/${safeName}/${this._presKey}`);
+        ref.onDisconnect().remove();
+        return ref.set(data)
+            .then(() => ({ error: null }))
+            .catch(e => ({ error: e }));
+    }
+
+    /** Equivalente a supabaseChannel.presenceState() */
+    presenceState() { return this._presState; }
+
+    /** Limpiar listeners */
+    unsubscribe() {
+        this._unsubs.forEach(fn => typeof fn === 'function' && fn());
+        this._unsubs = [];
+        // Eliminar presencia del RTDB al salir
+        if (_rtdb && this._presKey) {
+            const safeName = this.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            _rtdb.ref(`presence/${safeName}/${this._presKey}`).remove().catch(() => {});
+        }
+        return Promise.resolve({ error: null });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SHIM PRINCIPAL — objeto que sustituye al cliente de Supabase
+// ══════════════════════════════════════════════════════════════════════════
+function _createShim() {
+    return {
+        from: (table) => new _Query(table),
+
+        channel: (name, options) => new _Channel(name, options),
+
+        removeChannel: async (ch) => {
+            if (ch) await ch.unsubscribe();
+            return [];
+        },
+
+        storage: {
+            from: (_bucket) => ({
+                upload: async (path, file, opts) => {
+                    try {
+                        await _storage.ref(path).put(file, opts || {});
+                        return { error: null };
+                    } catch (e) { return { error: e }; }
+                },
+                // Firebase Storage no tiene URL pública síncrona como Supabase.
+                // uploadBannerImage (abajo) usa getDownloadURL() asíncrono directamente.
+                getPublicUrl: (path) => ({ data: { publicUrl: `__fb_storage__${path}` } })
+            })
+        }
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PRESENCIA GLOBAL — quién está en línea (reemplaza el canal de Supabase)
+// ══════════════════════════════════════════════════════════════════════════
 export function startGlobalPresence(userName) {
     if (!supabase || !userName) return;
 
-    // Obtener avatar, estilo e identificador estable por email para la presencia
-    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
-    const userAvatar = email ? localStorage.getItem('nexus_user_avatar_' + email) : null;
-    const userAvatarStyle = email ? (localStorage.getItem('nexus_user_avatar_style_' + email) || 'circle') : 'circle';
-    const presenceKey = email ? `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}` : `user_${userName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const email      = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    const presKey    = email
+        ? `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`
+        : `user_${userName.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
-    // ─── REUTILIZAR canal existente: solo actualizar el track sin destruir ──────
-    // Destruir y recrear el canal causa un evento leave+join visible para TODOS los
-    // demás usuarios, lo que rompe las llamadas de voz activas.
-    if (globalPresenceChannel && globalPresenceHeartbeat) {
-        console.log('[Presencia] Canal ya activo — actualizando track sin reconectar.');
-        globalPresenceChannel.track({
-            name: userName,
-            email: email,
-            // avatar NO se envía por presencia — vive en localStorage de cada cliente
-            // Eliminado para reducir el egress de Supabase drásticamente
+    // Reutilizar canal existente — solo re-trackear
+    if (_globalPresChannel && _globalPresHeartbeat) {
+        console.log('[Presencia] Canal activo — actualizando track.');
+        _globalPresChannel.track({
+            name: userName, email,
             voiceChannel: _localVoiceChannel,
             online_at: new Date().toISOString()
-        }).catch(err => console.warn('[Presencia] Error al re-trackear:', err));
-        return; // ← NO destruir el canal
-    }
-    // ──────────────────────────────────────────────────────────────────────────
-
-    // Primera vez (o si el canal fue limpiado explícitamente): crear canal nuevo
-    if (globalPresenceHeartbeat) {
-        clearInterval(globalPresenceHeartbeat);
-        globalPresenceHeartbeat = null;
-    }
-    if (globalPresenceChannel) {
-        try { supabase.removeChannel(globalPresenceChannel); } catch (e) {}
-        globalPresenceChannel = null;
+        }).catch(e => console.warn('[Presencia] Re-track error:', e));
+        return;
     }
 
-    globalPresenceChannel = supabase.channel('nexus:online-users', {
-        config: { presence: { key: presenceKey } }
+    // Limpiar estado anterior
+    if (_globalPresHeartbeat) { clearInterval(_globalPresHeartbeat); _globalPresHeartbeat = null; }
+    if (_globalPresChannel)   { _globalPresChannel.unsubscribe().catch(() => {}); _globalPresChannel = null; }
+
+    _globalPresChannel = supabase.channel('nexus:online-users', {
+        config: { presence: { key: presKey } }
     });
 
-    const trackPresence = async () => {
-        if (!globalPresenceChannel) return;
+    const track = async () => {
+        if (!_globalPresChannel) return;
         try {
-            await globalPresenceChannel.track({
-                name: userName,
-                email: email,          // identificador seguro para DMs y unicidad
-                // avatar eliminado del payload — vive en localStorage, no en Supabase Realtime
+            await _globalPresChannel.track({
+                name: userName, email,
                 voiceChannel: _localVoiceChannel,
                 online_at: new Date().toISOString()
             });
-        } catch (err) {
-            console.warn('[Presencia] Error al actualizar estado de presencia:', err);
-        }
+        } catch (e) { console.warn('[Presencia] track error:', e); }
     };
 
-    globalPresenceChannel
+    _globalPresChannel
         .on('presence', { event: 'sync' }, () => {
-            const state = globalPresenceChannel.presenceState();
+            const state = _globalPresChannel.presenceState();
             updateOnlineMembersSidebar(state);
-            // Actualizar mapa nombre→email para que el modal de perfil pueda buscar en Supabase
+            // Mapa nombre→email para el modal de perfil
             window._nexusEmailByName = window._nexusEmailByName || {};
-            Object.values(state).forEach(presences => {
-                presences.forEach(p => {
-                    if (p.name && p.email) window._nexusEmailByName[p.name] = p.email;
-                });
-            });
+            Object.values(state).forEach(arr => arr.forEach(p => {
+                if (p.name && p.email) window._nexusEmailByName[p.name] = p.email;
+            }));
         })
-        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-            console.log(`[Presencia] ${key} se conectó.`);
-        })
-        .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-            console.log(`[Presencia] ${key} se desconectó.`);
-        })
+        .on('presence', { event: 'join' },  ({ key }) => console.log(`[Presencia] ${key} conectado.`))
+        .on('presence', { event: 'leave' }, ({ key }) => console.log(`[Presencia] ${key} desconectado.`))
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                await trackPresence();
-                console.log(`[Presencia] ${userName} marcado como en línea.`);
-
-                // Heartbeat cada 25 segundos para no expirar y asegurar persistencia durante horas
-                if (globalPresenceHeartbeat) clearInterval(globalPresenceHeartbeat);
-                globalPresenceHeartbeat = setInterval(trackPresence, 25_000);
-            } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-                console.warn(`[Presencia] Canal de presencia ${status}. Reintentando suscripción en 5s...`);
-                setTimeout(() => {
-                    if (localStorage.getItem('nexus_user_email') && globalPresenceChannel) {
-                        trackPresence();
-                    }
-                }, 5000);
+                await track();
+                console.log(`[Presencia] ${userName} marcado en línea.`);
+                if (_globalPresHeartbeat) clearInterval(_globalPresHeartbeat);
+                _globalPresHeartbeat = setInterval(track, 25_000);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.warn(`[Presencia] ${status}. Reintentando en 5s...`);
+                setTimeout(() => { if (localStorage.getItem('nexus_user_email')) track(); }, 5000);
             } else if (status === 'CLOSED') {
-                // CLOSED ocurre de forma natural cuando removeChannel() limpia el canal anterior.
-                // NO reintentar aquí para evitar bucles infinitos de reconexión.
-                if (globalPresenceHeartbeat) {
-                    clearInterval(globalPresenceHeartbeat);
-                    globalPresenceHeartbeat = null;
-                }
+                if (_globalPresHeartbeat) { clearInterval(_globalPresHeartbeat); _globalPresHeartbeat = null; }
             }
         });
 }
 
 export function stopGlobalPresence() {
-    if (globalPresenceHeartbeat) {
-        clearInterval(globalPresenceHeartbeat);
-        globalPresenceHeartbeat = null;
-    }
-    if (globalPresenceChannel && supabase) {
-        try { supabase.removeChannel(globalPresenceChannel); } catch(e){}
-        globalPresenceChannel = null;
-    }
+    if (_globalPresHeartbeat) { clearInterval(_globalPresHeartbeat); _globalPresHeartbeat = null; }
+    if (_globalPresChannel)   { _globalPresChannel.unsubscribe().catch(() => {}); _globalPresChannel = null; }
 }
 
-/**
- * Llamar desde voice.js cuando el usuario entra o sale de un canal de voz.
- * Actualiza el campo voiceChannel en la presencia global para que TODOS los
- * usuarios (incluso los que no están en voz) vean quién está en cada canal.
- * @param {string|null} channelId - ID del canal de voz, o null si salió
- */
 export function updateGlobalPresenceVoiceChannel(channelId) {
     _localVoiceChannel = channelId || null;
-    if (!globalPresenceChannel) return;
-    const email = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
+    if (!_globalPresChannel) return;
+    const email   = (localStorage.getItem('nexus_user_email') || '').trim().toLowerCase();
     const rawName = email ? (localStorage.getItem('nexus_username_' + email) || email.split('@')[0]) : '';
-    const userName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'Usuario';
-    // Re-trackear con el nuevo voiceChannel — sin avatar para minimizar egress
-    globalPresenceChannel.track({
-        name: userName,
-        email: email,
-        // avatar eliminado — vive en localStorage de cada cliente
-        voiceChannel: _localVoiceChannel,
-        online_at: new Date().toISOString()
-    }).catch(e => console.warn('[Presencia] Error al actualizar voiceChannel:', e));
+    const name    = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'Usuario';
+    _globalPresChannel.track({
+        name, email, voiceChannel: _localVoiceChannel, online_at: new Date().toISOString()
+    }).catch(e => console.warn('[Presencia] updateVoiceChannel error:', e));
 }
 
-// ─────────────────────────────────────────────────────────────
-// ACTUALIZAR SIDEBAR DE MIEMBROS EN LÍNEA
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// SIDEBAR DE MIEMBROS EN LÍNEA
+// ══════════════════════════════════════════════════════════════════════════
 function updateOnlineMembersSidebar(presenceState) {
-    const membersList = document.querySelector('.members-list');
+    const membersList  = document.querySelector('.members-list');
     const onlineCountEl = document.getElementById('online-count');
     if (!membersList) return;
 
-    // Obtener nombre y correo propio actualizados
-    const rawEmail = localStorage.getItem('nexus_user_email') || '';
-    const myEmail = rawEmail.trim().toLowerCase();
-    const myName = (() => {
+    const rawEmail  = localStorage.getItem('nexus_user_email') || '';
+    const myEmail   = rawEmail.trim().toLowerCase();
+    const myName    = (() => {
         if (!myEmail) return null;
-        const customName = localStorage.getItem('nexus_username_' + myEmail) || localStorage.getItem('nexus_username_' + rawEmail);
-        if (customName) return customName;
-        const base = myEmail.split('@')[0];
-        return base.charAt(0).toUpperCase() + base.slice(1);
+        const n = localStorage.getItem('nexus_username_' + myEmail) || localStorage.getItem('nexus_username_' + rawEmail);
+        if (n) return n;
+        const b = myEmail.split('@')[0];
+        return b.charAt(0).toUpperCase() + b.slice(1);
     })();
-    const myAvatar = myEmail ? localStorage.getItem('nexus_user_avatar_' + myEmail) : null;
+    const myAvatar      = myEmail ? localStorage.getItem('nexus_user_avatar_' + myEmail) : null;
     const myAvatarStyle = myEmail ? (localStorage.getItem('nexus_user_avatar_style_' + myEmail) || 'circle') : 'circle';
 
-    // Recopilar todos los usuarios únicos presentes (priorizando deduplicación estricta por email y nombre)
     const onlineUsers = [];
-    const seenEmails = new Set();
-    const seenNames = new Set();
+    const seenEmails  = new Set();
+    const seenNames   = new Set();
 
     Object.values(presenceState).forEach(presences => {
         presences.forEach(p => {
             if (!p || !p.name) return;
-            const pEmail = (p.email || '').trim().toLowerCase();
-            const pName = p.name.trim();
+            const pEmail  = (p.email || '').trim().toLowerCase();
+            const pName   = p.name.trim();
+            const isLocal = (myEmail && pEmail && pEmail === myEmail) || (myName && pName.toLowerCase() === myName?.toLowerCase());
 
-            // Si es el usuario local actual, asegurarnos de usar sus datos locales más frescos
-            const isLocal = (myEmail && pEmail && pEmail === myEmail) || (myName && pName.toLowerCase() === myName.toLowerCase());
+            const effEmail  = isLocal && myEmail  ? myEmail  : pEmail;
+            const effName   = isLocal && myName   ? myName   : pName;
+            const effAvatar = isLocal && myAvatar ? myAvatar : (p.avatar || '');
+            const effStyle  = isLocal ? myAvatarStyle : (p.avatarStyle || 'circle');
 
-            const effectiveEmail = isLocal && myEmail ? myEmail : pEmail;
-            const effectiveName = isLocal && myName ? myName : pName;
-            const effectiveAvatar = isLocal && myAvatar ? myAvatar : (p.avatar || '');
-            const effectiveStyle = isLocal ? myAvatarStyle : (p.avatarStyle || 'circle');
+            if (effEmail && seenEmails.has(effEmail)) return;
+            if (effName  && seenNames.has(effName.toLowerCase())) return;
+            if (effEmail) seenEmails.add(effEmail);
+            seenNames.add(effName.toLowerCase());
 
-            if (effectiveEmail && seenEmails.has(effectiveEmail)) return;
-            if (effectiveName && seenNames.has(effectiveName.toLowerCase())) return;
-
-            if (effectiveEmail) seenEmails.add(effectiveEmail);
-            seenNames.add(effectiveName.toLowerCase());
-
-            onlineUsers.push({
-                name: effectiveName,
-                email: effectiveEmail,
-                online_at: p.online_at || new Date().toISOString(),
-                avatar: effectiveAvatar,
-                avatarStyle: effectiveStyle
-            });
+            onlineUsers.push({ name: effName, email: effEmail, online_at: p.online_at || new Date().toISOString(), avatar: effAvatar, avatarStyle: effStyle });
         });
     });
 
-    // Si el usuario local está autenticado pero la presencia remota aún no ha sincronizado su frame,
-    // mantenerlo visible de forma estable para evitar parpadeos molestos a (0)
+    // Asegurar que el usuario local esté visible aunque la presencia aún no sincronice
     if (myName && !onlineUsers.some(u => (myEmail && u.email === myEmail) || u.name.toLowerCase() === myName.toLowerCase())) {
-        onlineUsers.unshift({
-            name: myName,
-            email: myEmail,
-            online_at: new Date().toISOString(),
-            avatar: myAvatar || '',
-            avatarStyle: myAvatarStyle
-        });
+        onlineUsers.unshift({ name: myName, email: myEmail, online_at: new Date().toISOString(), avatar: myAvatar || '', avatarStyle: myAvatarStyle });
     }
 
-    // Actualizar contador
     if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;
-
-    // Compartir lista de usuarios en línea globalmente para el buscador de DM
     window.nexusOnlineUsers = onlineUsers;
 
-    // Reconstruir lista
     membersList.innerHTML = '';
-
     onlineUsers.forEach(user => {
-        const isMe = user.name === myName;
+        const isMe    = user.name === myName;
         const initial = user.name.charAt(0).toUpperCase();
-        const bgColors = ['bg-blue', 'bg-purple', 'bg-green', 'bg-orange', 'bg-cyan'];
-        const colorIdx = user.name.charCodeAt(0) % bgColors.length;
-        const bgClass = bgColors[colorIdx];
-        const borderRadius = user.avatarStyle === 'circle' ? '50%' : '8px';
+        const colors  = ['bg-blue','bg-purple','bg-green','bg-orange','bg-cyan'];
+        const bg      = colors[user.name.charCodeAt(0) % colors.length];
+        const radius  = user.avatarStyle === 'circle' ? '50%' : '8px';
 
-        // Construir el HTML del avatar
-        let avatarInnerHtml;
-        if (user.avatar && user.avatar.startsWith('data:image/')) {
-            avatarInnerHtml = `<div class="avatar ${bgClass}" style="background-image: url(${user.avatar}); background-size: cover; background-position: center; border-radius: ${borderRadius}; text-indent: -9999px;"></div>`;
-        } else {
-            avatarInnerHtml = `<div class="avatar ${bgClass}">${initial}</div>`;
-        }
+        const avatarHtml = (user.avatar && user.avatar.startsWith('data:image/'))
+            ? `<div class="avatar ${bg}" style="background-image:url(${user.avatar});background-size:cover;background-position:center;border-radius:${radius};text-indent:-9999px;"></div>`
+            : `<div class="avatar ${bg}">${initial}</div>`;
+
+        const dmBtn = !isMe
+            ? `<button class="member-dm-btn" title="Mensaje directo a ${_escHtml(user.name)}" onclick="(function(e){e.stopPropagation();if(window.openDMWith)window.openDMWith('${user.email.replace(/'/g,"\\'")}','${_escHtml(user.name).replace(/'/g,"\\'")}');})(event)">💬</button>`
+            : '';
 
         const li = document.createElement('li');
         li.className = 'member-item';
         if (isMe) li.id = 'local-user-sidebar-item';
-
-        // Botón DM — solo para otros usuarios, y solo si tienen email disponible
-        const dmBtnHtml = (!isMe)
-            ? `<button class="member-dm-btn" title="Mensaje directo a ${escapeHTMLPresence(user.name)}" onclick="(function(e){
-                e.stopPropagation();
-                if(window.openDMWith) window.openDMWith('${user.email.replace(/'/g, "\\'") || ''}', '${escapeHTMLPresence(user.name).replace(/'/g, "\\'") || ''}');
-              })(event)">💬</button>`
-            : '';
-
         li.innerHTML = `
-            <div class="avatar-container small">
-                ${avatarInnerHtml}
-                <span class="user-status online"></span>
-            </div>
+            <div class="avatar-container small">${avatarHtml}<span class="user-status online"></span></div>
             <div class="member-info">
-                <span class="member-name">${escapeHTMLPresence(user.name)}</span>
+                <span class="member-name">${_escHtml(user.name)}</span>
                 <span class="member-game">${isMe ? 'Tú · En línea' : 'En línea'}</span>
-            </div>
-            ${dmBtnHtml}
-        `;
+            </div>${dmBtn}`;
         membersList.appendChild(li);
     });
 
-    if (onlineUsers.length === 0 && onlineCountEl) {
-        onlineCountEl.textContent = '0';
-    }
-
-    // ── Actualizar canales de voz en el sidebar para TODOS los usuarios ───────
-    // Agrupa los usuarios de la presencia global por su campo voiceChannel
-    // y actualiza los contenedores voice-users-{id} y voice-count-{id}.
-    // Esto permite que usuarios fuera de voz vean quién está en cada canal.
+    // Actualizar canales de voz en sidebar
     const voiceByChannel = {};
     Object.values(presenceState).forEach(presences => {
         presences.forEach(p => {
             if (p && p.voiceChannel && p.name) {
                 if (!voiceByChannel[p.voiceChannel]) voiceByChannel[p.voiceChannel] = [];
-                // Deduplicar por email o nombre
                 const key = (p.email || p.name).toLowerCase();
-                if (!voiceByChannel[p.voiceChannel].some(x => (x.email || x.name).toLowerCase() === key)) {
+                if (!voiceByChannel[p.voiceChannel].some(x => (x.email || x.name).toLowerCase() === key))
                     voiceByChannel[p.voiceChannel].push({ name: p.name, email: p.email || '' });
-                }
             }
         });
     });
 
-    // Actualizar todos los contenedores de voz visibles en el sidebar
     document.querySelectorAll('[id^="voice-users-"]').forEach(container => {
-        const chId = container.id.replace('voice-users-', '');
+        const chId    = container.id.replace('voice-users-', '');
         const members = voiceByChannel[chId] || [];
-        const countBadge = document.getElementById('voice-count-' + chId);
-        if (countBadge) countBadge.textContent = members.length;
-        // Solo redibujar el sidebar-voice-users si el usuario NO está dentro de esa sala
-        // (si está dentro, voice.js → syncVoiceRoomFromPresence ya lo actualiza).
-        const statusPanel = document.getElementById('voice-status-panel');
-        const isInsideVoice = statusPanel && !statusPanel.classList.contains('hidden');
-        if (!isInsideVoice) {
+        const badge   = document.getElementById('voice-count-' + chId);
+        if (badge) badge.textContent = members.length;
+        const insideVoice = document.getElementById('voice-status-panel')?.classList.contains('hidden') === false;
+        if (!insideVoice) {
             container.innerHTML = members.map(m => `
-                <div class="sidebar-voice-user" title="${escapeHTMLPresence(m.name)}">
+                <div class="sidebar-voice-user" title="${_escHtml(m.name)}">
                     <div class="sidebar-user-avatar bg-blue">${m.name.charAt(0).toUpperCase()}</div>
-                    <span class="sidebar-user-name">${escapeHTMLPresence(m.name)}</span>
-                </div>
-            `).join('');
+                    <span class="sidebar-user-name">${_escHtml(m.name)}</span>
+                </div>`).join('');
         }
     });
 }
 
-
-function escapeHTMLPresence(str) {
+function _escHtml(str) {
     if (typeof str !== 'string') return '';
-    return str.replace(/[&<>'"]/g, t =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t)
-    );
+    return str.replace(/[&<>'"]/g, t => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[t] || t));
 }
 
-// ─────────────────────────────────────────────────────────────
-// INICIALIZACIÓN DE SUPABASE
-// Las credenciales están configuradas en el código.
-// El modal de configuración ha sido removido por seguridad.
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// INICIALIZACIÓN PÚBLICA — app.js llama a esta función tras el login
+// ══════════════════════════════════════════════════════════════════════════
 export function initSupabaseSetup() {
-    // Disparar evento para que el resto de la app sepa que Supabase está listo
     window.dispatchEvent(new CustomEvent('supabase-ready', { detail: { client: supabase } }));
     updateStatusIndicator();
 }
 
-function showConnectionSuccess() {
-    updateStatusIndicator();
-
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed; bottom: 24px; right: 24px; z-index: 100001;
-        background: linear-gradient(135deg, #0a1628 0%, #0d1f3c 100%);
-        border: 1px solid #00d4ff; border-radius: 12px;
-        padding: 16px 24px; box-shadow: 0 0 30px rgba(0,212,255,0.3);
-        animation: fadeInUp 0.4s ease; color: #c9d1d9; font-family: 'Inter', sans-serif;
-    `;
-    notification.innerHTML = `
-        <div style="font-weight: 700; color: #00d4ff; font-size: 0.85rem; margin-bottom: 4px; font-family: 'Orbitron', monospace;">⚡ NEXUS CONECTADO</div>
-        <div style="font-size: 0.78rem;">Supabase activo – mensajes en tiempo real habilitados</div>
-    `;
-    document.body.appendChild(notification);
-    setTimeout(() => {
-        notification.style.animation = 'fadeInUp 0.4s ease reverse';
-        setTimeout(() => notification.remove(), 400);
-    }, 4000);
-}
-
 function updateStatusIndicator() {
-    const dot = document.getElementById('supabase-status-dot');
+    const dot  = document.getElementById('supabase-status-dot');
     const text = document.getElementById('supabase-status-text');
-    if (dot && text) {
-        if (supabaseReady && supabase) {
-            dot.style.background = '#22c55e';
-            dot.style.boxShadow = '0 0 6px rgba(34,197,94,0.6)';
-            text.textContent = 'Supabase conectado – tiempo real activo';
-            text.style.color = '#22c55e';
-        } else {
-            dot.style.background = '#ef4444';
-            dot.style.boxShadow = 'none';
-            text.textContent = 'Sin conexión a base de datos';
-            text.style.color = '';
-        }
+    if (!dot || !text) return;
+    if (supabaseReady && supabase) {
+        dot.style.background  = '#22c55e';
+        dot.style.boxShadow   = '0 0 6px rgba(34,197,94,0.6)';
+        text.textContent      = 'Firebase conectado – tiempo real activo';
+        text.style.color      = '#22c55e';
+    } else {
+        dot.style.background  = '#ef4444';
+        dot.style.boxShadow   = 'none';
+        text.textContent      = 'Sin conexión a base de datos';
+        text.style.color      = '';
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// PERFILES DE USUARIO — lectura/escritura en tabla `profiles`
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Obtiene el perfil de un usuario por email desde Supabase.
- * Devuelve null si no existe o hay error.
- * @param {string} email
- * @returns {Promise<object|null>}
- */
+// ══════════════════════════════════════════════════════════════════════════
+// PERFILES DE USUARIO
+// ══════════════════════════════════════════════════════════════════════════
 export async function fetchUserProfile(email) {
-    if (!supabase || !email) return null;
+    if (!_db || !email) return null;
     try {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('email, username, bio, status, banner_url, banner_gradient, social_twitch, social_steam, social_twitter')
-            .eq('email', email.trim().toLowerCase())
-            .single();
-        if (error || !data) return null;
-        return data;
+        // Buscar por document ID (email sanitizado) primero
+        const docId = email.trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+        const snap  = await _db.collection('profiles').doc(docId).get();
+        if (snap.exists) return snap.data();
+
+        // Fallback: buscar por campo email
+        const q = await _db.collection('profiles').where('email', '==', email.trim().toLowerCase()).limit(1).get();
+        return q.empty ? null : q.docs[0].data();
     } catch (e) {
+        console.error('[Profile] fetchUserProfile error:', e);
         return null;
     }
 }
 
-/**
- * Guarda o actualiza el perfil del usuario actual en Supabase.
- * @param {object} profileData  - { email, username, bio, status, banner_url, banner_gradient, social_twitch, social_steam, social_twitter }
- * @returns {Promise<boolean>}  - true si se guardó correctamente
- */
 export async function saveUserProfile(profileData) {
-    if (!supabase || !profileData?.email) return false;
+    if (!_db || !profileData?.email) return false;
     try {
-        const { error } = await supabase
-            .from('profiles')
-            .upsert({
-                email:            profileData.email.trim().toLowerCase(),
-                username:         profileData.username         || '',
-                bio:              profileData.bio              || '',
-                status:           profileData.status           || '',
-                banner_url:       profileData.banner_url       || '',
-                banner_gradient:  profileData.banner_gradient  || 'linear-gradient(135deg,#8b5cf6,#00d4ff)',
-                social_twitch:    profileData.social_twitch    || '',
-                social_steam:     profileData.social_steam     || '',
-                social_twitter:   profileData.social_twitter   || '',
-                updated_at:       new Date().toISOString()
-            }, { onConflict: 'email' });
-        if (error) { console.error('[Profile] Error al guardar perfil:', error.message); return false; }
+        const docId = profileData.email.trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+        await _db.collection('profiles').doc(docId).set({
+            email:           profileData.email.trim().toLowerCase(),
+            username:        profileData.username        || '',
+            bio:             profileData.bio             || '',
+            status:          profileData.status          || '',
+            banner_url:      profileData.banner_url      || '',
+            banner_gradient: profileData.banner_gradient || 'linear-gradient(135deg,#8b5cf6,#00d4ff)',
+            social_twitch:   profileData.social_twitch   || '',
+            social_steam:    profileData.social_steam    || '',
+            social_twitter:  profileData.social_twitter  || '',
+            updated_at:      new Date().toISOString()
+        }, { merge: true });
         return true;
     } catch (e) {
-        console.error('[Profile] Excepción al guardar perfil:', e);
+        console.error('[Profile] saveUserProfile error:', e);
         return false;
     }
 }
 
-/**
- * Sube un archivo de banner a Supabase Storage y devuelve la URL pública.
- * Usa el bucket 'nexus-images' que ya existe.
- * @param {File} file   - Archivo de imagen
- * @param {string} email - Email del usuario (para nombrar el archivo)
- * @returns {Promise<string|null>}
- */
+// ══════════════════════════════════════════════════════════════════════════
+// STORAGE — subir banner de perfil
+// ══════════════════════════════════════════════════════════════════════════
 export async function uploadBannerImage(fileOrBlob, email) {
-    if (!supabase || !fileOrBlob || !email) return null;
+    if (!_storage || !fileOrBlob || !email) return null;
     try {
-        const ext = fileOrBlob.name ? (fileOrBlob.name.split('.').pop().toLowerCase() || 'jpg') : 'jpg';
-        const contentType = fileOrBlob.type || 'image/jpeg';
+        const ext  = fileOrBlob.name ? (fileOrBlob.name.split('.').pop().toLowerCase() || 'jpg') : 'jpg';
         const path = `banners/${email.replace(/[@.]/g, '_')}_${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-            .from('nexus-images')
-            .upload(path, fileOrBlob, { upsert: true, contentType });
-        if (upErr) { console.error('[Banner] Error al subir banner:', upErr.message); return null; }
-        const { data } = supabase.storage.from('nexus-images').getPublicUrl(path);
-        const publicUrl = data?.publicUrl || null;
-        console.log('[Banner] Banner subido exitosamente a Supabase Storage:', publicUrl);
-        return publicUrl;
+        const ref  = _storage.ref(path);
+        await ref.put(fileOrBlob, { contentType: fileOrBlob.type || 'image/jpeg' });
+        const url = await ref.getDownloadURL();
+        console.log('[Banner] Subido a Firebase Storage:', url);
+        return url;
     } catch (e) {
-        console.error('[Banner] Excepción al subir banner:', e);
+        console.error('[Banner] uploadBannerImage error:', e);
         return null;
     }
 }
