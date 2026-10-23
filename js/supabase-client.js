@@ -1,8 +1,8 @@
 /* NEXUS SUPABASE CLIENT MODULE (ES MODULE) */
 
 // ─── Credenciales hardcodeadas — los usuarios no necesitan configurar nada ───
-const NEXUS_SUPABASE_URL = 'https://hibtszckdsbopvijpjuj.supabase.co';
-const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpYnRzeGNrZHNib3B2aWpwanVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTYwNTIsImV4cCI6MjEwODE3MjA1Mn0.oqEuxxkcBQvJo66Puh6Tyh38oOrCapvgroY4dE7e_uM';
+const NEXUS_SUPABASE_URL = 'https://qlydbigebfqrlttjtdal.supabase.co';
+const NEXUS_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFseWRiaWdlZmJxcmx0dGp0ZGFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NzYwMjYsImV4cCI6MjEwODM1MjAyNn0.khvh1RauNtixUOMQ_G-dPrdv0tYQMHq6qPm0Sw7BCIU';
 
 export let supabase = null;
 export let supabaseUrl = NEXUS_SUPABASE_URL;
