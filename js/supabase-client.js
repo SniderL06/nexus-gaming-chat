@@ -17,6 +17,7 @@ const FIREBASE_CONFIG = {
 let _db      = null;   // Firestore
 let _rtdb    = null;   // Realtime Database (presencia)
 let _storage = null;   // Storage (imágenes/banners)
+const _storageUrlCache = new Map();
 
 // ─── Exports públicos (compatibles con el resto de la app) ─────────────────
 export let supabase      = null;
@@ -91,6 +92,21 @@ if (!initFirebase()) {
     }, 80);
 }
 
+function _sanitizeForFirestore(obj) {
+    if (obj === null || obj === undefined) return null;
+    if (typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(_sanitizeForFirestore);
+    const clean = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (v !== undefined) {
+            clean[k] = (typeof v === 'object' && v !== null && !(v instanceof Date))
+                ? _sanitizeForFirestore(v)
+                : v;
+        }
+    }
+    return clean;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // QUERY BUILDER — imita la API fluente de Supabase (.from().select()...)
 // ══════════════════════════════════════════════════════════════════════════
@@ -104,10 +120,17 @@ class _Query {
         this._payload = null;
         this._upsertOpts = null;
         this._isSingle = false;
+        this._selectFields = '*';
     }
 
     // ── Operaciones ───────────────────────────────────────────────────────
-    select()          { this._op = 'select'; return this; }
+    select(fields = '*') {
+        this._selectFields = fields;
+        if (this._op !== 'insert' && this._op !== 'upsert') {
+            this._op = 'select';
+        }
+        return this;
+    }
     insert(data)      { this._op = 'insert'; this._payload = data; return this; }
     upsert(data, opt) { this._op = 'upsert'; this._payload = data; this._upsertOpts = opt; return this; }
     delete()          { this._op = 'delete'; return this; }
@@ -137,11 +160,36 @@ class _Query {
         try {
             let q = _db.collection(this._t);
             this._cond.forEach(c => { q = q.where(c.col, c.op, c.val); });
-            if (this._ord) q = q.orderBy(this._ord.col, this._ord.dir);
-            if (this._lim) q = q.limit(this._lim);
+            
+            let snap;
+            try {
+                let qOrdered = q;
+                if (this._ord) qOrdered = qOrdered.orderBy(this._ord.col, this._ord.dir);
+                if (this._lim) qOrdered = qOrdered.limit(this._lim);
+                snap = await qOrdered.get();
+            } catch (queryErr) {
+                // Fallback automático si Firestore pide índice compuesto (ej: channel_id + created_at)
+                console.warn(`[FB] Consulta sin índice compuesta en ${this._t}, ordenando localmente en memoria:`, queryErr.message);
+                snap = await q.get();
+            }
 
-            const snap = await q.get();
-            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            let data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Si ordenamos en memoria por fallback:
+            if (this._ord && data.length > 0) {
+                const col = this._ord.col;
+                const isAsc = this._ord.dir === 'asc';
+                data.sort((a, b) => {
+                    const valA = a[col] || '';
+                    const valB = b[col] || '';
+                    if (valA < valB) return isAsc ? -1 : 1;
+                    if (valA > valB) return isAsc ? 1 : -1;
+                    return 0;
+                });
+                if (this._lim && data.length > this._lim) {
+                    data = data.slice(0, this._lim);
+                }
+            }
 
             if (this._isSingle) {
                 return data[0]
@@ -163,17 +211,17 @@ class _Query {
             const results = [];
 
             for (const item of items) {
-                const rec = { ...item, created_at: item.created_at || now };
+                const rec = _sanitizeForFirestore({ ...item, created_at: item.created_at || now });
                 // Servidores y canales tienen ID propio (text)
                 if (rec.id && (this._t === 'servers' || this._t === 'channels')) {
                     await col.doc(String(rec.id)).set(rec, { merge: true });
-                    results.push({ id: rec.id });
+                    results.push({ id: rec.id, ...rec });
                 } else {
                     const ref = await col.add(rec);
-                    results.push({ id: ref.id });
+                    results.push({ id: ref.id, ...rec });
                 }
             }
-            const out = Array.isArray(this._payload) ? results : results[0];
+            const out = Array.isArray(this._payload) ? results : [results[0]];
             return { data: out, error: null };
         } catch (e) {
             console.error(`[FB] insert(${this._t}):`, e.message);
@@ -185,7 +233,7 @@ class _Query {
         try {
             const now = new Date().toISOString();
             const col = _db.collection(this._t);
-            const data = this._payload;
+            const data = _sanitizeForFirestore(this._payload);
             const conflict = this._upsertOpts?.onConflict;
 
             // Perfiles usan email como document ID (sanitizado)
@@ -218,13 +266,18 @@ class _Query {
 
     async _delete() {
         try {
+            const idCond = this._cond.find(c => c.col === 'id' && c.op === '==');
+            if (idCond && idCond.val) {
+                await _db.collection(this._t).doc(String(idCond.val)).delete();
+                return { data: null, error: null };
+            }
+
             let q = _db.collection(this._t);
             this._cond.forEach(c => { q = q.where(c.col, c.op, c.val); });
 
             const snap = await q.get();
             if (snap.empty) return { data: null, error: null };
 
-            // Borrar en batch (máx 500 docs por batch — suficiente para cleanup de mensajes)
             const batch = _db.batch();
             snap.docs.forEach(d => batch.delete(d.ref));
             await batch.commit();
@@ -237,18 +290,20 @@ class _Query {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// CHANNEL — imita canales Realtime de Supabase (postgres_changes + presence)
+// CHANNEL — imita canales Realtime de Supabase (postgres_changes + presence + broadcast)
 // ══════════════════════════════════════════════════════════════════════════
 class _Channel {
     constructor(name, options) {
-        this.name       = name;
-        this._opts      = options || {};
-        this._pgHandlers  = [];   // { filter, cb }
-        this._presHandlers = {};  // { sync:[], join:[], leave:[] }
-        this._unsubs    = [];     // funciones de cleanup
-        this._presKey   = options?.config?.presence?.key || ('u_' + Math.random().toString(36).slice(2, 8));
-        this._presState = {};
-        this._rtdbRef   = null;
+        this.name          = name;
+        this._opts         = options || {};
+        this._pgHandlers   = [];   // { filter, cb }
+        this._presHandlers = {};   // { sync:[], join:[], leave:[] }
+        this._bcHandlers   = {};   // { event: [cb] }
+        this._unsubs       = [];   // funciones de cleanup
+        this._presKey      = options?.config?.presence?.key || ('u_' + Math.random().toString(36).slice(2, 8));
+        this._presState    = {};
+        this._rtdbRef      = null;
+        this._bcRef        = null;
     }
 
     on(type, filterOrOpts, cb) {
@@ -258,6 +313,10 @@ class _Channel {
             const ev = filterOrOpts?.event || 'sync';
             if (!this._presHandlers[ev]) this._presHandlers[ev] = [];
             this._presHandlers[ev].push(cb);
+        } else if (type === 'broadcast') {
+            const ev = filterOrOpts?.event || 'message';
+            if (!this._bcHandlers[ev]) this._bcHandlers[ev] = [];
+            this._bcHandlers[ev].push(cb);
         }
         return this;
     }
@@ -270,20 +329,21 @@ class _Channel {
 
             let q = _db.collection(table);
 
-            // Parsear filtro tipo "channel_id=eq.general"
             const fs = filter.filter || '';
             const m = fs.match(/^(\w+)=eq\.(.+)$/);
             if (m) q = q.where(m[1], '==', m[2]);
 
-            // Saltar la carga inicial (solo nuevos docs)
             let firstSnap = true;
             const unsub = q.onSnapshot({ includeMetadataChanges: false }, snap => {
                 if (firstSnap) { firstSnap = false; return; }
                 snap.docChanges().forEach(change => {
+                    const rowData = { id: change.doc.id, ...change.doc.data() };
                     if (change.type === 'added') {
-                        cb({ new: { id: change.doc.id, ...change.doc.data() }, old: null });
+                        cb({ eventType: 'INSERT', new: rowData, old: null });
+                    } else if (change.type === 'modified') {
+                        cb({ eventType: 'UPDATE', new: rowData, old: rowData });
                     } else if (change.type === 'removed') {
-                        cb({ new: null, old: { id: change.doc.id } });
+                        cb({ eventType: 'DELETE', new: null, old: { id: change.doc.id, ...change.doc.data() } });
                     }
                 });
             }, err => console.warn(`[FB] onSnapshot(${table}):`, err.message));
@@ -296,8 +356,52 @@ class _Channel {
             this._startPresence();
         }
 
-        if (statusCb) setTimeout(() => statusCb('SUBSCRIBED'), 150);
+        // ── RTDB Broadcast (DMs y notificaciones efímeras) ────────────────
+        if (Object.keys(this._bcHandlers).length > 0 || this._opts?.config?.broadcast) {
+            this._startBroadcast();
+        }
+
+        if (statusCb) setTimeout(() => statusCb('SUBSCRIBED'), 100);
         return this;
+    }
+
+    _startBroadcast() {
+        if (!_rtdb) return;
+        const safeName = this.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        this._bcRef = _rtdb.ref(`broadcast/${safeName}`);
+        
+        const handler = this._bcRef.limitToLast(1).on('child_added', snap => {
+            const val = snap.val();
+            if (!val || !val.event) return;
+            // No procesar mensajes viejos (> 15 segundos)
+            if (Date.now() - (val._sentAt || 0) > 15000) return;
+            const cbs = this._bcHandlers[val.event] || [];
+            cbs.forEach(cb => {
+                try { cb({ payload: val.payload }); } catch (err) { console.error('[Broadcast CB]', err); }
+            });
+        });
+
+        this._unsubs.push(() => {
+            if (this._bcRef) this._bcRef.off('child_added', handler);
+        });
+    }
+
+    /** Envío de eventos broadcast (Supabase Realtime Broadcast) */
+    send({ type, event, payload }) {
+        if (type === 'broadcast' && _rtdb) {
+            const safeName = this.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const ref = _rtdb.ref(`broadcast/${safeName}`);
+            const itemRef = ref.push();
+            itemRef.set({
+                event: event || 'message',
+                payload,
+                _sentAt: Date.now()
+            }).then(() => {
+                // Auto-borrar broadcast tras 30 segundos
+                setTimeout(() => itemRef.remove().catch(() => {}), 30000);
+            }).catch(e => console.warn('[FB Broadcast send]', e));
+        }
+        return Promise.resolve();
     }
 
     _startPresence() {
@@ -375,13 +479,22 @@ function _createShim() {
             from: (_bucket) => ({
                 upload: async (path, file, opts) => {
                     try {
-                        await _storage.ref(path).put(file, opts || {});
-                        return { error: null };
-                    } catch (e) { return { error: e }; }
+                        const ref = _storage.ref(path);
+                        const snap = await ref.put(file, opts || {});
+                        let downloadUrl = null;
+                        try {
+                            downloadUrl = await snap.ref.getDownloadURL();
+                            if (downloadUrl) _storageUrlCache.set(path, downloadUrl);
+                        } catch (_) {}
+                        return { data: { path, downloadUrl }, error: null };
+                    } catch (e) {
+                        return { data: null, error: e };
+                    }
                 },
-                // Firebase Storage no tiene URL pública síncrona como Supabase.
-                // uploadBannerImage (abajo) usa getDownloadURL() asíncrono directamente.
-                getPublicUrl: (path) => ({ data: { publicUrl: `__fb_storage__${path}` } })
+                getPublicUrl: (path) => {
+                    const url = _storageUrlCache.get(path) || path;
+                    return { data: { publicUrl: url } };
+                }
             })
         }
     };

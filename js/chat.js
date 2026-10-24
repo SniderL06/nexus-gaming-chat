@@ -1102,9 +1102,11 @@ async function sendMessage() {
                     const { data: uploadData, error: uploadErr } = await supabase.storage
                         .from('nexus-images')
                         .upload(fileName, blob, { contentType: mimeType, upsert: false });
-                    if (!uploadErr && uploadData) {
-                        const { data: { publicUrl } } = supabase.storage.from('nexus-images').getPublicUrl(fileName);
-                        newMsg.image = publicUrl;
+                    if (!uploadErr && uploadData && uploadData.downloadUrl) {
+                        newMsg.image = uploadData.downloadUrl;
+                    } else if (!uploadErr && uploadData) {
+                        const { data } = supabase.storage.from('nexus-images').getPublicUrl(fileName);
+                        newMsg.image = (data?.publicUrl && data.publicUrl.startsWith('http')) ? data.publicUrl : activeAttachment.dataUrl;
                     } else {
                         console.warn('[Chat] Storage upload falló, usando base64:', uploadErr?.message);
                         newMsg.image = activeAttachment.dataUrl;
