@@ -558,7 +558,7 @@ export function startGlobalPresence(userName) {
                 await track();
                 console.log(`[Presencia] ${userName} marcado en línea.`);
                 if (_globalPresHeartbeat) clearInterval(_globalPresHeartbeat);
-                _globalPresHeartbeat = setInterval(track, 25_000);
+                _globalPresHeartbeat = setInterval(track, 60_000);
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                 console.warn(`[Presencia] ${status}. Reintentando en 5s...`);
                 setTimeout(() => { if (localStorage.getItem('nexus_user_email')) track(); }, 5000);

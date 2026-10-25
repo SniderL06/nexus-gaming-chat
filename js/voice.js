@@ -1458,6 +1458,27 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         });
     });
 
+    // Atender peticiones de otros peers para ver nuestra transmisión de pantalla en vivo
+    presenceChannel.on('broadcast', { event: 'request-screen-stream' }, ({ payload }) => {
+        if (!payload) return;
+        const myPeerId = localPeerId || (peer ? peer.id : null);
+        if (payload.targetPeerId === myPeerId && state.isStreaming) {
+            import('./stream.js').then(({ activeStream, applyHighQualityVideoBitrate }) => {
+                if (activeStream && peer) {
+                    console.log(`[Stream] Peer ${payload.requesterPeerId} solicitó ver la transmisión. Enviando stream...`);
+                    const videoCall = peer.call(payload.requesterPeerId, activeStream, {
+                        metadata: { type: 'screen' }
+                    });
+                    if (typeof applyHighQualityVideoBitrate === 'function') {
+                        applyHighQualityVideoBitrate(videoCall, '1080p', 60);
+                    }
+                    const peerObj = activePeers.get(payload.requesterPeerId);
+                    if (peerObj) peerObj.videoCall = videoCall;
+                }
+            }).catch(e => console.warn('[Stream] Error al responder petición de stream:', e));
+        }
+    });
+
     await presenceChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             await sendVoicePresence();
@@ -1813,7 +1834,24 @@ export function watchPeerStream(peerId) {
         console.log(`[Stream] Conectando visor a la pantalla de ${peerId}...`);
         playRemoteStream(peerId, peerData.videoStream);
     } else {
-        console.warn(`[Stream] No hay transmisión de vídeo activa disponible para el peer ${peerId}`);
+        console.log(`[Stream] Solicitando stream de vídeo al peer ${peerId}...`);
+        if (presenceChannel) {
+            const myPeerId = localPeerId || (peer ? peer.id : null);
+            presenceChannel.send({
+                type: 'broadcast',
+                event: 'request-screen-stream',
+                payload: { targetPeerId: peerId, requesterPeerId: myPeerId }
+            });
+        }
+        const streamContainer = document.getElementById('stream-container');
+        const placeholder = document.getElementById('stream-placeholder');
+        const titleEl = document.getElementById('stream-user-title');
+        if (streamContainer) streamContainer.classList.remove('hidden');
+        if (placeholder) placeholder.classList.add('hidden');
+        if (titleEl) {
+            const info = activeMembersInRoom.find(m => m.peerId === peerId);
+            titleEl.textContent = `Conectando al directo de ${info ? info.name : 'Usuario'}...`;
+        }
     }
 }
 

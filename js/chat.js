@@ -56,6 +56,37 @@ const memeTemplates = [
 let currentMessages = JSON.parse(JSON.stringify(initialChannelMessages));
 let activeAttachment = null;
 
+// Optimización client-side para no exceder cuotas de Firebase (Spark 1MB doc limit)
+function compressImage(dataUrl, maxDim = 1280, quality = 0.8) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width <= maxDim && height <= maxDim && dataUrl.length < 300000) {
+                return resolve(dataUrl);
+            }
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
 // Emojis list with search keywords
 const emojiData = [
     { char: '😀', tags: 'grinning smile happy face alegre' },
@@ -217,7 +248,7 @@ export function initChat() {
         });
     }
 
-    // Adjunto
+    // Adjunto con compresión automática
     const attachmentBtn = document.getElementById('attachment-btn');
     if (attachmentBtn && fileInput) {
         attachmentBtn.addEventListener('click', () => fileInput.click());
@@ -227,11 +258,52 @@ export function initChat() {
             if (file.size > 15 * 1024 * 1024) { alert('El archivo supera el límite de 15 MB.'); return; }
             const isImage = file.type.startsWith('image/');
             const reader = new FileReader();
-            reader.onload = (event) => {
-                activeAttachment = { name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', dataUrl: event.target.result, isImage, type: file.type };
+            reader.onload = async (event) => {
+                let finalDataUrl = event.target.result;
+                let finalType = file.type;
+                if (isImage && !file.type.includes('gif')) {
+                    finalDataUrl = await compressImage(finalDataUrl);
+                    finalType = 'image/jpeg';
+                }
+                activeAttachment = {
+                    name: file.name,
+                    size: Math.round(finalDataUrl.length * 0.75 / 1024) + ' KB',
+                    dataUrl: finalDataUrl,
+                    isImage,
+                    type: finalType
+                };
                 showAttachmentPreview();
             };
             reader.readAsDataURL(file);
+        });
+    }
+
+    // Soporte para pegar capturas de pantalla / imágenes directamente del portapapeles (Ctrl+V)
+    if (chatTextarea) {
+        chatTextarea.addEventListener('paste', async (e) => {
+            const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    const file = item.getAsFile();
+                    if (!file) continue;
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                        let finalDataUrl = ev.target.result;
+                        finalDataUrl = await compressImage(finalDataUrl);
+                        activeAttachment = {
+                            name: `captura_${Date.now()}.jpg`,
+                            size: Math.round(finalDataUrl.length * 0.75 / 1024) + ' KB',
+                            dataUrl: finalDataUrl,
+                            isImage: true,
+                            type: 'image/jpeg'
+                        };
+                        showAttachmentPreview();
+                    };
+                    reader.readAsDataURL(file);
+                    break;
+                }
+            }
         });
     }
 
@@ -351,10 +423,11 @@ export function initChat() {
 // ─────────────────────────────────────────────────────────────
 // AUTO-LIMPIEZA DE MENSAJES > 24 HORAS (AUTOPRUNING)
 // ─────────────────────────────────────────────────────────────
+let lastPruneExecutionTime = 0;
 async function pruneOldMessages() {
     const cutOff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
-    // Purga en memoria local
+    // Purga en memoria local (rápida y síncrona en cliente)
     const now = Date.now();
     for (const chId in currentMessages) {
         if (Array.isArray(currentMessages[chId])) {
@@ -362,7 +435,11 @@ async function pruneOldMessages() {
         }
     }
 
-    // Purga en Supabase si la base de datos está conectada
+    // Ahorro de cuota Firebase: ejecutar la purga en base de datos máximo 1 vez cada 30 minutos
+    if (now - lastPruneExecutionTime < 30 * 60 * 1000) return;
+    lastPruneExecutionTime = now;
+
+    // Purga en Firebase si la base de datos está conectada
     if (supabaseReady && supabase) {
         try {
             await supabase.from('messages').delete().lt('created_at', cutOff);

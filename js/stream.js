@@ -1,7 +1,7 @@
 /* NEXUS REAL-TIME SCREEN CAPTURE & GAME STREAMING ENGINE (ES MODULE) */
 
 import { state, updateRenderLatency } from './app.js';
-import { peer, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream } from './voice.js';
+import { peer, localPeerId, activePeers, isMultiplayerMode, presenceChannel, getMicrophoneStream } from './voice.js';
 
 export let activeStream = null;
 let streamVideoElement = null;
@@ -224,7 +224,7 @@ async function startLocalStream() {
                 presenceChannel.track({
                     name: myName,
                     email: email.toLowerCase(),
-                    peerId: peer ? peer.id : null,
+                    peerId: localPeerId || (peer ? peer.id : null),
                     avatar: myAvatar,
                     avatarStyle: myAvatarStyle,
                     isMuted: state.isMuted,
@@ -301,7 +301,7 @@ export function stopLocalStream() {
             presenceChannel.track({
                 name: myName,
                 email: email.toLowerCase(),
-                peerId: peer ? peer.id : null,
+                peerId: localPeerId || (peer ? peer.id : null),
                 avatar: myAvatar,
                 avatarStyle: myAvatarStyle,
                 isMuted: state.isMuted,
