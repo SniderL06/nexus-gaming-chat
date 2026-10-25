@@ -70,22 +70,154 @@ function stopAudioCtxWatchdog() {
     }
 }
 
-// Resume el AudioContext cuando el usuario vuelve al tab (tab visibility change)
-document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && audioCtx) {
-        if (audioCtx.state === 'suspended') {
-            console.log('[VisibilityChange] Tab reactivado — resumiendo AudioContext...');
-            try {
-                await audioCtx.resume();
-                console.log('[VisibilityChange] AudioContext resumido.');
-            } catch (e) {}
+// ─────────────────────────────────────────────────────────────
+// KEEPALIVE EN SEGUNDO PLANO (ANDROID / MOBILE / PWA)
+// Evita que Android congele Chrome/WebRTC al cambiar de pestaña o abrir juegos
+// ─────────────────────────────────────────────────────────────
+const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+let backgroundAudioKeepAlive = null;
+let wakeLockSentinel = null;
+
+async function startBackgroundAudioKeepAlive(channelName) {
+    try {
+        if (!backgroundAudioKeepAlive) {
+            backgroundAudioKeepAlive = document.createElement('audio');
+            backgroundAudioKeepAlive.id = 'nexus-background-keepalive';
+            backgroundAudioKeepAlive.src = SILENT_AUDIO_URI;
+            backgroundAudioKeepAlive.loop = true;
+            backgroundAudioKeepAlive.autoplay = true;
+            backgroundAudioKeepAlive.playsInline = true;
+            backgroundAudioKeepAlive.volume = 0.01;
+            // Estilo invisible pero en el árbol DOM renderizado (evita recolección de Android)
+            backgroundAudioKeepAlive.style.position = 'fixed';
+            backgroundAudioKeepAlive.style.width = '1px';
+            backgroundAudioKeepAlive.style.height = '1px';
+            backgroundAudioKeepAlive.style.opacity = '0.01';
+            backgroundAudioKeepAlive.style.pointerEvents = 'none';
+            backgroundAudioKeepAlive.style.left = '-9999px';
+            document.body.appendChild(backgroundAudioKeepAlive);
         }
-        // Si hay microphoneStream pero la pista está inactiva, reiniciar el motor
-        if (microphoneStream) {
-            const track = microphoneStream.getAudioTracks()[0];
-            if (track && track.readyState === 'ended') {
-                console.warn('[VisibilityChange] Pista de micrófono terminada — reiniciando motor de audio...');
-                if (state.activeVoiceChannel) {
+        await backgroundAudioKeepAlive.play().catch(() => {});
+
+        // MediaSession API: Android registra un servicio de reproducción en primer plano
+        // que impide al sistema operativo suspender el proceso o congelar el audio WebRTC
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Nexus Gaming Chat — Sala de Voz',
+                artist: `Canal: #${channelName || 'general'}`,
+                album: 'Nexus Voice Chat',
+                artwork: [
+                    { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                    { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                ]
+            });
+            navigator.mediaSession.playbackState = 'playing';
+
+            navigator.mediaSession.setActionHandler('pause', () => {
+                toggleMute();
+            });
+            navigator.mediaSession.setActionHandler('play', () => {
+                toggleMute();
+            });
+            navigator.mediaSession.setActionHandler('stop', () => {
+                disconnectVoiceChannel();
+            });
+        }
+
+        // WakeLock para evitar suspensión de pantalla
+        if ('wakeLock' in navigator && !wakeLockSentinel) {
+            try {
+                wakeLockSentinel = await navigator.wakeLock.request('screen');
+                wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+            } catch (_) {}
+        }
+    } catch (e) {
+        console.warn('[KeepAlive] Error iniciando keepalive de segundo plano:', e);
+    }
+}
+
+function stopBackgroundAudioKeepAlive() {
+    if (backgroundAudioKeepAlive) {
+        backgroundAudioKeepAlive.pause();
+        backgroundAudioKeepAlive.remove();
+        backgroundAudioKeepAlive = null;
+    }
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'none';
+    }
+    if (wakeLockSentinel) {
+        try { wakeLockSentinel.release(); } catch (_) {}
+        wakeLockSentinel = null;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONTROL DE VISIBILIDAD DE PESTAÑA (TAB VISIBILITY & BACKGROUND)
+// ─────────────────────────────────────────────────────────────
+document.addEventListener('visibilitychange', async () => {
+    const isHidden = document.visibilityState === 'hidden';
+    console.log(`[VisibilityChange] Estado de pestaña: ${document.visibilityState}`);
+
+    if (state.activeVoiceChannel) {
+        // 1. Asegurar que el keepalive siga activo
+        if (backgroundAudioKeepAlive && backgroundAudioKeepAlive.paused) {
+            backgroundAudioKeepAlive.play().catch(() => {});
+        }
+
+        // 2. Asegurar que los audios remotos de todos los participantes sigan reproduciéndose
+        activePeers.forEach(({ audioEl }, peerId) => {
+            if (audioEl && audioEl.srcObject && audioEl.paused) {
+                console.log(`[Audio WebRTC] Reanudando audio remoto de peer ${peerId} tras cambio de visibilidad.`);
+                audioEl.play().catch(() => {});
+            }
+        });
+
+        // 3. Respaldo de micrófono para Android:
+        // Si el usuario cambia a un juego o minimiza, Android suspende AudioContext.
+        // Cambiamos inmediatamente el sender de WebRTC a la pista física cruda (microphoneStream)
+        // para que la captura de voz continúe sin interrupción.
+        if (isHidden) {
+            if (microphoneStream && microphoneStream.getAudioTracks().length > 0) {
+                const rawTrack = microphoneStream.getAudioTracks()[0];
+                if (rawTrack && rawTrack.readyState === 'live') {
+                    activePeers.forEach((peerData) => {
+                        const pc = peerData.call?.peerConnection;
+                        if (pc) {
+                            const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                            if (sender && sender.track !== rawTrack) {
+                                sender.replaceTrack(rawTrack).catch(() => {});
+                            }
+                        }
+                    });
+                }
+            }
+        } else {
+            // Al volver a la app, reanudar AudioContext y restaurar pista procesada si está activa
+            if (audioCtx && audioCtx.state === 'suspended') {
+                try {
+                    await audioCtx.resume();
+                    console.log('[VisibilityChange] AudioContext resumido al volver a primer plano.');
+                } catch (e) {}
+            }
+            if (processedStream && audioCtx && audioCtx.state === 'running') {
+                const filteredTrack = processedStream.getAudioTracks()[0];
+                if (filteredTrack && filteredTrack.readyState === 'live') {
+                    activePeers.forEach((peerData) => {
+                        const pc = peerData.call?.peerConnection;
+                        if (pc) {
+                            const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                            if (sender && sender.track !== filteredTrack) {
+                                sender.replaceTrack(filteredTrack).catch(() => {});
+                            }
+                        }
+                    });
+                }
+            }
+            // Si la pista de hardware murió por completo, reiniciar motor de audio
+            if (microphoneStream) {
+                const track = microphoneStream.getAudioTracks()[0];
+                if (track && track.readyState === 'ended') {
+                    console.warn('[VisibilityChange] Pista de micrófono terminada — reiniciando motor de audio...');
                     await startAudioEngine();
                 }
             }
@@ -1157,6 +1289,7 @@ export async function joinVoiceChannel(channelId, channelName) {
 
     // Iniciar motor de audio real (micrófono)
     await startAudioEngine();
+    startBackgroundAudioKeepAlive(channelName);
 
     // Decidir modo: Multiplayer (Supabase+PeerJS) o Local simulado
     if (supabaseReady && supabase && window.Peer) {
@@ -1758,8 +1891,12 @@ function playRemoteStream(peerId, remoteStream) {
         audioEl = document.createElement('audio');
         audioEl.id = `remote-audio-${peerId}`;
         audioEl.autoplay = true;
-        audioEl.playsInline = true;
-        audioEl.style.display = 'none';
+        audioEl.style.position = 'fixed';
+        audioEl.style.width = '1px';
+        audioEl.style.height = '1px';
+        audioEl.style.opacity = '0.01';
+        audioEl.style.pointerEvents = 'none';
+        audioEl.style.left = '-9999px';
         document.body.appendChild(audioEl);
 
         // Si el navegador o webview pausa el elemento de audio remotamente, forzar play()
@@ -1933,6 +2070,7 @@ export function disconnectVoiceChannel(triggerUI = true) {
 
     // Detener analizador y streams reales
     stopAudioEngine();
+    stopBackgroundAudioKeepAlive();
 
     // Detener simulador de habla virtual (modo local)
     if (voiceSpeakerLoopInterval) {
