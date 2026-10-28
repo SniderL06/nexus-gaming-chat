@@ -6,6 +6,7 @@
     "copy-dist": "node scripts/prepare-dist.js",
     "tauri": "tauri",
     "build:app": "node scripts/prepare-dist.js && tauri build",
+    "build:linux": "node scripts/prepare-dist.js && tauri build --bundles appimage,deb",
     "generate:latest": "node scripts/generate-latest-json.js"
   }
 }

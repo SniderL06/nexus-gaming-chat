@@ -1,0 +1,65 @@
+# Este archivo es la configuración de GitHub Actions para compilar automáticamente
+# tanto Windows (.exe) como Linux (.AppImage y .deb) y subirlos a GitHub Releases.
+#
+# Para activarlo en GitHub:
+# 1. En GitHub.com ve a tu repositorio: https://github.com/SniderL06/nexus-gaming-chat
+# 2. Entra en la carpeta .github/workflows/ y edita "release.yml"
+# 3. Pega este contenido completo y haz commit.
+#
+# (GitHub requiere que el archivo en .github/workflows/ se edite desde la web o con un
+# token que tenga el permiso 'workflow' activado).
+
+name: Release Nexus (Auto-Updater)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+          - platform: ubuntu-22.04
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libayatana-appindicator3-dev
+
+      - name: Prepare Frontend Dist
+        run: node scripts/prepare-dist.js
+
+      - name: Build and Release with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Nexus v__VERSION__'
+          releaseBody: 'Actualización automática de Nexus Gaming Chat para Windows y Linux (AppImage / .deb). Incluye mejoras de rendimiento y estabilidad.'
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
