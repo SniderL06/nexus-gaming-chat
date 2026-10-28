@@ -26,8 +26,25 @@ class AudioContextMock {
   createOscillator() { return Object.assign(new AudioNodeMock('OscillatorNode'), { start: () => {}, stop: () => {} }); }
   createDynamicsCompressor() { return new AudioNodeMock('DynamicsCompressorNode'); }
   createWaveShaper() { return new AudioNodeMock('WaveShaperNode'); }
-  createAnalyser() { return Object.assign(new AudioNodeMock('AnalyserNode'), { frequencyBinCount: 128, getByteTimeDomainData: () => {} }); }
+  createAnalyser() { return Object.assign(new AudioNodeMock('AnalyserNode'), { frequencyBinCount: 128, getByteTimeDomainData: () => {}, getFloatFrequencyData: () => {}, getFloatTimeDomainData: () => {} }); }
   createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ kind: 'audio' }] } }; }
+  createBuffer(channels, length, sampleRate) {
+    return {
+      getChannelData: () => new Float32Array(length),
+      duration: length / (sampleRate || 48000),
+      length,
+      numberOfChannels: channels,
+      sampleRate: sampleRate || 48000
+    };
+  }
+  createBufferSource() {
+    return Object.assign(new AudioNodeMock('AudioBufferSourceNode'), {
+      buffer: null,
+      loop: false,
+      start: () => {},
+      stop: () => {}
+    });
+  }
 }
 
 const audioCtx = new AudioContextMock();
@@ -37,6 +54,8 @@ const voiceCode = fs.readFileSync('js/voice.js', 'utf8');
 
 // Extraer funciones
 const makeDistortionCurveMatch = voiceCode.match(/function makeDistortionCurve[\s\S]*?\n\}/);
+const createPitchShifterMatch = voiceCode.match(/function createDualDelayPitchShifter[\s\S]*?\n\}/);
+const createSmartNoiseMatch = voiceCode.match(/function createSmartNoiseSuppressor[\s\S]*?\n\}/);
 const buildFilterChainMatch = voiceCode.match(/function buildFilterChain[\s\S]*?\n\}/);
 
 if (!makeDistortionCurveMatch || !buildFilterChainMatch) {
@@ -45,6 +64,8 @@ if (!makeDistortionCurveMatch || !buildFilterChainMatch) {
 }
 
 eval(makeDistortionCurveMatch[0]);
+if (createPitchShifterMatch) eval(createPitchShifterMatch[0]);
+if (createSmartNoiseMatch) eval(createSmartNoiseMatch[0]);
 eval(buildFilterChainMatch[0]);
 
 const filters = ['noise', 'none', 'extreme', 'robot', 'radio', 'megaphone', 'echo', 'bass', 'chipmunk'];
