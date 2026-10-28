@@ -1,6 +1,18 @@
 const { app, BrowserWindow, shell, session } = require('electron');
 const path = require('path');
 
+// ═════════════════════════════════════════════════════════════════════════════
+// OPTIMIZACIONES EXTREMAS DE MEMORIA RAM Y CPU PARA NEXUS GAMING CLIENT
+// ═════════════════════════════════════════════════════════════════════════════
+app.commandLine.appendSwitch('disable-renderer-backgrounding'); // Mantiene audio WebRTC fluido sin dormir hilos de voz
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128'); // Limita el heap de JS a 128 MB (en vez de 4GB que usa Electron estándar)
+app.commandLine.appendSwitch('disable-extensions'); // Sin extensiones pesadas de Chrome
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-breakpad'); // Sin telemetría ni crash reporter de Google
+app.commandLine.appendSwitch('enable-gpu-rasterization'); // Rendimiento GPU fluido en juegos
+app.commandLine.appendSwitch('enable-zero-copy');
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -15,7 +27,8 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false, // Permite cargar CDNs y anuncios sin bloqueo de CORS
       allowRunningInsecureContent: true,
-      autoplayPolicy: 'no-user-gesture-required'
+      autoplayPolicy: 'no-user-gesture-required',
+      backgroundThrottling: false // No congela canales de voz en segundo plano mientras juegas
     },
     icon: path.join(__dirname, 'assets/icons/icon-192.png')
   });
