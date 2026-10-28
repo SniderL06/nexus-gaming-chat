@@ -13,7 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest]
+        include:
+          - platform: windows-latest
+          - platform: ubuntu-22.04
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -28,6 +30,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libayatana-appindicator3-dev
+
       - name: Prepare Frontend Dist
         run: node scripts/prepare-dist.js
 
@@ -40,7 +48,9 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'Nexus v__VERSION__'
-          releaseBody: 'Actualización automática de Nexus Gaming Chat. Incluye mejoras de rendimiento y estabilidad.'
+          releaseBody: 'Actualización automática de Nexus Gaming Chat para Windows y Linux (AppImage / .deb).'
           releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
           prerelease: false
           includeUpdaterJson: true
