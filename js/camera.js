@@ -160,11 +160,13 @@ export function stopCamera() {
 
 // ─── Attach camera video to local user's voice card ──
 export function attachLocalCameraToCard() {
-    const myEmail = localStorage.getItem('nexus_user_email') || '';
+    if (!cameraStream) return;
     const myName = getLocalUserName();
-    const cardId = `voice-member-${myName.replace(/\s+/g, '-')}`;
-    const card = document.getElementById(cardId);
-    if (!card || !cameraStream) return;
+    const card = document.querySelector('.voice-member-card[data-is-local="true"]') ||
+                 (localPeerId && document.getElementById(`voice-member-${localPeerId}`)) ||
+                 document.getElementById(`voice-member-${myName.replace(/\s+/g, '-')}`) ||
+                 document.querySelector(`.voice-member-card[data-name="${myName}"]`);
+    if (!card) return;
 
     card.classList.add('has-camera');
 
@@ -180,6 +182,7 @@ export function attachLocalCameraToCard() {
     }
     videoEl.srcObject = cameraStream;
     videoEl.classList.add('active');
+    videoEl.play().catch(() => {});
 
     // Badge
     if (!card.querySelector('.voice-camera-badge')) {
@@ -191,14 +194,11 @@ export function attachLocalCameraToCard() {
 }
 
 function detachLocalCameraFromCard() {
-    const myEmail = localStorage.getItem('nexus_user_email') || '';
-    let myName = 'Usuario Nexus';
-    if (myEmail) {
-        const base = myEmail.split('@')[0];
-        myName = base.charAt(0).toUpperCase() + base.slice(1);
-    }
-    const cardId = `voice-member-${myName.replace(/\s+/g, '-')}`;
-    const card = document.getElementById(cardId);
+    const myName = getLocalUserName();
+    const card = document.querySelector('.voice-member-card[data-is-local="true"]') ||
+                 (localPeerId && document.getElementById(`voice-member-${localPeerId}`)) ||
+                 document.getElementById(`voice-member-${myName.replace(/\s+/g, '-')}`) ||
+                 document.querySelector(`.voice-member-card[data-name="${myName}"]`);
     if (!card) return;
 
     card.classList.remove('has-camera');
@@ -213,11 +213,19 @@ function detachLocalCameraFromCard() {
 
 // ─── Attach a remote camera stream to a peer's card ──
 export function attachRemoteCameraToCard(peerId, stream, remoteName) {
-    const cardId = `voice-member-${remoteName.replace(/\s+/g, '-')}`;
-    const card = document.getElementById(cardId);
+    let card = null;
+    if (peerId) {
+        card = document.getElementById(`voice-member-${peerId}`) ||
+               document.querySelector(`.voice-member-card[data-peer-id="${peerId}"]`);
+    }
+    if (!card && remoteName) {
+        card = document.querySelector(`.voice-member-card[data-name="${remoteName}"]`) ||
+               document.getElementById(`voice-member-${remoteName.replace(/\s+/g, '-')}`);
+    }
+
     if (!card) {
-        console.warn(`[Camera] Tarjeta no encontrada para ${remoteName}, reintentando en 500ms...`);
-        setTimeout(() => attachRemoteCameraToCard(peerId, stream, remoteName), 500);
+        console.warn(`[Camera] Tarjeta no encontrada aún para peer ${peerId} (${remoteName}), reintentando...`);
+        setTimeout(() => attachRemoteCameraToCard(peerId, stream, remoteName), 250);
         return;
     }
 
@@ -234,6 +242,7 @@ export function attachRemoteCameraToCard(peerId, stream, remoteName) {
     }
     videoEl.srcObject = stream;
     videoEl.classList.add('active');
+    videoEl.play().catch(() => {});
 
     if (!card.querySelector('.voice-camera-badge')) {
         const badge = document.createElement('span');
@@ -248,13 +257,20 @@ export function attachRemoteCameraToCard(peerId, stream, remoteName) {
     // Clean up when the remote track ends
     stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         remoteCameraStreams.delete(peerId);
-        detachRemoteCameraFromCard(remoteName);
+        detachRemoteCameraFromCard(remoteName, peerId);
     });
 }
 
-export function detachRemoteCameraFromCard(remoteName) {
-    const cardId = `voice-member-${remoteName.replace(/\s+/g, '-')}`;
-    const card = document.getElementById(cardId);
+export function detachRemoteCameraFromCard(remoteName, peerId) {
+    let card = null;
+    if (peerId) {
+        card = document.getElementById(`voice-member-${peerId}`) ||
+               document.querySelector(`.voice-member-card[data-peer-id="${peerId}"]`);
+    }
+    if (!card && remoteName) {
+        card = document.querySelector(`.voice-member-card[data-name="${remoteName}"]`) ||
+               document.getElementById(`voice-member-${remoteName.replace(/\s+/g, '-')}`);
+    }
     if (!card) return;
     card.classList.remove('has-camera');
     const videoEl = card.querySelector('.voice-member-video');

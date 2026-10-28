@@ -245,6 +245,106 @@ function makeDistortionCurve(amount) {
     return curve;
 }
 
+/**
+ * Motor de cambio de tono (Pitch Shifter) en tiempo real con doble línea de delay solapada (Hann windowing).
+ * Elimina chasquidos, zumbidos y aliasing metálico.
+ */
+function createDualDelayPitchShifter(ctx, pitchRatio) {
+    const grainDuration = 0.055; // 55ms ventana acústica natural para formantes de habla
+    const sampleRate = ctx.sampleRate || 48000;
+    const bufferLength = Math.max(256, Math.floor(sampleRate * grainDuration));
+
+    const input = ctx.createGain();
+    const output = ctx.createGain();
+
+    const delay1 = ctx.createDelay(0.2);
+    const delay2 = ctx.createDelay(0.2);
+    const gain1 = ctx.createGain();
+    const gain2 = ctx.createGain();
+
+    // Rampa de modulación y ventanas de desvanecimiento suave (Hann)
+    const delayBuffer1 = ctx.createBuffer(1, bufferLength, sampleRate);
+    const delayBuffer2 = ctx.createBuffer(1, bufferLength, sampleRate);
+    const gainBuffer1 = ctx.createBuffer(1, bufferLength, sampleRate);
+    const gainBuffer2 = ctx.createBuffer(1, bufferLength, sampleRate);
+
+    const d1 = delayBuffer1.getChannelData(0);
+    const d2 = delayBuffer2.getChannelData(0);
+    const g1 = gainBuffer1.getChannelData(0);
+    const g2 = gainBuffer2.getChannelData(0);
+
+    const slope = 1.0 - pitchRatio;
+    const maxDelay = Math.min(0.15, Math.abs(slope) * grainDuration);
+
+    for (let i = 0; i < bufferLength; i++) {
+        const t1 = i / bufferLength;
+        const t2 = (t1 + 0.5) % 1.0;
+
+        if (slope < 0) {
+            // Pitch UP (Ardilla): el tiempo de retardo decrece linealmente
+            d1[i] = maxDelay * (1.0 - t1);
+            d2[i] = maxDelay * (1.0 - t2);
+        } else {
+            // Pitch DOWN (Grave): el tiempo de retardo crece linealmente
+            d1[i] = maxDelay * t1;
+            d2[i] = maxDelay * t2;
+        }
+
+        // Ventana Hann simétrica: cuando una rampa se reinicia, su ganancia es EXACTAMENTE 0 (cero clics/artefactos)
+        g1[i] = 0.5 * (1.0 - Math.cos(2 * Math.PI * t1));
+        g2[i] = 0.5 * (1.0 - Math.cos(2 * Math.PI * t2));
+    }
+
+    const modRamp1 = ctx.createBufferSource();
+    modRamp1.buffer = delayBuffer1;
+    modRamp1.loop = true;
+
+    const modRamp2 = ctx.createBufferSource();
+    modRamp2.buffer = delayBuffer2;
+    modRamp2.loop = true;
+
+    const modGain1 = ctx.createBufferSource();
+    modGain1.buffer = gainBuffer1;
+    modGain1.loop = true;
+
+    const modGain2 = ctx.createBufferSource();
+    modGain2.buffer = gainBuffer2;
+    modGain2.loop = true;
+
+    delay1.delayTime.value = 0;
+    delay2.delayTime.value = 0;
+    gain1.gain.value = 0;
+    gain2.gain.value = 0;
+
+    modRamp1.connect(delay1.delayTime);
+    modRamp2.connect(delay2.delayTime);
+    modGain1.connect(gain1.gain);
+    modGain2.connect(gain2.gain);
+
+    input.connect(delay1);
+    input.connect(delay2);
+    delay1.connect(gain1);
+    delay2.connect(gain2);
+    gain1.connect(output);
+    gain2.connect(output);
+
+    modRamp1.start();
+    modRamp2.start();
+    modGain1.start();
+    modGain2.start();
+
+    const cleanup = () => {
+        try {
+            modRamp1.stop(); modRamp2.stop(); modGain1.stop(); modGain2.stop();
+            modRamp1.disconnect(); modRamp2.disconnect(); modGain1.disconnect(); modGain2.disconnect();
+            input.disconnect(); delay1.disconnect(); delay2.disconnect();
+            gain1.disconnect(); gain2.disconnect(); output.disconnect();
+        } catch (_) {}
+    };
+
+    return { input, output, cleanup };
+}
+
 // Construir cadena de filtros y retornar el nodo de salida
 function buildFilterChain(filterName, inputNode) {
     // Limpiar filtro anterior
@@ -620,110 +720,107 @@ function buildFilterChain(filterName, inputNode) {
         }
 
         case 'bass': {
-            // Voz grave: boost de bajas frecuencias
-            const peak = audioCtx.createBiquadFilter();
-            peak.type = 'peaking';
-            peak.frequency.value = 150;
-            peak.Q.value = 1;
-            peak.gain.value = 12;
+            // ─── FILTRO VOZ GRAVE REALÍSTICA (-5 semitonos, pitch ratio 0.75) ───
+            const shifter = createDualDelayPitchShifter(audioCtx, 0.75);
 
-            const lowShelf = audioCtx.createBiquadFilter();
-            lowShelf.type = 'lowshelf';
-            lowShelf.frequency.value = 400;
-            lowShelf.gain.value = 6;
+            // Realce de resonancia de pecho y sub-armónicos cálidos (110Hz a 180Hz)
+            const subWarmth = audioCtx.createBiquadFilter();
+            subWarmth.type = 'peaking';
+            subWarmth.frequency.value = 140;
+            subWarmth.Q.value = 1.2;
+            subWarmth.gain.value = 6.0;
 
+            // Suave atenuación de siseos agudos para enfatizar la profundidad
+            const highCut = audioCtx.createBiquadFilter();
+            highCut.type = 'lowpass';
+            highCut.frequency.value = 5200;
+            highCut.Q.value = 0.8;
+
+            // Compresor de voz para nivelar volumen
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -12;
-            comp.ratio.value = 3;
+            comp.threshold.value = -22;
+            comp.knee.value = 4;
+            comp.ratio.value = 4;
+            comp.attack.value = 0.005;
+            comp.release.value = 0.08;
 
-            inputNode.connect(peak);
-            peak.connect(lowShelf);
-            lowShelf.connect(comp);
+            const makeup = audioCtx.createGain();
+            makeup.gain.value = 1.35;
 
-            filterCleanupFns.push(() => { try { peak.disconnect(); lowShelf.disconnect(); comp.disconnect(); } catch(e){} });
-            return comp;
+            inputNode.connect(shifter.input);
+            shifter.output.connect(subWarmth);
+            subWarmth.connect(highCut);
+            highCut.connect(comp);
+            comp.connect(makeup);
+
+            filterCleanupFns.push(() => {
+                shifter.cleanup();
+                try {
+                    subWarmth.disconnect();
+                    highCut.disconnect();
+                    comp.disconnect();
+                    makeup.disconnect();
+                } catch(_) {}
+            });
+            return makeup;
         }
 
         case 'chipmunk': {
-            // ─── FILTRO ARDILLA (CHIPMUNK) REALÍSTICO ───
-            // 1. Corte drástico de frecuencias graves (por debajo de 500Hz)
+            // ─── FILTRO ARDILLA REALÍSTICA (+7.5 semitonos, pitch ratio 1.52) ───
             const hp = audioCtx.createBiquadFilter();
             hp.type = 'highpass';
-            hp.frequency.value = 520;
-            hp.Q.value = 1.6;
+            hp.frequency.value = 320;
+            hp.Q.value = 1.0;
 
-            // 2. Resonancia de formante alta (efecto cavidad vocal pequeña, típica de ardilla)
-            const formant1 = audioCtx.createBiquadFilter();
-            formant1.type = 'peaking';
-            formant1.frequency.value = 1600;
-            formant1.Q.value = 2.5;
-            formant1.gain.value = 14;
+            const shifter = createDualDelayPitchShifter(audioCtx, 1.52);
 
-            const formant2 = audioCtx.createBiquadFilter();
-            formant2.type = 'peaking';
-            formant2.frequency.value = 3200;
-            formant2.Q.value = 2.0;
-            formant2.gain.value = 16;
+            // Realce de formante aguda y presencia brillante
+            const formant = audioCtx.createBiquadFilter();
+            formant.type = 'peaking';
+            formant.frequency.value = 3000;
+            formant.Q.value = 1.8;
+            formant.gain.value = 4.5;
 
-            const highShelf = audioCtx.createBiquadFilter();
-            highShelf.type = 'highshelf';
-            highShelf.frequency.value = 4500;
-            highShelf.gain.value = 12;
-
-            // 3. Modulación de tono vibrato rápido / pitch-shifter simulado con oscilador de delay
-            const delay = audioCtx.createDelay(0.1);
-            delay.delayTime.value = 0.012;
-
-            const lfo = audioCtx.createOscillator();
-            lfo.type = 'sawtooth';
-            lfo.frequency.value = 14; // Modulación rápida que eleva el tono percibido
-
-            const lfoGain = audioCtx.createGain();
-            lfoGain.gain.value = 0.005; // 5ms de profundidad
-
-            lfo.connect(lfoGain);
-            lfoGain.connect(delay.delayTime);
-            lfo.start();
-
-            // Compresión rápida para voz apretada de ardilla
             const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -18;
-            comp.ratio.value = 6;
+            comp.threshold.value = -20;
+            comp.ratio.value = 5;
             comp.attack.value = 0.002;
-            comp.release.value = 0.05;
+            comp.release.value = 0.06;
 
-            // Ganancia de salida
-            const outputBoost = audioCtx.createGain();
-            outputBoost.gain.value = 2.2;
+            const boost = audioCtx.createGain();
+            boost.gain.value = 1.35;
 
-            // Encadenado: input -> hp -> formant1 -> formant2 -> highShelf -> delay -> comp -> outputBoost
             inputNode.connect(hp);
-            hp.connect(formant1);
-            formant1.connect(formant2);
-            formant2.connect(highShelf);
-            highShelf.connect(delay);
-            delay.connect(comp);
-            comp.connect(outputBoost);
+            hp.connect(shifter.input);
+            shifter.output.connect(formant);
+            formant.connect(comp);
+            comp.connect(boost);
 
             filterCleanupFns.push(() => {
+                shifter.cleanup();
                 try {
-                    lfo.stop();
-                    lfo.disconnect();
-                    lfoGain.disconnect();
-                    delay.disconnect();
                     hp.disconnect();
-                    formant1.disconnect();
-                    formant2.disconnect();
-                    highShelf.disconnect();
+                    formant.disconnect();
                     comp.disconnect();
-                    outputBoost.disconnect();
-                } catch(e){}
+                    boost.disconnect();
+                } catch(_) {}
             });
-            return outputBoost;
+            return boost;
         }
 
-        default: // 'none' — sin filtro
-            return inputNode;
+        case 'none':
+        default: {
+            // ─── SIN FILTRO: MICRÓFONO NATURAL DIRECTO ───
+            // Audio transparente, sin compresión, sin puerta de ruido, máxima fidelidad
+            const passThrough = audioCtx.createGain();
+            passThrough.gain.value = 1.0;
+            inputNode.connect(passThrough);
+
+            filterCleanupFns.push(() => {
+                try { passThrough.disconnect(); } catch(_) {}
+            });
+            return passThrough;
+        }
     }
 }
 
@@ -1444,6 +1541,22 @@ async function joinMultiplayerVoice(channelId) {
                     }, 500);
                 }
             }).catch(() => {});
+
+            // Si la cámara está activa localmente, compartirla también con quien nos llama
+            import('./camera.js').then(({ isCameraActive, getCameraStream }) => {
+                if (isCameraActive()) {
+                    const camStream = getCameraStream();
+                    if (camStream && peer) {
+                        setTimeout(() => {
+                            const peerObj = activePeers.get(call.peer);
+                            if (peerObj && !peerObj.cameraCall) {
+                                console.log(`[Camera] Compartiendo cámara con participante entrante: ${call.peer}`);
+                                peerObj.cameraCall = peer.call(call.peer, camStream, { metadata: { type: 'camera' } });
+                            }
+                        }, 600);
+                    }
+                }
+            }).catch(() => {});
         }
 
         call.on('stream', async (remoteStream) => {
@@ -1463,10 +1576,9 @@ async function joinMultiplayerVoice(channelId) {
         call.on('close', async () => {
             if (callType === 'camera') {
                 const peerInfo = activeMembersInRoom.find(m => m.peerId === call.peer);
-                if (peerInfo) {
-                    const { detachRemoteCameraFromCard } = await import('./camera.js');
-                    detachRemoteCameraFromCard(peerInfo.name);
-                }
+                const remoteName = peerInfo?.name || call.peer;
+                const { detachRemoteCameraFromCard } = await import('./camera.js');
+                detachRemoteCameraFromCard(remoteName, call.peer);
             } else if (callType === 'screen') {
                 console.log(`[PeerJS] Transmisión de pantalla de ${call.peer} finalizada.`);
                 cleanUpRemoteScreen(call.peer);
@@ -1544,6 +1656,22 @@ async function joinSupabasePresence(channelId, myName, peerId) {
                     console.log(`[Presence Sync] Peer existente detectado: ${presence.name} — iniciando llamada...`);
                     setTimeout(() => callPeer(presence.peerId, presence.name), 400 + Math.random() * 400);
                 }
+
+                if (presence.isCameraOn && presence.peerId && presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
+                    import('./camera.js').then(({ remoteCameraStreams }) => {
+                        if (!remoteCameraStreams.has(presence.peerId) && presenceChannel) {
+                            console.log(`[Camera] Solicitando cámara activa de ${presence.name} (${presence.peerId})...`);
+                            presenceChannel.send({
+                                type: 'broadcast',
+                                event: 'request-camera-stream',
+                                payload: {
+                                    requesterPeerId: localPeerId || (peer ? peer.id : null),
+                                    targetPeerId: presence.peerId
+                                }
+                            }).catch(() => {});
+                        }
+                    }).catch(() => {});
+                }
             });
         });
     });
@@ -1553,6 +1681,19 @@ async function joinSupabasePresence(channelId, myName, peerId) {
             if (presence.peerId !== localPeerId && !presence.peerId.startsWith('nexus_')) {
                 console.log(`[Presence] ${presence.name} se unió. Llamando...`);
                 callPeer(presence.peerId, presence.name);
+
+                if (presence.isCameraOn && presenceChannel) {
+                    setTimeout(() => {
+                        presenceChannel.send({
+                            type: 'broadcast',
+                            event: 'request-camera-stream',
+                            payload: {
+                                requesterPeerId: localPeerId || (peer ? peer.id : null),
+                                targetPeerId: presence.peerId
+                            }
+                        }).catch(() => {});
+                    }, 800);
+                }
 
                 // Solo notificar si no está ya en la sala y han pasado al menos 120s desde la última notificación
                 const now = Date.now();
@@ -1609,6 +1750,27 @@ async function joinSupabasePresence(channelId, myName, peerId) {
                     if (peerObj) peerObj.videoCall = videoCall;
                 }
             }).catch(e => console.warn('[Stream] Error al responder petición de stream:', e));
+        }
+    });
+
+    // Atender peticiones de otros peers para recibir nuestra cámara en vivo
+    presenceChannel.on('broadcast', { event: 'request-camera-stream' }, ({ payload }) => {
+        if (!payload) return;
+        const myPeerId = localPeerId || (peer ? peer.id : null);
+        if (payload.targetPeerId === myPeerId) {
+            import('./camera.js').then(({ isCameraActive, getCameraStream }) => {
+                if (isCameraActive()) {
+                    const camStream = getCameraStream();
+                    if (camStream && peer) {
+                        console.log(`[Camera] Peer ${payload.requesterPeerId} solicitó la cámara. Llamando...`);
+                        const camCall = peer.call(payload.requesterPeerId, camStream, {
+                            metadata: { type: 'camera' }
+                        });
+                        const pObj = activePeers.get(payload.requesterPeerId);
+                        if (pObj) pObj.cameraCall = camCall;
+                    }
+                }
+            }).catch(e => console.warn('[Camera] Error al responder petición de cámara:', e));
         }
     });
 
@@ -2401,6 +2563,8 @@ function renderVoiceMembers() {
         const card = document.createElement('div');
         card.className = `voice-member-card ${member.activeSpeaker ? 'speaking' : ''} ${isUser ? 'is-local-user-card' : ''}`;
         card.id = `voice-member-${memberKey}`;
+        if (member.peerId) card.setAttribute('data-peer-id', member.peerId);
+        if (member.name) card.setAttribute('data-name', member.name);
         if (isUser) card.setAttribute('data-is-local', 'true');
 
         let statusIcons = '';
