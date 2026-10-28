@@ -351,12 +351,14 @@ function createDualDelayPitchShifter(ctx, pitchRatio) {
  */
 function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
     const {
-        highPassFreq = 125,
-        vocalFocusHighCut = 7200,
-        snrMarginDb = 7.5,
-        holdMs = 260,
-        duckAmount = 0.08,
-        makeupGain = 1.35
+        highPassFreq         = 125,
+        vocalFocusHighCut    = 7200,
+        snrMarginDb          = 7.5,
+        holdMs               = 260,
+        duckAmount           = 0.08,
+        makeupGain           = 1.35,
+        harmonicsThreshold   = 6.0,   // Contraste espectral mínimo para detectar voz
+        loudnessThreshold    = -40.0  // dBFS absoluto: voz muy fuerte → abre siempre
     } = options;
 
     // 1. High-pass: corta vibraciones mecánicas de mesa, viento y retumbos sub-graves
@@ -450,7 +452,7 @@ function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
     comp.connect(makeup);
 
     // ─── LÓGICA DSP DE SEGUIMIENTO ADAPTATIVO Y FACTOR DE CRESTA ───
-    let noiseFloorDb = -62.0;       // Nivel base dinámico de la habitación
+    let noiseFloorDb = -65.0;       // Nivel base dinámico de la habitación
     let lastVoiceTime = 0;
     let gateOpen = false;
     let transientDuckingUntil = 0;
@@ -505,7 +507,7 @@ function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
         // C. Calibración continua del piso de ruido ambiental (adaptación automática)
         if (!gateOpen) {
             // Cuando la compuerta está cerrada, aprendemos el ruido ambiente de la habitación (ventilador, zumbido)
-            if (avgVocalDb > -75 && avgVocalDb < -35) {
+            if (avgVocalDb > -80 && avgVocalDb < -38) {
                 noiseFloorDb = (noiseFloorDb * 0.96) + (avgVocalDb * 0.04);
             }
         } else {
@@ -514,12 +516,12 @@ function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
         }
 
         // Umbral adaptativo: debe superar el piso de ruido más el margen SNR
-        const dynamicThreshold = Math.max(-55.0, noiseFloorDb + snrMarginDb);
+        const dynamicThreshold = Math.max(-58.0, noiseFloorDb + snrMarginDb);
 
         // Contraste espectral: la voz humana tiene picos armónicos pronunciados (F1/F2)
         // El ruido plano o de fricción tiene una distribución difusa (pico apenas superior a la media)
         const spectralContrast = maxVocalBin - avgVocalDb; // > 8 dB en vocales
-        const hasVocalHarmonics = spectralContrast > 7.0 || avgVocalDb > -38.0;
+        const hasVocalHarmonics = spectralContrast > harmonicsThreshold || avgVocalDb > loudnessThreshold;
 
         // Detección real de voz humana:
         // Debe superar el umbral adaptativo, tener contraste armónico, y NO ser un impacto transitorio de teclado
@@ -605,12 +607,14 @@ function buildFilterChain(filterName, inputNode) {
         case 'extreme': {
             // ─── SUPRESIÓN EXTREMA: AISLAMIENTO VOCAL ESTRICTO ───
             const suppressor = createSmartNoiseSuppressor(audioCtx, inputNode, {
-                highPassFreq: 145,
-                vocalFocusHighCut: 5400,
-                snrMarginDb: 11.5,
-                holdMs: 170,
-                duckAmount: 0.02,
-                makeupGain: 1.45
+                highPassFreq:       130,    // Corta retumbos sin afectar voz grave
+                vocalFocusHighCut:  6500,   // Conserva fricativas ("s","f","ch")
+                snrMarginDb:        8.5,    // Margen SNR balanceado (vs 11.5 anterior)
+                holdMs:             350,    // Gate se cierra más lento → no corta sílabas
+                duckAmount:         0.04,
+                makeupGain:         1.5,
+                harmonicsThreshold: 5.0,   // Más sensible al contraste espectral
+                loudnessThreshold:  -44.0  // Voz fuerte = -44 dBFS abre siempre
             });
             filterCleanupFns.push(suppressor.cleanup);
             return suppressor.output;
