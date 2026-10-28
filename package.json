@@ -1,12 +1,42 @@
 {
   "name": "nexus-gaming-chat",
-  "version": "1.2.23",
+  "productName": "Nexus",
+  "version": "1.2.24",
   "description": "Nexus Gaming Chat Client",
+  "main": "electron-main.js",
   "scripts": {
+    "start": "electron .",
     "copy-dist": "node scripts/prepare-dist.js",
     "tauri": "tauri",
     "build:app": "node scripts/prepare-dist.js && tauri build",
-    "build:linux": "node scripts/prepare-dist.js && tauri build --bundles appimage,deb",
+    "build:linux-appimage": "electron-builder --linux AppImage",
     "generate:latest": "node scripts/generate-latest-json.js"
+  },
+  "build": {
+    "appId": "gg.nexus.chat",
+    "productName": "Nexus",
+    "directories": {
+      "output": "release-electron"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Network;Chat;AudioVideo;",
+      "icon": "assets/icons/icon-512.png"
+    },
+    "files": [
+      "electron-main.js",
+      "index.html",
+      "privacy.html",
+      "manifest.json",
+      "sw.js",
+      "ads.js",
+      "css/**/*",
+      "js/**/*",
+      "assets/**/*"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
   }
 }

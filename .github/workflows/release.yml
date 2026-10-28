@@ -7,17 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  # ─── BUILD WINDOWS CON TAURI (Ligero, rápido y funciona perfecto en Windows) ───
+  release-windows:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-          - platform: ubuntu-22.04
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,24 +24,10 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            libgtk-3-dev \
-            libglib2.0-dev \
-            squashfs-tools
-
       - name: Prepare Frontend Dist
         run: node scripts/prepare-dist.js
 
-      - name: Build and Release with Tauri
+      - name: Build and Release with Tauri (Windows)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,7 +36,38 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'Nexus v__VERSION__'
-          releaseBody: 'Actualización automática de Nexus Gaming Chat para Windows y Linux (AppImage / .deb).'
+          releaseBody: 'Actualización automática de Nexus Gaming Chat para Windows (Tauri) y Linux (Electron AppImage con Chromium nativo).'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+  # ─── BUILD LINUX CON ELECTRON (Chromium puro, permisos micrófono/cámara y ads) ───
+  release-linux:
+    permissions:
+      contents: write
+    needs: release-windows
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Electron AppImage (Linux)
+        run: npx electron-builder --linux AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload AppImage to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: release-electron/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
