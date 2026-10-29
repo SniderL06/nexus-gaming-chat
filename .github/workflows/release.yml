@@ -10,8 +10,27 @@ permissions:
   contents: write
 
 jobs:
-  # ─── BUILD WINDOWS (ELECTRON CON CHROMIUM PURO, PERMISOS WEBRTC Y BAJO CONSUMO) ───
+  # ─── 1. CREAR EL OBJETO RELEASE EN GITHUB PRIMERO ───
+  create-release:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "Creando o actualizando Release para el tag: $TAG_NAME"
+          gh release create "$TAG_NAME" \
+            --title "Nexus $TAG_NAME" \
+            --notes "Actualización de Nexus Gaming Chat para Windows (.exe) y Linux (.AppImage) con Chromium nativo optimizado." \
+            || echo "La release ya existía, continuando..."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── 2. COMPILAR E INSTALAR WINDOWS (ELECTRON) ───
   build-windows:
+    needs: create-release
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -39,8 +58,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ─── BUILD LINUX (ELECTRON CON CHROMIUM PURO Y GEAR LEVER / APPIMAGE) ───
+  # ─── 3. COMPILAR E INSTALAR LINUX (APPIMAGE) ───
   build-linux:
+    needs: create-release
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
