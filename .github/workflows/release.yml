@@ -1,4 +1,4 @@
-name: Release Nexus (Auto-Updater)
+name: Release Nexus (Multiplatform)
 
 on:
   push:
@@ -8,11 +8,10 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  # ─── BUILD WINDOWS CON TAURI (Ligero, rápido y funciona perfecto en Windows) ───
-  release-windows:
+  # ─── BUILD WINDOWS (ELECTRON CON CHROMIUM PURO, PERMISOS WEBRTC Y BAJO CONSUMO) ───
+  build-windows:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -23,29 +22,25 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: npm install
 
-      - name: Prepare Frontend Dist
-        run: node scripts/prepare-dist.js
-
-      - name: Build and Release with Tauri (Windows)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Windows Installer (.exe)
+        run: npx electron-builder --windows nsis
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'Nexus v__VERSION__'
-          releaseBody: 'Actualización automática de Nexus Gaming Chat para Windows (Tauri) y Linux (Electron AppImage con Chromium nativo).'
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
 
-  # ─── BUILD LINUX CON ELECTRON (Chromium puro, permisos micrófono/cámara y ads) ───
-  release-linux:
-    needs: release-windows
+      - name: Upload Windows Artifacts
+        run: |
+          $tag = "${{ github.ref }}".Replace("refs/tags/", "")
+          Write-Host "Subiendo instalador de Windows a release: $tag"
+          gh release upload "$tag" release-electron/*.exe --clobber
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── BUILD LINUX (ELECTRON CON CHROMIUM PURO Y GEAR LEVER / APPIMAGE) ───
+  build-linux:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -59,12 +54,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Electron AppImage (Linux)
+      - name: Build Linux AppImage
         run: npx electron-builder --linux AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload AppImage to GitHub Release
+      - name: Upload Linux AppImage
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           echo "Subiendo AppImage a release: $TAG_NAME"
