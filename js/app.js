@@ -288,21 +288,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log('[Anuncios] Renovando bloque de anuncio patrocinado...');
             try {
-                const adHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: transparent; overflow: hidden; }
-  </style>
-</head>
-<body>
-  <script async="async" data-cfasync="false" src="https://pl29682057.profitableratecpmnetwork.com/c9a8a020d51acf922166ae36bc735892/invoke.js"></script>
-  <div id="container-c9a8a020d51acf922166ae36bc735892"></div>
-</body>
-</html>`;
+                // Si estamos en la app de escritorio o local, cargar la URL real de Vercel con HTTPS
+                const isDesktopOrLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost';
+                const adUrl = isDesktopOrLocal 
+                    ? `https://nexus-gaming-chat.vercel.app/ad-banner.html?t=${Date.now()}`
+                    : `ad-banner.html?t=${Date.now()}`;
 
-                iframe.srcdoc = adHtml;
+                iframe.src = adUrl;
             } catch (err) {
                 console.warn('[Anuncios] Error al recargar anuncio en iframe:', err);
             }

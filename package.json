@@ -41,6 +41,7 @@
       "electron-main.js",
       "index.html",
       "privacy.html",
+      "ad-banner.html",
       "manifest.json",
       "sw.js",
       "ads.js",
