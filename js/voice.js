@@ -500,17 +500,17 @@ function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
             noiseFloorDb = Math.max(-78, noiseFloorDb - 0.008);
         }
 
-        // Umbral dinámico suave: voz debe superar el ruido por snrMarginDb
-        // Clamp inferior a -64 dBFS para que cualquier murmullo o voz suave abra la compuerta
-        const dynamicThreshold = Math.max(-64.0, noiseFloorDb + snrMarginDb);
+        // Umbral dinámico ultra-sensible: voz debe superar el ruido por snrMarginDb
+        // Clamp inferior a -70 dBFS para que incluso susurros o voces a distancia abran sin esfuerzo
+        const dynamicThreshold = Math.max(-70.0, noiseFloorDb + snrMarginDb);
 
         const now = Date.now();
-        // Es voz si supera el umbral dinámico o si la voz supera los -48 dBFS
-        const isSpeech = (avgVocalDb > dynamicThreshold || avgVocalDb > -48.0) && !isClickTransient;
+        // Es voz si supera el umbral dinámico o si la energía vocal supera los -56 dBFS
+        const isSpeech = (avgVocalDb > dynamicThreshold || avgVocalDb > -56.0) && !isClickTransient;
 
         // D. Atenuación rápida de clics sin cortar la voz si ya está activa
         if (isClickTransient && !gateOpen) {
-            transientDuckingUntil = now + 35;
+            transientDuckingUntil = now + 30;
             try {
                 transientGain.gain.setValueAtTime(duckAmount, audioCtx.currentTime);
             } catch (_) {}
@@ -520,20 +520,20 @@ function createSmartNoiseSuppressor(audioCtx, inputNode, options = {}) {
             } catch (_) {}
         }
 
-        // E. Expansor descendente: abre de inmediato en 4ms, sostiene por holdMs y baja suavemente
+        // E. Expansor descendente: abre de inmediato en 3ms, sostiene por holdMs y baja muy suavemente
         if (isSpeech) {
             lastVoiceTime = now;
             if (!gateOpen) {
                 gateOpen = true;
                 try {
-                    gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.004);
+                    gateGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.003);
                 } catch (_) {}
             }
         } else if (gateOpen && (now - lastVoiceTime) > holdMs) {
             gateOpen = false;
-            // No mutear a cero: bajar suavemente al floorGain en 80ms para una caída natural
+            // No mutear a cero: bajar suavemente al floorGain en 140ms para una caída imperceptible
             try {
-                gateGain.gain.setTargetAtTime(floorGain, audioCtx.currentTime, 0.08);
+                gateGain.gain.setTargetAtTime(floorGain, audioCtx.currentTime, 0.14);
             } catch (_) {}
         }
     }, 12);
@@ -570,15 +570,15 @@ function buildFilterChain(filterName, inputNode) {
     switch (filterName) {
 
         case 'noise': {
-            // ─── SUPRESIÓN DE RUIDO INTELIGENTE (ESTÁNDAR PARA GAMING / DISCORD-LIKE) ───
+            // ─── SUPRESIÓN DE RUIDO INTELIGENTE (GAMING ESTÁNDAR / DISCORD-LIKE) ───
             const suppressor = createSmartNoiseSuppressor(audioCtx, inputNode, {
-                highPassFreq:       90,     // Conserva toda la calidez y cuerpo de la voz
-                vocalFocusHighCut:  8000,   // Alta fidelidad vocal (fricativas claras)
-                snrMarginDb:        3.5,    // Detección inmediata con volumen bajo
-                holdMs:             450,    // Mantiene la compuerta abierta entre pausas naturales
-                duckAmount:         0.45,   // Atenuación suave de clics
+                highPassFreq:       85,     // Conserva los graves naturales de cualquier voz
+                vocalFocusHighCut:  8500,   // Claridad vocal total sin filtrar consonantes
+                snrMarginDb:        2.5,    // Detección instantánea con volumen de voz normal o bajo
+                holdMs:             520,    // Mantiene abierta la voz más de medio segundo entre pausas
+                duckAmount:         0.50,   // Atenuación suave de clics
                 makeupGain:         1.2,    // Ganancia limpia
-                floorGain:          0.06    // Atenúa -24dB el ruido de fondo sin silenciar
+                floorGain:          0.08    // -22dB en reposo: ruido inaudible, pero voz nunca cortada
             });
             filterCleanupFns.push(suppressor.cleanup);
             return suppressor.output;
@@ -587,13 +587,13 @@ function buildFilterChain(filterName, inputNode) {
         case 'extreme': {
             // ─── SUPRESIÓN EXTREMA: AISLAMIENTO VOCAL FUERTE (AMBIENTES MUY RUIDOSOS) ───
             const suppressor = createSmartNoiseSuppressor(audioCtx, inputNode, {
-                highPassFreq:       110,    // Corta retumbos graves de escritorio
-                vocalFocusHighCut:  7000,   // Conserva consonantes naturales
-                snrMarginDb:        5.5,    // Umbral de relación señal/ruido equilibrado
-                holdMs:             480,    // Hold amplio para evitar picar palabras
-                duckAmount:         0.25,   // Atenuación más marcada de teclas fuertes (-12dB)
-                makeupGain:         1.35,   // Nivelación extra de voz
-                floorGain:          0.02    // Atenúa -34dB el fondo cuando no se habla
+                highPassFreq:       100,    // Corta retumbos mecánicos de mesa
+                vocalFocusHighCut:  7500,   // Rango de frecuencias vocales balanceado
+                snrMarginDb:        4.0,    // Umbral de relación señal/ruido accesible
+                holdMs:             550,    // Hold extendido para respiraciones y pausas
+                duckAmount:         0.30,   // Atenúa golpes fuertes de teclado
+                makeupGain:         1.35,   // Realce vocal compensatorio
+                floorGain:          0.03    // -30dB en reposo: silencia ventiladores sin asfixiar la voz
             });
             filterCleanupFns.push(suppressor.cleanup);
             return suppressor.output;
@@ -2277,18 +2277,14 @@ async function startAudioEngine() {
         }
 
         // Constraints con id de dispositivo seleccionado.
-        // IMPORTANTE: desactivamos echoCancellation, noiseSuppression y autoGainControl del navegador
-        // porque nuestro motor DSP (createSmartNoiseSuppressor) ya hace todo esto de forma más precisa y
-        // adaptativa. Dejarlos activos crea interferencias: el navegador puede abrir/cerrar la señal
-        // antes de que nuestro analizador de formantes la procese, lo que produce cortes y pérdida de voz.
         const constraints = {
             audio: {
                 deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
-                echoCancellation: false,       // Lo gestiona nuestro DSP personalizado
-                noiseSuppression: false,       // Lo gestiona createSmartNoiseSuppressor (factor de cresta + adaptativo)
-                autoGainControl: false,        // Lo gestiona el nodo inputVolumeNode + compresor del filtro
-                sampleRate: 48000,             // Frecuencia óptima para análisis espectral en la puerta de ruido
-                channelCount: 1               // Mono — reduce CPU y ruido de canal
+                echoCancellation: true,        // Esencial para evitar retorno con audífonos/parlantes
+                noiseSuppression: true,        // Filtro nativo de hardware/driver de micrófono
+                autoGainControl: true,         // Normalización de volumen natural
+                sampleRate: 48000,
+                channelCount: 1
             }
         };
 
