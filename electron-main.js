@@ -54,6 +54,23 @@ function createWindow() {
     return allowedPermissions.includes(permission);
   });
 
+  // Permitir captura de pantalla en getDisplayMedia (Electron)
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    try {
+      const { desktopCapturer } = require('electron');
+      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+      // Seleccionar la pantalla principal o la primera fuente disponible
+      if (sources.length > 0) {
+        callback({ video: sources[0] });
+      } else {
+        callback({});
+      }
+    } catch (err) {
+      console.warn('[Electron] Error capturando fuentes de pantalla:', err);
+      callback({});
+    }
+  });
+
   // Abrir enlaces externos en el navegador predeterminado del sistema
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {

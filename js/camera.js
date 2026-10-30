@@ -77,17 +77,9 @@ async function startCamera() {
         // Show local user's own card with the camera stream
         attachLocalCameraToCard();
 
-        // Send to all peers in room — combine video track with mic audio so voice doesn't drop
+        // Send to all peers in room — send pure camera video stream (audio is handled independently by voice call)
         if (isMultiplayerMode && peer && activePeers.size > 0) {
-            const micStream = getMicrophoneStream();
-            // Build a combined stream: video from camera + audio from mic (if available)
-            let streamToSend = cameraStream;
-            if (micStream && micStream.getAudioTracks().length > 0) {
-                streamToSend = new MediaStream([
-                    ...cameraStream.getVideoTracks(),
-                    ...micStream.getAudioTracks()
-                ]);
-            }
+            const streamToSend = cameraStream;
             activePeers.forEach(({ name }, remotePeerId) => {
                 try {
                     const videoCall = peer.call(remotePeerId, streamToSend, {
@@ -237,7 +229,7 @@ export function attachRemoteCameraToCard(peerId, stream, remoteName) {
         videoEl.className = 'voice-member-video';
         videoEl.autoplay = true;
         videoEl.playsInline = true;
-        videoEl.muted = false;
+        videoEl.muted = true; // Cámara solo reproduce vídeo; el audio viene por el canal de voz
         card.insertBefore(videoEl, card.firstChild);
     }
     videoEl.srcObject = stream;
