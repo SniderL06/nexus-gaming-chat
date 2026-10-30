@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, session } = require('electron');
+const { app, BrowserWindow, shell, session, desktopCapturer } = require('electron');
 const path = require('path');
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -12,6 +12,12 @@ app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-breakpad'); // Sin telemetría ni crash reporter de Google
 app.commandLine.appendSwitch('enable-gpu-rasterization'); // Rendimiento GPU fluido en juegos
 app.commandLine.appendSwitch('enable-zero-copy');
+
+// ─── CAPTURA DE PANTALLA (Screen Share) ──────────────────────────────────────
+// Habilitar capturador PipeWire para Wayland (Linux moderno)
+app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
+// Permitir getDisplayMedia sin gesto de usuario (necesario para UI de Nexus)
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -55,18 +61,26 @@ function createWindow() {
   });
 
   // Permitir captura de pantalla en getDisplayMedia (Electron)
+  // IMPORTANTE: El handler debe existir ANTES de que se llame getDisplayMedia desde el renderer.
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
-      const { desktopCapturer } = require('electron');
-      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
-      // Seleccionar la pantalla principal o la primera fuente disponible
-      if (sources.length > 0) {
-        callback({ video: sources[0] });
+      // thumbnailSize: 0x0 = no genera thumbnails, ahorra RAM (no los necesitamos aquí)
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 0, height: 0 }
+      });
+
+      if (sources && sources.length > 0) {
+        // Preferir la pantalla principal (id comienza con 'screen:0:') o la primera disponible
+        const mainScreen = sources.find(s => s.id === 'screen:0:0' || s.id.startsWith('screen:0:')) || sources[0];
+        console.log(`[Electron] Fuente de pantalla seleccionada: ${mainScreen.name} (${mainScreen.id})`);
+        callback({ video: mainScreen, audio: 'loopback' });
       } else {
+        console.warn('[Electron] No se encontraron fuentes de pantalla disponibles.');
         callback({});
       }
     } catch (err) {
-      console.warn('[Electron] Error capturando fuentes de pantalla:', err);
+      console.warn('[Electron] Error al capturar fuentes de pantalla:', err.message || err);
       callback({});
     }
   });

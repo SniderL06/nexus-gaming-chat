@@ -854,6 +854,8 @@ body {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
     transform: translateZ(0);
+    position: relative;
+    z-index: 2; /* Siempre por encima del stream-placeholder (z-index:1) */
 }
 
 .stream-placeholder {

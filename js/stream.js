@@ -115,12 +115,11 @@ async function startLocalStream() {
     console.log(`[Stream] Capturando a ${width}x${height} @ ${targetFps} FPS (${targetQuality})...`);
     
     try {
-        // Invoca el diálogo nativo del navegador con la resolución y tasa de refresco seleccionada
+        // Intento 1: video con calidad ideal (sin displaySurface, incompatible con Electron/desktopCapturer)
         try {
             activeStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: 'always',
-                    displaySurface: 'monitor',
                     frameRate: { ideal: targetFps, max: targetFps },
                     width: { ideal: width, max: width },
                     height: { ideal: height, max: height }
@@ -146,7 +145,7 @@ async function startLocalStream() {
             } catch (basicAudioErr) {
                 console.warn('[Stream] Fallo al capturar con audio. Reintentando captura solo de video...', basicAudioErr);
                 activeStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: 'always', frameRate: { ideal: targetFps } },
+                    video: { cursor: 'always' },
                     audio: false
                 });
             }
@@ -243,9 +242,26 @@ async function startLocalStream() {
         }
 
     } catch (err) {
-        console.warn('[Stream] Captura denegada o cancelada. Activando transmisión simulada de prueba.', err);
-        // Fallback: Si se cancela la captura real, iniciamos un stream simulado interactivo
-        startSimulatedStream();
+        // El usuario canceló el diálogo de captura, o el permiso fue denegado.
+        // NO iniciar transmisión simulada silenciosa — notificar al usuario claramente.
+        const wasCancelled = err.name === 'AbortError' || err.name === 'NotAllowedError' || err.message?.includes('Permission denied') || err.message?.includes('cancel');
+        const msg = wasCancelled
+            ? '⚠️ Captura cancelada. Haz clic en "Compartir pantalla" y acepta el permiso.'
+            : `⚠️ No se pudo capturar la pantalla: ${err.message || err}`;
+        console.warn('[Stream] Captura denegada o cancelada:', err);
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast(msg, 'error');
+        } else {
+            console.error('[Stream] Error UI:', msg);
+        }
+        // Asegurarse de que el estado queda limpio
+        state.isStreaming = false;
+        if (goLiveBtn) {
+            goLiveBtn.classList.remove('live');
+            const span = goLiveBtn.querySelector('span');
+            if (span) span.textContent = 'En Directo';
+        }
+        return;
     }
 
     updateRenderLatency(startTime);

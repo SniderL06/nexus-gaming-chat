@@ -1509,7 +1509,15 @@ async function joinMultiplayerVoice(channelId) {
             const camStream = getCameraStream();
             call.answer(camStream || undefined);
         } else if (callType === 'screen') {
-            call.answer(); // screen share: no need to send anything back
+            // IMPORTANTE: Pasar un MediaStream vacío en vez de nada.
+            // Si se llama a call.answer() sin argumento, PeerJS/WebRTC puede crear
+            // una negociación inválida que nunca emite el evento 'stream' en el receptor.
+            // Un MediaStream vacío fuerza una conexión recvonly correctamente.
+            try {
+                call.answer(new MediaStream());
+            } catch (_e) {
+                call.answer();
+            }
         } else {
             // Audio call — responder con stream filtrado
             if (audioAnswerStream) {
