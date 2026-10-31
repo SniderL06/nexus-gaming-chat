@@ -1934,21 +1934,15 @@ function callPeer(remotePeerId, remoteName) {
         }
     }).catch(err => console.warn('[PeerJS] Fallo al importar stream de pantalla:', err));
 
-    // Si la cámara está activa, enviarla también al nuevo peer
-    import('./camera.js').then(({ getCameraStream, isCameraActive, getMicrophoneStream: _getM }) => {
+    // Si la cámara está activa, enviarla también al nuevo peer (solo video, sin mic)
+    import('./camera.js').then(({ getCameraStream, isCameraActive }) => {
         if (!isCameraActive()) return;
         const camStream = getCameraStream();
         if (!camStream) return;
-        const micStream = processedStream || microphoneStream;
-        let streamToSend = camStream;
-        if (micStream && micStream.getAudioTracks().length > 0) {
-            streamToSend = new MediaStream([
-                ...camStream.getVideoTracks(),
-                ...micStream.getAudioTracks()
-            ]);
-        }
+        // IMPORTANTE: NO mezclar el micrófono aquí — la llamada de audio ya existe en peerData.call
+        // Mezclar mic + cámara causaría eco doble: el receptor escucharía la voz dos veces.
         try {
-            const cameraCall = peer.call(remotePeerId, streamToSend, { metadata: { type: 'camera' } });
+            const cameraCall = peer.call(remotePeerId, camStream, { metadata: { type: 'camera' } });
             const peerObj = activePeers.get(remotePeerId);
             if (peerObj) peerObj.cameraCall = cameraCall;
             console.log(`[Camera] Cámara enviada a nuevo participante: ${remoteName}`);
@@ -1957,6 +1951,7 @@ function callPeer(remotePeerId, remoteName) {
         }
     }).catch(() => {});
 }
+
 
 function playRemoteStream(peerId, remoteStream) {
     if (!remoteStream) return;
@@ -2285,12 +2280,15 @@ async function startAudioEngine() {
         }
 
         // Constraints con id de dispositivo seleccionado.
+        // NOTA: Desactivamos echoCancellation y noiseSuppression NATIVAS del driver para que
+        // no interfieran con la cadena de filtros Web Audio (noise/extreme). Nuestro procesador
+        // JS hace un trabajo más preciso y adaptable que los filtros de hardware.
         const constraints = {
             audio: {
                 deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
-                echoCancellation: true,        // Esencial para evitar retorno con audífonos/parlantes
-                noiseSuppression: true,        // Filtro nativo de hardware/driver de micrófono
-                autoGainControl: true,         // Normalización de volumen natural
+                echoCancellation: false,       // Lo manejamos en Web Audio manualmente
+                noiseSuppression: false,       // Lo manejamos con createSmartNoiseSuppressor()
+                autoGainControl: false,        // Lo manejamos con el nodo de ganancia
                 sampleRate: 48000,
                 channelCount: 1
             }
@@ -2302,7 +2300,20 @@ async function startAudioEngine() {
         console.log('[Audio] Micrófono capturado con éxito.');
 
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // En Linux/Electron el AudioContext arranca en estado 'suspended' sin gesto de usuario previo.
+        // Resumirlo de inmediato es CRÍTICO para que los filtros de ruido funcionen.
+        if (audioCtx.state === 'suspended') {
+            try {
+                await audioCtx.resume();
+                console.log('[Audio] AudioContext resumido al arrancar (Linux/Electron fix).');
+            } catch (resumeErr) {
+                console.warn('[Audio] No se pudo resumir AudioContext al arrancar:', resumeErr);
+            }
+        }
+
         analyser = audioCtx.createAnalyser();
+
         analyser.fftSize = 128; // Pequeño tamaño para optimización extrema de CPU
 
         sourceNode = audioCtx.createMediaStreamSource(microphoneStream);

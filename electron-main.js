@@ -63,8 +63,17 @@ function createWindow() {
   // Permitir captura de pantalla en getDisplayMedia (Electron)
   // IMPORTANTE: El handler debe existir ANTES de que se llame getDisplayMedia desde el renderer.
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    // En Electron 22+ podemos usar useSystemPicker para mostrar el diálogo nativo del SO
+    // (el mismo que aparece en Chrome/Firefox) en vez de elegir automáticamente.
+    // Esto permite al usuario elegir qué ventana o pantalla compartir.
+    if (typeof callback.useSystemPicker === 'function') {
+      // API nueva (Electron 27+)
+      callback({ useSystemPicker: true });
+      return;
+    }
+
     try {
-      // thumbnailSize: 0x0 = no genera thumbnails, ahorra RAM (no los necesitamos aquí)
+      // thumbnailSize: 0x0 = no genera thumbnails, ahorra RAM
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: 0, height: 0 }
@@ -83,7 +92,7 @@ function createWindow() {
       console.warn('[Electron] Error al capturar fuentes de pantalla:', err.message || err);
       callback({});
     }
-  });
+  }, { useSystemPicker: true });  // ← habilitar picker nativo si Electron lo soporta
 
   // Abrir enlaces externos en el navegador predeterminado del sistema
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
