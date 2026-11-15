@@ -46,6 +46,56 @@ export function initStream() {
         });
     }
 
+    // Controles para el segundo visor de transmisión
+    const stopStreamBtn2 = document.getElementById('stop-stream-btn-2');
+    const hidePreviewBtn2 = document.getElementById('stream-hide-preview-btn-2');
+    const compactBtn2 = document.getElementById('stream-compact-btn-2');
+    const fullscreenBtn2 = document.getElementById('stream-fullscreen-btn-2');
+    const micToggleBtn2 = document.getElementById('stream-mic-toggle-2');
+    const streamContainer2 = document.getElementById('stream-container-2');
+    const video2 = document.getElementById('remote-stream-video-2');
+
+    if (stopStreamBtn2) {
+        stopStreamBtn2.addEventListener('click', () => {
+            if (video2) video2.srcObject = null;
+            if (streamContainer2) streamContainer2.classList.add('hidden');
+        });
+    }
+    if (hidePreviewBtn2) {
+        hidePreviewBtn2.addEventListener('click', () => {
+            if (streamContainer2) streamContainer2.classList.add('hidden');
+        });
+    }
+    if (compactBtn2) {
+        compactBtn2.addEventListener('click', () => {
+            if (streamContainer2) {
+                const isCompact = streamContainer2.classList.toggle('compact-mode');
+                compactBtn2.textContent = isCompact ? '🗖 Expandir' : '🗗 Reducir';
+            }
+        });
+    }
+    if (fullscreenBtn2 && video2) {
+        fullscreenBtn2.addEventListener('click', () => {
+            const vp2 = document.getElementById('stream-viewport-2') || video2;
+            const req = vp2.requestFullscreen || vp2.webkitRequestFullscreen || vp2.msRequestFullscreen;
+            if (req) req.call(vp2).catch(() => {});
+        });
+    }
+    if (micToggleBtn2 && video2) {
+        micToggleBtn2.addEventListener('click', () => {
+            video2.muted = !video2.muted;
+            micToggleBtn2.textContent = video2.muted ? 'Audio Off' : 'Audio On';
+        });
+    }
+    if (video2) {
+        video2.addEventListener('dblclick', () => {
+            const vp2 = document.getElementById('stream-viewport-2') || video2;
+            const req = vp2.requestFullscreen || vp2.webkitRequestFullscreen || vp2.msRequestFullscreen;
+            if (req) req.call(vp2).catch(() => {});
+        });
+    }
+
+
     // Doble clic en el video para pantalla completa
     if (streamVideoElement) {
         streamVideoElement.addEventListener('dblclick', toggleFullscreen);

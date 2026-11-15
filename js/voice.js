@@ -1965,47 +1965,55 @@ function playRemoteStream(peerId, remoteStream) {
 
     // Detectar si es un stream de vídeo (compartir pantalla)
     if (remoteStream.getVideoTracks().length > 0) {
-        console.log(`[PeerJS] Stream de vídeo remoto detectado del peer: ${peerId}`);
-        const remoteVideo = document.getElementById('local-stream-video');
-        const streamContainer = document.getElementById('stream-container');
+        // Detectar si el primer visor ya está ocupado con otra transmisión activa
+        let targetVideo = document.getElementById('local-stream-video');
+        let targetContainer = document.getElementById('stream-container');
+        let targetTitle = document.getElementById('stream-user-title');
+        let isSecondary = false;
+
+        if (targetVideo && targetVideo.srcObject && targetVideo.srcObject !== remoteStream && !targetVideo.paused) {
+            // Usar el segundo visor para que se puedan ver las dos transmisiones en paralelo
+            const video2 = document.getElementById('remote-stream-video-2');
+            const container2 = document.getElementById('stream-container-2');
+            const title2 = document.getElementById('stream-user-title-2');
+            if (video2 && container2) {
+                targetVideo = video2;
+                targetContainer = container2;
+                targetTitle = title2;
+                isSecondary = true;
+            }
+        }
+
         const placeholder = document.getElementById('stream-placeholder');
-        const titleEl = document.getElementById('stream-user-title');
         
-        if (remoteVideo) {
-            // Si el stream recibido ya es el srcObject activo y no está pausado, no hacer nada
-            if (remoteVideo.srcObject === remoteStream && !remoteVideo.paused) {
+        if (targetVideo) {
+            if (targetVideo.srcObject === remoteStream && !targetVideo.paused) {
                 console.log('[Stream] Stream ya en reproducción, ignorando llamada duplicada.');
                 return;
             }
 
-            // Registrar identificador de token para cancelar reproducciones obsoletas concurrentes
-            const currentToken = (remoteVideo._playSessionToken || 0) + 1;
-            remoteVideo._playSessionToken = currentToken;
+            const currentToken = (targetVideo._playSessionToken || 0) + 1;
+            targetVideo._playSessionToken = currentToken;
 
-            // Pausar de forma segura sin disparar uncaught error
-            if (!remoteVideo.paused) {
-                try { remoteVideo.pause(); } catch(e) {}
+            if (!targetVideo.paused) {
+                try { targetVideo.pause(); } catch(e) {}
             }
 
-            remoteVideo.srcObject = remoteStream;
-            // SIEMPRE empezar muteado para garantizar autoplay en Tauri/WebView.
-            remoteVideo.muted = true;
+            targetVideo.srcObject = remoteStream;
+            targetVideo.muted = true;
 
             const executeSafePlay = () => {
-                if (remoteVideo._playSessionToken !== currentToken) return;
-                const playPromise = remoteVideo.play();
+                if (targetVideo._playSessionToken !== currentToken) return;
+                const playPromise = targetVideo.play();
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
                         console.log('[Stream] Vídeo remoto iniciado con éxito.');
                     }).catch(err => {
-                        if (err.name === 'AbortError') {
-                            // Ignorar AbortError provocado por nueva asignación o play() concurrente
-                            return;
-                        }
+                        if (err.name === 'AbortError') return;
                         console.warn('[Stream] Autoplay bloqueado por el navegador, reintentando tras interacción:', err);
                         const retryPlay = () => {
-                            if (remoteVideo._playSessionToken === currentToken) {
-                                remoteVideo.play().catch(() => {});
+                            if (targetVideo._playSessionToken === currentToken) {
+                                targetVideo.play().catch(() => {});
                             }
                         };
                         document.addEventListener('click', retryPlay, { once: true });
@@ -2015,23 +2023,22 @@ function playRemoteStream(peerId, remoteStream) {
                 }
             };
 
-            // Pequeña espera para asentar el MediaStream y evitar colisión con llamadas anteriores
             setTimeout(executeSafePlay, 100);
 
-            // Actualizar botón de audio
-            const audioBtn = document.getElementById('stream-mic-toggle');
+            const audioBtnId = isSecondary ? 'stream-mic-toggle-2' : 'stream-mic-toggle';
+            const audioBtn = document.getElementById(audioBtnId);
             if (audioBtn) {
                 audioBtn.textContent = 'Audio Off';
                 audioBtn.onclick = () => {
-                    remoteVideo.muted = !remoteVideo.muted;
-                    audioBtn.textContent = remoteVideo.muted ? 'Audio Off' : 'Audio On';
+                    targetVideo.muted = !targetVideo.muted;
+                    audioBtn.textContent = targetVideo.muted ? 'Audio Off' : 'Audio On';
                 };
             }
         }
-        if (streamContainer) streamContainer.classList.remove('hidden');
-        if (placeholder) placeholder.classList.add('hidden');
+        if (targetContainer) targetContainer.classList.remove('hidden');
+        if (placeholder && !isSecondary) placeholder.classList.add('hidden');
         
-        if (titleEl) {
+        if (targetTitle) {
             let peerInfo = activeMembersInRoom.find(m => m.peerId === peerId);
             let broadcasterName = peerInfo ? peerInfo.name : null;
             if (!broadcasterName && presenceChannel) {
@@ -2042,8 +2049,9 @@ function playRemoteStream(peerId, remoteStream) {
                     });
                 });
             }
-            titleEl.textContent = `Directo de ${broadcasterName || 'Usuario Remoto'}`;
+            targetTitle.textContent = `Directo de ${broadcasterName || 'Usuario Remoto'}`;
         }
+
 
         // Escuchar cuando el emisor detiene la transmisión para cerrar el visor inmediatamente
         remoteStream.getVideoTracks().forEach(track => {
@@ -2132,14 +2140,26 @@ export function cleanUpRemoteScreen(peerId) {
     }
     const remoteVideo = document.getElementById('local-stream-video');
     const streamContainer = document.getElementById('stream-container');
+    const remoteVideo2 = document.getElementById('remote-stream-video-2');
+    const streamContainer2 = document.getElementById('stream-container-2');
     const placeholder = document.getElementById('stream-placeholder');
-    if (remoteVideo) {
-        remoteVideo.srcObject = null;
+
+    // Verificar si el stream que terminó estaba en el visor 2 o 1
+    const peerData = peerId ? activePeers.get(peerId) : null;
+    const stream = peerData ? peerData.videoStream : null;
+
+    if (remoteVideo2 && (remoteVideo2.srcObject === stream || !remoteVideo.srcObject)) {
+        remoteVideo2.srcObject = null;
+        if (streamContainer2) streamContainer2.classList.add('hidden');
     }
-    if (streamContainer) streamContainer.classList.add('hidden');
-    if (placeholder) placeholder.classList.remove('hidden');
+    if (remoteVideo && (remoteVideo.srcObject === stream || !stream)) {
+        remoteVideo.srcObject = null;
+        if (streamContainer) streamContainer.classList.add('hidden');
+        if (placeholder) placeholder.classList.remove('hidden');
+    }
     console.log(`[Stream] Limpieza de transmisión remota de ${peerId} completada.`);
 }
+
 
 // Permitir a un usuario sintonizar la pantalla de un peer con 1 clic
 export function watchPeerStream(peerId) {

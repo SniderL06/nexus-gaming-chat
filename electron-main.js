@@ -13,9 +13,10 @@ app.commandLine.appendSwitch('disable-breakpad'); // Sin telemetría ni crash re
 app.commandLine.appendSwitch('enable-gpu-rasterization'); // Rendimiento GPU fluido en juegos
 app.commandLine.appendSwitch('enable-zero-copy');
 
-// ─── CAPTURA DE PANTALLA (Screen Share) ──────────────────────────────────────
-// Habilitar capturador PipeWire para Wayland (Linux moderno)
-app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
+// ─── CAPTURA DE PANTALLA Y AUDIO DEL SISTEMA ────────────────────────────────
+// Habilitar capturador PipeWire para Wayland (Linux moderno) y captura de audio del sistema
+app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,PulseaudioLoopbackAudioForScreenShare');
+app.commandLine.appendSwitch('auto-select-desktop-capture-source', 'Entire screen');
 // Permitir getDisplayMedia sin gesto de usuario (necesario para UI de Nexus)
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
@@ -61,28 +62,23 @@ function createWindow() {
   });
 
   // Permitir captura de pantalla en getDisplayMedia (Electron)
-  // IMPORTANTE: El handler debe existir ANTES de que se llame getDisplayMedia desde el renderer.
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
-    // En Electron 22+ podemos usar useSystemPicker para mostrar el diálogo nativo del SO
-    // (el mismo que aparece en Chrome/Firefox) en vez de elegir automáticamente.
-    // Esto permite al usuario elegir qué ventana o pantalla compartir.
+    // Si la plataforma soporta el selector nativo del sistema
     if (typeof callback.useSystemPicker === 'function') {
-      // API nueva (Electron 27+)
       callback({ useSystemPicker: true });
       return;
     }
 
     try {
-      // thumbnailSize: 0x0 = no genera thumbnails, ahorra RAM
       const sources = await desktopCapturer.getSources({
-        types: ['screen'],
+        types: ['screen', 'window'],
         thumbnailSize: { width: 0, height: 0 }
       });
 
       if (sources && sources.length > 0) {
-        // Preferir la pantalla principal (id comienza con 'screen:0:') o la primera disponible
         const mainScreen = sources.find(s => s.id === 'screen:0:0' || s.id.startsWith('screen:0:')) || sources[0];
         console.log(`[Electron] Fuente de pantalla seleccionada: ${mainScreen.name} (${mainScreen.id})`);
+        // audio: 'loopback' permite compartir el sonido del sistema en Windows y Linux
         callback({ video: mainScreen, audio: 'loopback' });
       } else {
         console.warn('[Electron] No se encontraron fuentes de pantalla disponibles.');
@@ -92,7 +88,8 @@ function createWindow() {
       console.warn('[Electron] Error al capturar fuentes de pantalla:', err.message || err);
       callback({});
     }
-  }, { useSystemPicker: true });  // ← habilitar picker nativo si Electron lo soporta
+  }, { useSystemPicker: true });
+
 
   // Abrir enlaces externos en el navegador predeterminado del sistema
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

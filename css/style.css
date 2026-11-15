@@ -735,24 +735,45 @@ body {
     position: relative;
 }
 
+/* CONTENEDOR MULTI-STREAMING */
+.streams-wrapper {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    width: 100%;
+    padding: 0 4px;
+    background-color: var(--bg-tertiary);
+    border-bottom: var(--border-dark);
+}
+
+.streams-wrapper:empty,
+.streams-wrapper > .stream-container.hidden:only-child {
+    display: none;
+}
+
 /* CONTENEDOR DE STREAMING (PANTALLA COMPARTIDA) */
 .stream-container {
     background-color: var(--bg-tertiary);
-    border-bottom: var(--border-dark);
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     position: relative;
-    max-height: 38vh; /* Más compacto por defecto para dejar espacio amplio al chat */
+    max-height: 28vh; /* Tamaño óptimo para ver el juego sin tapar el chat */
     transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 4px 0;
 }
 
-/* Modo compacto: deja libre el 90% de la pantalla para el chat y lista */
+
+/* Modo compacto: deja libre más del 92% de la pantalla para el chat */
 .stream-container.compact-mode {
-    max-height: 90px;
+    max-height: 65px;
 }
 
 .stream-container.compact-mode .stream-viewport {
-    max-height: 50px;
+    max-height: 38px;
 }
 
 .stream-container.compact-mode .stream-controls {
@@ -935,20 +956,23 @@ body {
 .voice-room-container {
     background-color: hsl(230, 15%, 8%);
     border-bottom: var(--border-dark);
-    padding: 16px;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
+    max-height: 38vh;
+    overflow-y: auto;
 }
 
 /* ── PANEL DE FILTROS DE MICRÓFONO ── */
 .mic-filters-panel {
     background: linear-gradient(135deg, rgba(139,92,246,0.07) 0%, rgba(0,212,255,0.05) 100%);
     border: 1px solid rgba(139,92,246,0.2);
-    border-radius: 12px;
-    padding: 14px 16px;
+    border-radius: 10px;
+    padding: 8px 12px;
     backdrop-filter: blur(4px);
 }
+
 
 .filters-header {
     display: flex;
@@ -3680,10 +3704,10 @@ body.theme-light .theme-panel {
     filter: drop-shadow(0 0 4px rgba(87,242,135,0.6));
 }
 
-/* Voice member card with camera: video fills the card */
 .voice-member-card {
     position: relative;
     overflow: hidden;
+    min-height: 110px;
 }
 .voice-member-video {
     position: absolute;
@@ -3693,16 +3717,19 @@ body.theme-light .theme-panel {
     object-fit: cover;
     border-radius: inherit;
     opacity: 0;
-    transition: opacity 0.4s ease;
-    z-index: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1; /* Por encima del avatar y fondo */
+    background: #000;
 }
 .voice-member-video.active {
-    opacity: 1;
+    opacity: 1 !important;
+    display: block !important;
 }
-/* Dim the avatar when video is active */
+/* Ocultar avatar completamente cuando el video está activo */
 .voice-member-card.has-camera .voice-member-avatar {
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: opacity 0.2s ease;
 }
 /* Keep name & icons above the video */
 .voice-member-card .voice-member-name,

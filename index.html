@@ -275,44 +275,78 @@
             <!-- CONTENIDO INTERACTIVO -->
             <div class="content-body">
                 
-                <!-- ÁREA DE STREAMING -->
-                <div class="stream-container hidden" id="stream-container">
-                    <div class="stream-header">
-                        <div class="stream-info">
-                            <span class="live-tag">DIRECTO</span>
-                            <span class="stream-title" id="stream-user-title">Transmisión de Usuario Nexus</span>
+                <!-- ÁREA DE STREAMING (SOPORTA HASTA 2 TRANSMISIONES SIMULTÁNEAS) -->
+                <div class="streams-wrapper" id="streams-wrapper">
+                    <!-- STREAM 1 (LOCAL O REMOTO PRINCIPAL) -->
+                    <div class="stream-container hidden" id="stream-container">
+                        <div class="stream-header">
+                            <div class="stream-info">
+                                <span class="live-tag">DIRECTO</span>
+                                <span class="stream-title" id="stream-user-title">Transmisión de Usuario Nexus</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="stream-action-header-btn" id="stream-compact-btn" title="Modo compacto / Expandir (para ver y escribir en el chat)">🗗 Reducir</button>
+                                <button class="stream-action-header-btn" id="stream-hide-preview-btn" title="Ocultar visor de video (la transmisión continúa en segundo plano)">👁️ Ocultar Visor</button>
+                                <button class="stream-close" id="stop-stream-btn" title="Detener Transmisión / Salir">✕</button>
+                            </div>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <button class="stream-action-header-btn" id="stream-compact-btn" title="Modo compacto / Expandir (para ver y escribir en el chat)">🗗 Reducir</button>
-                            <button class="stream-action-header-btn" id="stream-hide-preview-btn" title="Ocultar visor de video (la transmisión continúa en segundo plano)">👁️ Ocultar Visor</button>
-                            <button class="stream-close" id="stop-stream-btn" title="Detener Transmisión / Salir">✕</button>
+                        <div class="stream-viewport" id="stream-viewport">
+                            <video id="local-stream-video" autoplay playsinline muted title="Doble clic para pantalla completa"></video>
+                            <div class="stream-placeholder" id="stream-placeholder">
+                                <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M12 7v5l3 3"/></svg>
+                                <p>Compartiendo pantalla / Juego en curso...</p>
+                            </div>
+                            <!-- Overlay de fullscreen al hacer doble clic -->
+                            <div class="fullscreen-hint" id="fullscreen-hint">
+                                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                                Pantalla completa
+                            </div>
+                        </div>
+                        <div class="stream-controls">
+                            <div class="control-group">
+                                <span class="quality-label" id="stream-quality-indicator">Calidad: 1080p @ 60 FPS (Auto)</span>
+                            </div>
+                            <div class="control-group">
+                                <button class="control-btn" id="stream-mic-toggle" title="Silenciar / Activar audio del directo">Audio On</button>
+                                <button class="control-btn accent" id="stream-fullscreen-btn">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                                    Pantalla Completa
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div class="stream-viewport" id="stream-viewport">
-                        <video id="local-stream-video" autoplay playsinline muted title="Doble clic para pantalla completa"></video>
-                        <div class="stream-placeholder" id="stream-placeholder">
-                            <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M12 7v5l3 3"/></svg>
-                            <p>Compartiendo pantalla / Juego en curso...</p>
+
+                    <!-- STREAM 2 (SEGUNDA TRANSMISIÓN EN SIMULTÁNEO) -->
+                    <div class="stream-container hidden" id="stream-container-2">
+                        <div class="stream-header">
+                            <div class="stream-info">
+                                <span class="live-tag" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">DIRECTO 2</span>
+                                <span class="stream-title" id="stream-user-title-2">Transmisión 2</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="stream-action-header-btn" id="stream-compact-btn-2" title="Modo compacto / Expandir">🗗 Reducir</button>
+                                <button class="stream-action-header-btn" id="stream-hide-preview-btn-2" title="Ocultar visor">👁️ Ocultar Visor</button>
+                                <button class="stream-close" id="stop-stream-btn-2" title="Cerrar visor">✕</button>
+                            </div>
                         </div>
-                        <!-- Overlay de fullscreen al hacer doble clic -->
-                        <div class="fullscreen-hint" id="fullscreen-hint">
-                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-                            Pantalla completa
+                        <div class="stream-viewport" id="stream-viewport-2">
+                            <video id="remote-stream-video-2" autoplay playsinline muted title="Doble clic para pantalla completa"></video>
                         </div>
-                    </div>
-                    <div class="stream-controls">
-                        <div class="control-group">
-                            <span class="quality-label" id="stream-quality-indicator">Calidad: 1080p @ 60 FPS (Auto)</span>
-                        </div>
-                        <div class="control-group">
-                            <button class="control-btn" id="stream-mic-toggle" title="Silenciar / Activar audio del directo">Audio On</button>
-                            <button class="control-btn accent" id="stream-fullscreen-btn">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-                                Pantalla Completa
-                            </button>
+                        <div class="stream-controls">
+                            <div class="control-group">
+                                <span class="quality-label" id="stream-quality-indicator-2">En vivo</span>
+                            </div>
+                            <div class="control-group">
+                                <button class="control-btn" id="stream-mic-toggle-2" title="Silenciar / Activar audio">Audio On</button>
+                                <button class="control-btn accent" id="stream-fullscreen-btn-2">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                                    Pantalla Completa
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
+
 
                 <div class="voice-room-container hidden" id="voice-room-container">
                     <div class="voice-members-grid" id="voice-grid"></div>
