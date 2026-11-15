@@ -1758,6 +1758,13 @@ async function joinSupabasePresence(channelId, myName, peerId) {
         }
     });
 
+    // Atender notificación cuando un emisor detiene su transmisión de pantalla
+    presenceChannel.on('broadcast', { event: 'screen-stream-ended' }, ({ payload }) => {
+        if (!payload || !payload.peerId) return;
+        console.log(`[Stream] Notificación broadcast de fin de transmisión recibida de: ${payload.peerId}`);
+        cleanUpRemoteScreen(payload.peerId);
+    });
+
     // Atender peticiones de otros peers para recibir nuestra cámara en vivo
     presenceChannel.on('broadcast', { event: 'request-camera-stream' }, ({ payload }) => {
         if (!payload) return;
@@ -2037,6 +2044,14 @@ function playRemoteStream(peerId, remoteStream) {
             }
             titleEl.textContent = `Directo de ${broadcasterName || 'Usuario Remoto'}`;
         }
+
+        // Escuchar cuando el emisor detiene la transmisión para cerrar el visor inmediatamente
+        remoteStream.getVideoTracks().forEach(track => {
+            track.addEventListener('ended', () => {
+                console.log(`[Stream] Pista de video de ${peerId} finalizó. Cerrando visor remoto.`);
+                cleanUpRemoteScreen(peerId);
+            }, { once: true });
+        });
 
         // Registrar la llamada de video en activePeers
         const existing = activePeers.get(peerId);

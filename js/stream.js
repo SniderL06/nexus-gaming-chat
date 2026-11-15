@@ -304,6 +304,17 @@ export function stopLocalStream() {
             }
         });
 
+        // Enviar notificación a los espectadores para que limpien su visor inmediatamente
+        if (presenceChannel) {
+            try {
+                presenceChannel.send({
+                    type: 'broadcast',
+                    event: 'screen-stream-ended',
+                    payload: { peerId: localPeerId || (peer ? peer.id : null) }
+                }).catch(() => {});
+            } catch (_) {}
+        }
+
         // Actualizar presencia para marcar isStreaming: false manteniendo avatar y email
         if (presenceChannel) {
             const email = localStorage.getItem('nexus_user_email') || '';
@@ -392,15 +403,24 @@ function toggleFullscreen() {
                          document.msFullscreenElement;
 
     if (!isFullscreen) {
-        // Solicitar pantalla completa con compatibilidad multi-navegador
-        const requestMethod = targetElement.requestFullscreen || 
-                              targetElement.webkitRequestFullscreen || 
-                              targetElement.mozRequestFullScreen || 
-                              targetElement.msRequestFullscreen;
+        // Solicitar pantalla completa con compatibilidad multi-navegador y Electron
+        const target = targetElement || streamVideoElement;
+        const requestMethod = target.requestFullscreen || 
+                              target.webkitRequestFullscreen || 
+                              target.mozRequestFullScreen || 
+                              target.msRequestFullscreen;
 
         if (requestMethod) {
-            requestMethod.call(targetElement).catch(err => {
-                console.error(`Error al intentar pantalla completa: ${err.message}`);
+            requestMethod.call(target).catch(err => {
+                console.warn(`[Stream] Fallo al poner contenedor en pantalla completa, intentando con elemento de video: ${err.message}`);
+                // Si el contenedor falla (por restricciones de iframe o shadow root), intentar directamente sobre el elemento <video>
+                if (streamVideoElement && streamVideoElement !== target) {
+                    const videoReq = streamVideoElement.requestFullscreen || 
+                                     streamVideoElement.webkitRequestFullscreen || 
+                                     streamVideoElement.mozRequestFullScreen || 
+                                     streamVideoElement.msRequestFullscreen;
+                    if (videoReq) videoReq.call(streamVideoElement).catch(vErr => console.error('[Stream] Error final fullscreen:', vErr));
+                }
             });
         }
     } else {

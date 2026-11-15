@@ -613,6 +613,12 @@ function saveDMMessageToStorage(convId, msg) {
 function renderDMMessage(msg, isOwn) {
     if (!dmMessages) return;
 
+    // Evitar mensajes duplicados comprobando ID único por timestamp + texto
+    const msgId = `msg-${msg.ts || ''}-${(msg.text || '').slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_')}`;
+    if (msg.ts && dmMessages.querySelector(`[data-msg-id="${msgId}"]`)) {
+        return;
+    }
+
     const { initial, color } = getAvatarData(msg.senderName);
     const myData = getAvatarData(getMyName());
     const timeStr = relTime(msg.ts || Date.now());
@@ -635,6 +641,10 @@ function renderDMMessage(msg, isOwn) {
 
     const bubble = document.createElement('div');
     bubble.className = `dm-message ${isOwn ? 'dm-message-own' : 'dm-message-other'}`;
+    if (msg.ts) {
+        bubble.setAttribute('data-msg-id', msgId);
+    }
+
     bubble.innerHTML = `
         ${!isOwn ? `<div class="dm-msg-avatar" style="background:${color}" title="${esc(msg.senderName)}">${initial}</div>` : ''}
         <div class="dm-bubble-wrapper">

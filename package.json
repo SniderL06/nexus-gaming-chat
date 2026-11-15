@@ -1,7 +1,7 @@
 {
   "name": "nexus-gaming-chat",
   "productName": "Nexus",
-  "version": "1.2.27",
+  "version": "1.2.28",
   "description": "Nexus Gaming Chat Client",
   "main": "electron-main.js",
   "scripts": {

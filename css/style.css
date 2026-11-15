@@ -3130,13 +3130,35 @@ body.theme-light .theme-panel {
 }
 .stream-viewport:hover .fullscreen-hint { opacity: 1; }
 
-/* Video en pantalla completa sin bordes */
+/* Video y viewport en pantalla completa sin bordes */
+.stream-viewport:fullscreen,
+.stream-viewport:-webkit-full-screen,
+.stream-viewport:-moz-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    max-width: 100vw !important;
+    aspect-ratio: auto !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 999999 !important;
+}
+
+.stream-viewport:fullscreen video,
+.stream-viewport:-webkit-full-screen video,
+.stream-viewport:-moz-full-screen video,
 .stream-viewport video:fullscreen,
 .stream-viewport video:-webkit-full-screen,
 .stream-viewport video:-moz-full-screen {
     background: #000;
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    max-width: 100vw !important;
+    object-fit: contain !important;
 }
 
 /* Cursor que desaparece en inactividad */
