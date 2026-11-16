@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, shell, session, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -32,6 +32,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'electron-preload.js'), // Bridge IPC seguro
       webSecurity: false, // Permite cargar CDNs y anuncios sin bloqueo de CORS
       allowRunningInsecureContent: true,
       autoplayPolicy: 'no-user-gesture-required',
@@ -62,34 +63,76 @@ function createWindow() {
   });
 
   // Permitir captura de pantalla en getDisplayMedia (Electron)
+  // useSystemPicker: true → Electron 28+ muestra el selector nativo del SO (Linux XDG, Windows SystemPickerDialog)
+  // Si el SO no soporta el selector nativo, se muestra el picker propio de Electron con miniaturas
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
-    // Si la plataforma soporta el selector nativo del sistema
-    if (typeof callback.useSystemPicker === 'function') {
-      callback({ useSystemPicker: true });
-      return;
-    }
-
     try {
       const sources = await desktopCapturer.getSources({
         types: ['screen', 'window'],
-        thumbnailSize: { width: 0, height: 0 }
+        thumbnailSize: { width: 300, height: 180 }
       });
 
-      if (sources && sources.length > 0) {
-        const mainScreen = sources.find(s => s.id === 'screen:0:0' || s.id.startsWith('screen:0:')) || sources[0];
-        console.log(`[Electron] Fuente de pantalla seleccionada: ${mainScreen.name} (${mainScreen.id})`);
-        // audio: 'loopback' permite compartir el sonido del sistema en Windows y Linux
+      if (!sources || sources.length === 0) {
+        console.warn('[Electron] No se encontraron fuentes de pantalla.');
+        callback({});
+        return;
+      }
+
+      // Enviar la lista de fuentes al renderer para que el usuario elija en la UI de Nexus
+      mainWindow.webContents.send('display-sources', sources.map(s => ({
+        id:        s.id,
+        name:      s.name,
+        thumbnail: s.thumbnail.toDataURL()
+      })));
+
+      // Esperar la respuesta del renderer (el usuario elige la fuente en el modal)
+      const chosenId = await new Promise((resolve, reject) => {
+        const handler = (event, sourceId) => {
+          ipcMain.removeListener('display-source-chosen', handler);
+          ipcMain.removeListener('display-source-cancelled', cancelHandler);
+          resolve(sourceId);
+        };
+        const cancelHandler = () => {
+          ipcMain.removeListener('display-source-chosen', handler);
+          ipcMain.removeListener('display-source-cancelled', cancelHandler);
+          reject(new Error('cancelled'));
+        };
+        ipcMain.once('display-source-chosen', handler);
+        ipcMain.once('display-source-cancelled', cancelHandler);
+        // Timeout de seguridad: si el usuario no elige en 60 s → auto-seleccionar pantalla principal
+        setTimeout(() => { ipcMain.removeAllListeners('display-source-chosen'); ipcMain.removeAllListeners('display-source-cancelled'); resolve(null); }, 60000);
+      });
+
+      if (chosenId === null) {
+        // Timeout: seleccionar primera pantalla disponible como fallback
+        const mainScreen = sources.find(s => s.id.startsWith('screen:')) || sources[0];
         callback({ video: mainScreen, audio: 'loopback' });
+        return;
+      }
+
+      const chosen = sources.find(s => s.id === chosenId);
+      if (chosen) {
+        // audio: 'loopback' captura el audio del sistema (funciona en Windows; en Linux requiere PipeWire + loopback)
+        callback({ video: chosen, audio: 'loopback' });
       } else {
-        console.warn('[Electron] No se encontraron fuentes de pantalla disponibles.');
         callback({});
       }
     } catch (err) {
-      console.warn('[Electron] Error al capturar fuentes de pantalla:', err.message || err);
+      if (err.message !== 'cancelled') {
+        console.warn('[Electron] Error en selector de pantalla:', err.message || err);
+      }
       callback({});
     }
   }, { useSystemPicker: true });
 
+
+  // Manejar pantalla completa HTML (element.requestFullscreen() en stream.js)
+  mainWindow.webContents.on('enter-html-full-screen', () => {
+    mainWindow.setFullScreen(true);
+  });
+  mainWindow.webContents.on('leave-html-full-screen', () => {
+    mainWindow.setFullScreen(false);
+  });
 
   // Abrir enlaces externos en el navegador predeterminado del sistema
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

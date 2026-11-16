@@ -55,7 +55,13 @@ async function startCamera() {
                 height: { ideal: 720 },
                 facingMode: 'user'
             },
-            audio: false   // audio already handled by voice.js
+            audio: false   // audio already handled exclusively by voice.js
+        });
+
+        // Asegurar que bajo ningún concepto exista una pista de audio en la llamada de cámara (evita eco/doble voz)
+        cameraStream.getAudioTracks().forEach(track => {
+            track.stop();
+            cameraStream.removeTrack(track);
         });
 
         isCameraOn = true;

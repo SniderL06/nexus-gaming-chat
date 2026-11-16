@@ -1507,7 +1507,13 @@ async function joinMultiplayerVoice(channelId) {
             // Dynamically import camera module to avoid circular deps
             const { getCameraStream } = await import('./camera.js');
             const camStream = getCameraStream();
-            call.answer(camStream || undefined);
+            if (camStream) {
+                // Limpiar cualquier audio antes de responder
+                camStream.getAudioTracks().forEach(t => { t.stop(); camStream.removeTrack(t); });
+                call.answer(camStream);
+            } else {
+                call.answer();
+            }
         } else if (callType === 'screen') {
             // IMPORTANTE: Pasar un MediaStream vacío en vez de nada.
             // Si se llama a call.answer() sin argumento, PeerJS/WebRTC puede crear

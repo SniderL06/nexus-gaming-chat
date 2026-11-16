@@ -908,6 +908,42 @@
         </div>
     </div>
 
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SELECTOR DE PANTALLA/VENTANA (solo Electron — display media picker) -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div id="display-source-picker" class="hidden" style="
+        position: fixed; inset: 0; z-index: 999999;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.80); backdrop-filter: blur(10px);
+    ">
+        <div style="
+            background: var(--bg-secondary); border: 1px solid var(--border-dark);
+            width: 100%; max-width: 680px; max-height: 80vh; border-radius: 14px;
+            padding: 24px; box-shadow: 0 24px 48px rgba(0,0,0,0.7);
+            display: flex; flex-direction: column; gap: 18px; overflow: hidden;
+        ">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-dark); padding-bottom:14px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.5rem;">🖥️</span>
+                    <div>
+                        <h3 style="margin:0; font-size:1rem; font-weight:700; color:var(--text-normal);">Selecciona lo que quieres compartir</h3>
+                        <p style="margin:3px 0 0; font-size:0.75rem; color:var(--text-muted);">Haz clic en una pantalla o ventana y luego en Compartir</p>
+                    </div>
+                </div>
+                <button id="display-picker-cancel" style="background:none; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer;" title="Cancelar">✕</button>
+            </div>
+            <!-- Grid de fuentes con miniatura -->
+            <div id="display-sources-grid" style="
+                display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap:12px; overflow-y:auto; max-height:50vh; padding-right:4px;
+            "></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border-dark); padding-top:14px;">
+                <button id="display-picker-cancel-btn" class="theme-reset-btn" style="margin:0; padding:10px 16px; font-size:0.8rem;">Cancelar</button>
+                <button id="display-picker-share-btn" class="login-submit-btn" style="margin:0; width:auto; padding:10px 20px; font-size:0.8rem; background:linear-gradient(135deg,var(--accent-purple),var(--accent-cyan)); border:none; border-radius:8px; color:#fff; font-weight:600; cursor:pointer;" disabled>🖥️ Compartir</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ══════════════════════════════════════════════════════════ -->
     <!-- LANDING PAGE PÚBLICA (visible para AdSense + crawlers)   -->
     <!-- Se oculta automáticamente al iniciar sesión              -->
@@ -1483,5 +1519,93 @@
 
     <!-- Carga de módulos ES -->
     <script type="module" src="js/app.js"></script>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CONTROLADOR DEL SELECTOR DE PANTALLA (solo Electron)              -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+    (function() {
+        // Solo inicializar si estamos en Electron (window.electronAPI expuesto por preload)
+        if (!window.electronAPI) return;
+
+        const picker      = document.getElementById('display-source-picker');
+        const grid        = document.getElementById('display-sources-grid');
+        const shareBtn    = document.getElementById('display-picker-share-btn');
+        const cancelBtn   = document.getElementById('display-picker-cancel-btn');
+        const cancelX     = document.getElementById('display-picker-cancel');
+
+        let selectedSourceId = null;
+
+        function closePicker(cancelled) {
+            if (picker) picker.classList.add('hidden');
+            if (grid) grid.innerHTML = '';
+            selectedSourceId = null;
+            if (shareBtn) { shareBtn.disabled = true; shareBtn.textContent = '🖥️ Compartir'; }
+            if (cancelled) window.electronAPI.cancelDisplaySource();
+        }
+
+        if (cancelBtn) cancelBtn.addEventListener('click', () => closePicker(true));
+        if (cancelX)   cancelX.addEventListener('click',   () => closePicker(true));
+
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => {
+                if (!selectedSourceId) return;
+                window.electronAPI.chooseDisplaySource(selectedSourceId);
+                picker.classList.add('hidden');
+                grid.innerHTML = '';
+                selectedSourceId = null;
+                shareBtn.disabled = true;
+            });
+        }
+
+        // Escuchar cuando el main process envía la lista de fuentes
+        window.electronAPI.onDisplaySources((sources) => {
+            if (!picker || !grid) return;
+
+            grid.innerHTML = '';
+            selectedSourceId = null;
+            if (shareBtn) { shareBtn.disabled = true; shareBtn.textContent = '🖥️ Compartir'; }
+
+            sources.forEach(src => {
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    border: 2px solid var(--border-dark); border-radius: 8px; overflow: hidden;
+                    cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+                    display: flex; flex-direction: column;
+                `;
+                card.innerHTML = `
+                    <img src="${src.thumbnail}" alt="${src.name}"
+                         style="width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000;">
+                    <span style="font-size:0.72rem; color:var(--text-normal); padding:6px 8px;
+                                 font-weight:600; white-space:nowrap; overflow:hidden;
+                                 text-overflow:ellipsis;" title="${src.name}">${src.name}</span>
+                `;
+                card.addEventListener('click', () => {
+                    // Deseleccionar todos
+                    grid.querySelectorAll('div').forEach(c => {
+                        c.style.borderColor = 'var(--border-dark)';
+                        c.style.transform = 'scale(1)';
+                    });
+                    // Seleccionar éste
+                    card.style.borderColor = 'var(--accent-cyan)';
+                    card.style.transform = 'scale(1.03)';
+                    selectedSourceId = src.id;
+                    if (shareBtn) { shareBtn.disabled = false; }
+                });
+                card.addEventListener('dblclick', () => {
+                    selectedSourceId = src.id;
+                    window.electronAPI.chooseDisplaySource(selectedSourceId);
+                    picker.classList.add('hidden');
+                    grid.innerHTML = '';
+                    selectedSourceId = null;
+                    if (shareBtn) shareBtn.disabled = true;
+                });
+                grid.appendChild(card);
+            });
+
+            picker.classList.remove('hidden');
+        });
+    })();
+    </script>
 </body>
 </html>

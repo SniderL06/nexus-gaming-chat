@@ -77,8 +77,16 @@ export function initStream() {
     if (fullscreenBtn2 && video2) {
         fullscreenBtn2.addEventListener('click', () => {
             const vp2 = document.getElementById('stream-viewport-2') || video2;
-            const req = vp2.requestFullscreen || vp2.webkitRequestFullscreen || vp2.msRequestFullscreen;
-            if (req) req.call(vp2).catch(() => {});
+            const req = vp2.requestFullscreen ||
+                        vp2.webkitRequestFullscreen ||
+                        vp2.mozRequestFullScreen ||
+                        vp2.msRequestFullscreen;
+            if (req) {
+                req.call(vp2).catch(() => {
+                    const vReq = video2.requestFullscreen || video2.webkitRequestFullscreen;
+                    if (vReq) vReq.call(video2).catch(() => {});
+                });
+            }
         });
     }
     if (micToggleBtn2 && video2) {
@@ -90,8 +98,16 @@ export function initStream() {
     if (video2) {
         video2.addEventListener('dblclick', () => {
             const vp2 = document.getElementById('stream-viewport-2') || video2;
-            const req = vp2.requestFullscreen || vp2.webkitRequestFullscreen || vp2.msRequestFullscreen;
-            if (req) req.call(vp2).catch(() => {});
+            const req = vp2.requestFullscreen ||
+                        vp2.webkitRequestFullscreen ||
+                        vp2.mozRequestFullScreen ||
+                        vp2.msRequestFullscreen;
+            if (req) {
+                req.call(vp2).catch(() => {
+                    const vReq = video2.requestFullscreen || video2.webkitRequestFullscreen;
+                    if (vReq) vReq.call(video2).catch(() => {});
+                });
+            }
         });
     }
 
